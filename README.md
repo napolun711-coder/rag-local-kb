@@ -302,7 +302,7 @@ security.
 
 ## Current limitations
 
-- OCR, inbox polling, cloud TTS, LAN device approval, and Qdrant switching are not
+- OCR, inbox polling, cloud TTS, and Qdrant switching are not
   part of the current MVP.
 - History search is lexical, not semantic.
 - A knowledge-service outage currently prevents the combined document listing

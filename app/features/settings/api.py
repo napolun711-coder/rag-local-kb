@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.features.settings import service
+from app.platform.config import get_settings
 
 router = APIRouter(tags=["settings"])
 
@@ -48,19 +49,6 @@ def test_settings() -> Dict[str, Any]:
 @router.get("/api/tts/options", dependencies=[Depends(_require_local)])
 def get_tts_options() -> Dict[str, Any]:
     return service.tts_options()
-
-
-# Compatibility responses for the copied settings page. LAN device approval is
-# not implemented in this build, so the page renders an empty, non-actionable
-# state instead of polling a missing route.
-@router.get("/api/app/access/devices", dependencies=[Depends(_require_local)])
-def access_devices() -> Dict[str, Any]:
-    return {"devices": [], "available": False}
-
-
-@router.get("/api/app/access/requests", dependencies=[Depends(_require_local)])
-def access_requests() -> Dict[str, Any]:
-    return {"requests": [], "available": False}
 
 
 def _is_private_ip(ip: str) -> bool:
@@ -170,7 +158,7 @@ def _lan_ip_candidates() -> list[str]:
 
 @router.get("/api/app/access/connect-info", dependencies=[Depends(_require_local)])
 def access_connect_info(request: Request) -> Dict[str, Any]:
-    cfg = _platform_settings()
+    cfg = get_settings()
     ips = _lan_ip_candidates()
     if ips:
         url = f"http://{ips[0]}:{cfg.port}/web"

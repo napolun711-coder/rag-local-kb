@@ -54,6 +54,22 @@ def memory_page() -> FileResponse:
     )
 
 
+@router.get("/pair")
+def pair_page() -> FileResponse:
+    return FileResponse(
+        get_settings().static_dir / "pair.html",
+        headers=_NO_CACHE,
+    )
+
+
+@router.get("/access_required")
+def access_required_page() -> FileResponse:
+    return FileResponse(
+        get_settings().static_dir / "access_required.html",
+        headers=_NO_CACHE,
+    )
+
+
 @router.get("/favicon.ico", include_in_schema=False)
 def favicon() -> FileResponse:
     return FileResponse(get_settings().static_dir / "app.ico", headers=_NO_CACHE)

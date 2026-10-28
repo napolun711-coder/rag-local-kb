@@ -10,11 +10,9 @@ dist/
 build/
 *.egg-info/
 .coverage
-.integration-run/
 htmlcov/
 .pytest_cache/
 .ruff_cache/
-.integration-run/
 *.log
 
 config/*

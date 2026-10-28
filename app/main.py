@@ -6,15 +6,19 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api import system
+from app.features.access import api as access_api
+from app.features.access import service as access_service
 from app.features.chat import api as chat_api
 from app.features.documents import api as documents_api
 from app.features.ingest import api as ingest_api
 from app.features.knowledge import api as knowledge_api
 from app.features.memory import api as memory_api
+from app.features.session import api as session_api
 from app.features.settings import api as settings_api
 from app.platform.config import get_settings
 from app.platform.errors import register_exception_handlers
@@ -75,12 +79,44 @@ def create_app() -> FastAPI:
     logger.info("Application starting: %s", settings.to_log_dict())
 
     application = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
+
+    @application.middleware("http")
+    async def enforce_lan_access(request, call_next):
+        path = request.url.path
+        public = (
+            path in {"/pair", "/access_required", "/favicon.ico", "/health",
+                     "/api/app/access/status"}
+            or path.startswith("/static/")
+            or (request.method == "POST" and path == "/api/app/access/requests")
+            or (
+                request.method == "POST"
+                and path.startswith("/api/app/access/requests/")
+                and path.endswith("/claim")
+            )
+        )
+        if public or access_service.is_request_authorized(request):
+            return await call_next(request)
+        if path.startswith("/api/"):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": {
+                        "error": "device_auth_required",
+                        "message": "This device must be authorized by the local computer",
+                        "pair_url": "/pair",
+                    }
+                },
+            )
+        return RedirectResponse("/pair", status_code=307)
+
     application.mount(
         "/static",
         RevalidatingStaticFiles(directory=str(settings.static_dir)),
         name="static",
     )
     application.include_router(system.router)
+    application.include_router(access_api.router)
+    application.include_router(session_api.router)
     application.include_router(chat_api.router)
     application.include_router(documents_api.router)
     application.include_router(documents_api.topics_router)

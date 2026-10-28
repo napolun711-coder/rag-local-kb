@@ -97,7 +97,7 @@ Runtime service state and process logs are under `logs/runtime/`.
 - Document search reads up to 20 remote pages when a filter is active.
 - Local document listing does not yet degrade to a fully local-only response when
   the knowledge service is unavailable.
-- OCR, inbox polling, cloud TTS, LAN device authorization, Qdrant switching, and
+- OCR, inbox polling, cloud TTS, Qdrant switching, and
   advanced topic management are not part of the current MVP.
 - Formal LightRAG indexing still requires the engine and shell to be healthy.
 - This directory is not yet a Git repository, so release history and rollback
@@ -243,3 +243,26 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - No save, clear, purge, delete, or formal configuration write was performed.
 - The isolated backend process and temporary files remain under
   `.integration-run/20261028-204252`.
+
+## LAN access and session routes (2026-10-28)
+
+- Added a dedicated `app.features.access` module for pairing requests, device
+  approvals, persistent device records, hashed device tokens, and LAN status.
+- Added `/pair`, `/access_required`, `/api/app/access/status`,
+  `/api/app/access/requests`, `/api/app/access/devices`, approval, claim, and
+  revocation routes.
+- Added server-side middleware that redirects unauthorized LAN pages to `/pair`
+  and blocks unauthorized LAN APIs with HTTP 401. Local loopback requests remain
+  unrestricted.
+- Added `app.features.session` routes for session state, keepalive, control token,
+  delayed leave, and delayed stop. Actual stop delegates to the existing
+  `scripts/lifecycle.py stop`; web stop is enabled only for a lifecycle-managed
+  app process and can be disabled with `RAGKB_WEB_STOP_ENABLED=off`.
+- Verified local access/session routes return HTTP 200.
+- Verified via an in-process ASGI contract check that unauthorized LAN pages
+  redirect to `/pair`, LAN APIs are blocked, pairing approval and Cookie
+  authorization work, local-only APIs remain blocked for LAN clients, and session
+  mode is reported as local or LAN correctly.
+- No process stop, leave, clear, purge, delete, or formal configuration write was
+  executed during verification.
+- A real two-device LAN browser test and lifecycle stop test remain to be run.
