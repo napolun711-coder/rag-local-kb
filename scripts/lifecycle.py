@@ -331,6 +331,11 @@ def _wait_http(
     raise RuntimeError(f"Timed out waiting for health at {url} ({last_error})")
 
 
+def _probe_url(service: ServiceState) -> str:
+    host = "127.0.0.1" if service.host in {"0.0.0.0", "::"} else service.host
+    return f"http://{host}:{service.port}"
+
+
 def _tail(path: Path, lines: int = 12) -> str:
     try:
         content = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -717,7 +722,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
         _save_state(services)
         _publish_port("app", app_port)
         _wait_http(
-            app_state.url + "/health",
+            _probe_url(app_state) + "/health",
             timeout=timeout,
             process_pid=app_state.pid,
         )
@@ -745,7 +750,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
 
 def _health(service: ServiceState, name: str) -> tuple[bool, Dict[str, Any]]:
     try:
-        with urllib.request.urlopen(service.url + "/health", timeout=3.0) as response:
+        with urllib.request.urlopen(_probe_url(service) + "/health", timeout=3.0) as response:
             status_code = response.status
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, urllib.error.URLError):
@@ -814,7 +819,7 @@ def open_web() -> int:
     if not healthy:
         print("Application is running but its health check failed. Use status or restart.")
         return 1
-    webbrowser.open(app.url + "/web")
+    webbrowser.open(_probe_url(app) + "/web")
     return 0
 
 

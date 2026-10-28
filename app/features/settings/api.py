@@ -7,7 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.features.settings import service
-from app.platform.config import get_settings
+from app.platform.config import get_settings as get_platform_settings
 
 router = APIRouter(tags=["settings"])
 
@@ -158,17 +158,18 @@ def _lan_ip_candidates() -> list[str]:
 
 @router.get("/api/app/access/connect-info", dependencies=[Depends(_require_local)])
 def access_connect_info(request: Request) -> Dict[str, Any]:
-    cfg = get_settings()
+    cfg = get_platform_settings()
+    port = request.url.port or cfg.port
     ips = _lan_ip_candidates()
     if ips:
-        url = f"http://{ips[0]}:{cfg.port}/web"
+        url = f"http://{ips[0]}:{port}/web"
     else:
         # No private adapter found (offline): fall back to the request host.
         url = str(request.base_url).rstrip("/") + "/web"
     return {
         "url": url,
         "ips": ips,
-        "port": cfg.port,
+        "port": port,
         "available": False,
     }
 

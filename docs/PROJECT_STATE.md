@@ -265,7 +265,8 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   mode is reported as local or LAN correctly.
 - No process stop, leave, clear, purge, delete, or formal configuration write was
   executed during verification.
-- A real two-device LAN browser test and lifecycle stop test remain to be run.
+- A real LAN device browser test completed; the lifecycle stop test remains to
+  be run.
 
 ## Isolated full-service lifecycle (2026-10-28)
 
@@ -286,7 +287,7 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Settings source resolved to the isolated app.env; runtime services reported
   engine/shell/app healthy, and local session mode reported stop capability.
 - No save, delete, clear, purge, leave, stop, or formal data operation was run.
-- A real two-device LAN test and lifecycle stop test remain pending.
+- A real LAN device test completed; the lifecycle stop test remains pending.
 
 ## Isolated full-service ingestion smoke (2026-10-28)
 
@@ -316,3 +317,22 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - A single `/chat` call answered `ORBIT-LANTERN-3B-7419` and cited
   `integration-smoke-3b.md`.
 - No cloud API key or cloud LLM was required for this smoke test.
+
+### Real LAN device validation
+
+- Temporarily bound only the app to `0.0.0.0:19180`; engine and shell remained
+  loopback-only.
+- A LAN client at `192.168.3.8` opened `/web`, was redirected to `/pair`,
+  appeared in the local approval list, and was approved on the computer.
+- The authorized client received a HttpOnly device cookie and accessed chat.
+- LAN access to `/api/settings` remained HTTP 403.
+- After a full isolated service-group restart, the same device record remained
+  and the client resumed keepalive, confirming authorization persistence.
+- Revoking the device removed the record; subsequent keepalive requests from the
+  old device cookie returned HTTP 401.
+- The isolated app was restored to `127.0.0.1` after the test.
+- `/api/app/access/connect-info` now returns HTTP 200 with the actual request
+  port and the primary private LAN address. The settings page does not depend
+  on this compatibility endpoint; pairing, status, approval, claim,
+  authorization, and revocation worked correctly.
+- A lifecycle stop test remains pending.
