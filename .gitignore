@@ -1,5 +1,6 @@
 .env
 .venv/
+.integration-run/
 __pycache__/
 *.py[cod]
 *.bak
@@ -9,6 +10,7 @@ dist/
 build/
 *.egg-info/
 .coverage
+.integration-run/
 htmlcov/
 .pytest_cache/
 .ruff_cache/
