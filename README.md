@@ -223,6 +223,31 @@ Reviewed content is submitted only after an explicit user action. The returned
 track id is recorded, and indexing status is refreshed through the knowledge
 gateway. Uploads are not presented as indexed until the engine confirms success.
 
+## Inbox folder scanning
+
+Inbox scanning is opt-in and disabled by default. Configure
+`RAGKB_INBOX_ENABLED=true` and an existing `RAGKB_INBOX_DIR` in the settings page
+or `.env`, then restart the application.
+
+- Files remain in the inbox directory. The scanner never moves, overwrites, or
+  deletes source files.
+- Hidden files, temporary download/editor files, unsupported extensions,
+  symlinks, and files above the upload limit are skipped or marked failed.
+- A file is accepted only after its size and modification time remain unchanged
+  for the configured settle interval.
+- Accepted content is sent through the same local parsing and quality pipeline
+  as a normal upload, then enters the local review queue.
+- Inbox files are never submitted to the knowledge service automatically.
+- SHA-256 content fingerprints prevent the same content from being accepted
+  again under another filename.
+- Scanner state is stored in the application data directory as
+  `inbox-state.json`; it contains file metadata and hashes, never file contents.
+
+Use “立即扫描收件箱” on the document page for a local manual scan. The API is
+local-only and also requires the per-process control token. The “打开收件箱文件夹”
+action uses a separate local-only endpoint with the same token and always opens
+the configured inbox directory; it never accepts a client-supplied path.
+
 ## Document management
 
 The document page at `/files` supports:
@@ -328,8 +353,7 @@ security.
 
 ## Current limitations
 
-- OCR, inbox polling, cloud TTS, and Qdrant switching are not
-  part of the current MVP.
+- OCR, cloud TTS, and Qdrant switching are not part of the current MVP.
 - History search is lexical, not semantic.
 - Advanced topic rename, archive, and hierarchy management are not implemented.
 - Index compatibility depends on a baseline recorded by the current working

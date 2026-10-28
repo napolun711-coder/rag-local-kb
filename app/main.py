@@ -16,6 +16,7 @@ from app.features.access import service as access_service
 from app.features.chat import api as chat_api
 from app.features.documents import api as documents_api
 from app.features.ingest import api as ingest_api
+from app.features.inbox import api as inbox_api
 from app.features.knowledge import api as knowledge_api
 from app.features.memory import api as memory_api
 from app.features.session import api as session_api
@@ -39,6 +40,12 @@ class RevalidatingStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    try:
+        from app.features.inbox import service as inbox_service
+
+        inbox_service.start_background()
+    except Exception:
+        LOGGER.exception("Inbox scanner startup failed (ignored)")
     try:
         from app.adapters.lightrag.client import LightRagHttpClient
         from app.features.knowledge import index_guard
@@ -70,6 +77,12 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
+        try:
+            from app.features.inbox import service as inbox_service
+
+            inbox_service.stop_background()
+        except Exception:
+            LOGGER.exception("Inbox scanner shutdown failed (ignored)")
         try:
             if memory_worker is not None:
                 memory_worker.stop()
@@ -134,6 +147,8 @@ def create_app() -> FastAPI:
     application.include_router(documents_api.router)
     application.include_router(documents_api.topics_router)
     application.include_router(ingest_api.router)
+    application.include_router(inbox_api.router)
+    application.include_router(inbox_api.files_router)
     application.include_router(memory_api.router)
     application.include_router(memory_api.status_router)
     application.include_router(memory_api.frontend_router)

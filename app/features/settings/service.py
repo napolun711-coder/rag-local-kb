@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 from app.adapters.lightrag.config import get_lightrag_settings
+from app.features.inbox.config import get_inbox_settings
 from app.features.ingest.config import get_ingest_settings
 from app.features.knowledge.service import get_knowledge_gateway
 from app.features.memory.config import get_memory_settings
@@ -339,6 +340,7 @@ def settings_payload() -> Dict[str, Any]:
     app_values, engine_values = _read_sources()
     app = get_settings()
     ingest = get_ingest_settings()
+    inbox = get_inbox_settings()
     runtime_rows = _runtime_state()
     unsupported_values = dict(UNSUPPORTED)
     app_env = app_env_path()
@@ -374,14 +376,13 @@ def settings_payload() -> Dict[str, Any]:
             "pending_review_ttl_hours": 24,
         },
         "inbox_effective": {
-            "enabled": False,
-            "poll_seconds": 10,
-            "settle_seconds": 5,
-            "confirm": "auto",
+            "enabled": inbox.enabled,
+            "poll_seconds": inbox.poll_seconds,
+            "settle_seconds": inbox.settle_seconds,
+            "confirm": "review",
             "dirs": {
-                "inbox": str(ROOT / "data" / "inbox"),
-                "originals": str(ROOT / "data" / "originals"),
-                "failed": str(ROOT / "data" / "inbox" / "_failed"),
+                "inbox": str(inbox.directory),
+                "state": str(inbox.state_path),
             },
         },
         "ocr_effective": {

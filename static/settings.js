@@ -24,8 +24,9 @@ const FIELDS = [
     ["quality", "pass_score"], ["quality", "max_unocr_images"],
     // 入库确认门：通过质检后是否停下来等确认
     ["ingest", "confirm"], ["ingest", "ttl_hours"],
-    // 文件夹轮询：data\inbox\ 自动入库 + 它自己的确认门
-    ["inbox", "enabled"], ["inbox", "poll_seconds"], ["inbox", "confirm"],
+    // 文件夹扫描：只生成待复核作业，不自动入库
+    ["inbox", "enabled"], ["inbox", "poll_seconds"], ["inbox", "settle_seconds"],
+    ["inbox", "dir"], ["inbox", "confirm"],
     // OCR 文字识别
     ["ocr", "mode"], ["ocr", "provider"], ["ocr", "image_ocr"], ["ocr", "lang"], ["ocr", "device"],
     ["ocr", "base_url"], ["ocr", "model"], ["ocr", "token"], ["ocr", "max_file_mb"], ["ocr", "local_model_dir"],
@@ -1385,15 +1386,15 @@ function renderSummaries(data) {
     const inboxWaiting = Boolean(inboxSaved && ((inboxSaved === "true") !== Boolean(inbox.enabled)));
     setSummary("sum-inbox", [
         inbox.enabled ? ("已开启 · 每 " + (inbox.poll_seconds || 10) + " 秒") : "未开启（收件箱不扫描）",
-        "确认 " + (INBOX_MODE_TAG[inbox.confirm] || INBOX_MODE_TAG.auto),
+        "只进入复核队列",
         inboxWaiting ? "已保存 · 待重启" : ""
     ], "—");
     const navInbox = document.getElementById("nav-inbox");
     if (navInbox) {
-        navInbox.textContent = inbox.enabled ? (INBOX_MODE_TAG[inbox.confirm] || "auto") : "关";
-        navInbox.className = "state" + (inbox.enabled ? (inbox.confirm === "off" ? " warn" : " on") : "");
+        navInbox.textContent = inbox.enabled ? "复核" : "关";
+        navInbox.className = "state" + (inbox.enabled ? " on" : "");
         navInbox.title = "现在生效：文件夹轮询 " + (inbox.enabled ? "开启" : "关闭")
-            + "，收件箱确认 " + (inbox.confirm || "auto")
+            + "，来源只进入本机复核队列"
             + (inboxWaiting ? "（已保存 " + inboxSaved + "，重启后生效）" : "");
     }
     const navQuality = document.getElementById("nav-quality");
@@ -1438,12 +1439,10 @@ const INGEST_MODE_TEXT = {
     off: "不确认（通过校验就直接入库）"
 };
 const INGEST_MODE_TAG = { always: "逐个", auto: "智能", off: "直通" };
-// 文件夹轮询：确认门取值域与入库确认门完全相同，作用范围不同而已
-const INBOX_MODE_TAG = INGEST_MODE_TAG;
+// 文件夹轮询固定进入复核队列，不提供自动入库选项。
+const INBOX_MODE_TAG = { review: "复核" };
 const INBOX_MODE_TEXT = {
-    always: "逐个确认（文件夹来的文件也停下来问我）",
-    auto: "智能放行（建议入库的自动入库，其余问我）",
-    off: "不确认（通过质检就直接入库）"
+    review: "只进入本机复核队列，不会自动写入知识库"
 };
 
 function renderIngestHint(data) {
@@ -1489,24 +1488,25 @@ function renderInboxHint(data) {
     if (String(saved.poll_seconds || "") && String(saved.poll_seconds) !== String(polling)) {
         waiting.push("扫描间隔 → " + String(saved.poll_seconds) + " 秒");
     }
+    if (String(saved.settle_seconds || "") && String(saved.settle_seconds) !== String(settle)) {
+        waiting.push("稳定等待 → " + String(saved.settle_seconds) + " 秒");
+    }
     if (String(saved.confirm || "") && String(saved.confirm) !== String(inbox.confirm)) {
         waiting.push("确认方式 → " + String(saved.confirm));
     }
     if (waiting.length) {
         box.className = "note-line warn";
         box.textContent = "已保存但还没生效：" + waiting.join("、") + "。当前进程仍是 "
-            + (inbox.enabled ? "开启" : "关闭") + " / 每 " + polling + " 秒 / 确认 "
-            + (inbox.confirm || "auto")
+            + (inbox.enabled ? "开启" : "关闭") + " / 每 " + polling + " 秒 / 只进入复核"
             + "——重启服务后新设置生效（重启服务后生效）。";
         return;
     }
     box.className = "note-line";
     box.textContent = "现在生效：" + (inbox.enabled ? "开启" : "关闭")
         + "，每 " + polling + " 秒扫一次收件箱，文件长稳 " + settle + " 秒后受理；"
-        + "确认方式 " + (inbox.confirm || "auto") + "（" + (INBOX_MODE_TEXT[inbox.confirm] || "") + "）。"
-        + "目录：" + ((inbox.dirs || {}).inbox || "data/inbox") + " → 原件留档 "
-        + ((inbox.dirs || {}).originals || "data/originals") + "（受理失败隔离在 "
-        + ((inbox.dirs || {}).failed || "data/inbox/_failed") + "）。";
+        + "结果只进入本机复核队列，不会自动写入知识库。"
+        + "目录：" + ((inbox.dirs || {}).inbox || "data/inbox")
+        + "；源文件保留在原处，状态记录：" + ((inbox.dirs || {}).state || "data/inbox-state.json") + "。";
 }
 
 // 把「保存了什么 / 现在生效什么 / 为什么还不能用」写成一句人话
@@ -1978,7 +1978,7 @@ function bindActivateKey(node) {
 }
 
 function markUnavailableSettings() {
-    const sections = ["sec-ingest", "sec-inbox", "sec-ocr", "sec-tts"];
+    const sections = ["sec-ingest", "sec-ocr", "sec-tts"];
     sections.forEach(function (id) {
         const card = document.getElementById(id);
         if (!card || card.getAttribute("data-unavailable") === "true") { return; }

@@ -95,8 +95,8 @@ Runtime service state and process logs are under `logs/runtime/`.
 - Persisted history and history search require the memory-backed session store.
 - Document topic controls require the memory database.
 - Document search reads up to 20 remote pages when a filter is active.
-- OCR, inbox polling, cloud TTS, Qdrant switching, and
-  advanced topic management are not part of the current MVP.
+- OCR, cloud TTS, Qdrant switching, and advanced topic management are not part
+  of the current MVP.
 - Formal LightRAG indexing still requires the engine and shell to be healthy.
 - Git is initialized and provides reviewed release history and rollback.
 - The running services may use an older process image than the current source.
@@ -410,3 +410,47 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   the overview also returned `upstream=true`, 3 remote documents, and 4 local
   jobs; `/files` returned HTTP 200.
 - No full regression was run.
+
+## Inbox folder scanning (2026-10-29)
+
+- Added `app.features.inbox` with opt-in configuration, a persistent scan state,
+  a background worker, read-only status, and a local-only manual scan API.
+- Inbox scanning is disabled by default. Enabling it requires an existing
+  directory and an application restart.
+- The scanner accepts only top-level regular files with allowed extensions,
+  skips hidden/temporary files and symlinks, enforces the upload size limit, and
+  requires a stable size plus modification time before reading content.
+- Filesystem overlap with the project root, knowledge, upload, parsed, or log
+  directories is rejected.
+- Accepted files reuse the existing upload, local parsing, quality, and review
+  pipeline. They remain in the inbox directory; the scanner never moves,
+  overwrites, or deletes source files, and never submits content to the knowledge
+  service automatically.
+- SHA-256 content fingerprints are persisted so identical content is accepted
+  only once. Failures are recorded without retrying unchanged files on every
+  poll.
+- Scanner metadata is stored under the application data directory in
+  `inbox-state.json`. It contains no file contents or credentials.
+- The settings page now exposes enable, poll interval, settle interval, and
+  directory fields. The legacy confirmation choice is fixed to `review`; the
+  existing card remains present.
+- The document page displays actual inbox state and enables manual scan only
+  when the feature is enabled.
+- Added a local-only, control-token-protected folder-open action for the
+  configured inbox path. It accepts no client-supplied path; invalid tokens
+  returned HTTP 403 during verification.
+- Added `tests/test_inbox_scanner.py` covering disabled behavior, settling,
+  one-time acceptance, content deduplication, failure retention, and ignored
+  files. All 5 inbox tests passed; the combined focused suite passed 15/15.
+- Isolated end-to-end acceptance enabled scanning through temporary environment
+  overrides only. One Markdown file was accepted into `review` with
+  `knowledge.state=not_submitted`, the source file remained present, and a
+  manual scan returned success.
+- The isolated service group was restarted afterward without overrides;
+  `/api/inbox/status` reported `enabled=false` and `running=false`.
+- The settings API returned the new inbox fields and effective paths without a
+  configuration save. The document overview used the same disabled scanner
+  state.
+- The test source and generated review job remain under `.integration-run` only.
+- No formal configuration, knowledge submission, source move, or source deletion
+  was performed.

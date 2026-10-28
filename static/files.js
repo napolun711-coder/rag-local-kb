@@ -434,13 +434,15 @@ function renderInbox(inbox) {
   $("inboxStats").innerHTML =
     statCell("等待处理", inbox.waiting || 0, rel("inbox")) +
     statCell("正在等长稳", inbox.settling || 0) +
-    statCell("已受理", inbox.accepted || 0, "本次运行") +
+    statCell("已受理", inbox.accepted || 0, "进入本机复核") +
     statCell("重复跳过", inbox.duplicate || 0, "内容指纹相同") +
-    statCell("受理失败", inbox.failed || 0, rel("failed")) +
-    statCell("原件留档", ((dirs.originals || {}).files) || 0, rel("originals"));
+    statCell("受理失败", inbox.failed || 0, "源文件保留") +
+    statCell("源文件保留", inbox.source_files || 0, rel("inbox"));
   $("inboxHint").textContent = inbox.hint || "";
+  $("scanBtn").disabled = !inbox.enabled || !state.token;
+  $("scanBtn").title = inbox.enabled ? "立即扫描收件箱" : "请先在设置页启用收件箱扫描";
   $("openInboxBtn").hidden = !state.canOpenFolder;
-  $("openOriginalsBtn").hidden = !state.canOpenFolder;
+  $("openOriginalsBtn").hidden = true;
   const events = (inbox.events || []).map(function (item) {
     const label = item.kind === "accepted" ? "已受理" : (item.kind === "duplicate" ? "重复" : "失败");
     const cls = item.kind === "accepted" ? "ok" : (item.kind === "duplicate" ? "warn" : "bad");

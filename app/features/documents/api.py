@@ -15,6 +15,7 @@ from app.features.documents.contracts import DocumentOverview, DocumentView, Loc
 from app.features.documents.deletion import DeleteValidationError, get_job, start_deletion
 from app.features.documents.service import DocumentCatalogService
 from app.features.documents import topics
+from app.features.inbox import service as inbox_service
 
 
 def _require_local(request: Request) -> None:
@@ -153,7 +154,7 @@ def _overview_payload(view: DocumentOverview) -> Dict[str, Any]:
             "message": view.upstream_message,
         },
         "pipeline": {"busy": False, "recovery_required": False, "recovery_message": ""},
-        "inbox": {"enabled": False, "waiting": 0, "settling": 0, "accepted": 0, "duplicate": 0, "failed": 0, "events": [], "dirs": {}, "hint": ""},
+        "inbox": inbox_service.status(),
         "folders": [],
     }
 
