@@ -487,3 +487,32 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Current limitation: arbitrary scanned PDF pages are supported only when the
   existing parser can extract their embedded images; no separate PDF renderer is
   bundled.
+
+## Rerank integration (2026-10-29)
+
+- Replaced the ambiguous rerank binding control with explicit `off`, `local`, and
+  `cloud` modes. Cloud mode exposes Cohere, Jina, and Aliyun DashScope providers.
+- Local mode maps to LightRAG's native Cohere-compatible rerank adapter and
+  requires an explicit model plus a loopback, private-LAN, or `.local` endpoint.
+  Public endpoints are rejected in local mode.
+- Cloud mode requires an API key. Provider-specific default rerank URLs are used
+  when no endpoint is supplied.
+- Added rerank timeout configuration and a fixed two-document connection test that
+  validates returned indices and relevance scores.
+- Added light-gray model guidance for `BAAI/bge-reranker-v2-m3`,
+  `jina-reranker-v2-base-multilingual`, and `gte-rerank-v2`.
+- No quality baseline, model comparison, or local/cloud result evaluation was
+  performed, as requested.
+- Added `tests/test_rerank.py` covering off/local/cloud mapping, private endpoint
+  validation, and public endpoint rejection. All 3 rerank tests passed; the
+  combined focused suite passed 24/24.
+- Isolated integration used a local Cohere-compatible mock rerank service on
+  `127.0.0.1:19300` and temporary environment overrides only. LightRAG health
+  reported `enable_rerank=true`, binding `cohere`, and the mock model.
+- One existing knowledge query completed successfully. The mock received a
+  `/v2/rerank` request with 2 documents, engine logs reported
+  `Successfully reranked: 2 chunks from 2 original chunks`, and the answer still
+  contained `ORBIT-LANTERN-3B-7419`.
+- The isolated service group was restarted without overrides and the mock process
+  was stopped; port `19300` is no longer listening. No formal configuration was
+  written.

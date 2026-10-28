@@ -160,8 +160,9 @@ Operational cautions:
 - Changing the embedding dimension requires rebuilding the knowledge index.
 - Qdrant and cloud vector-store options are not currently available; enabling
   them requires backend support plus a migration or rebuild plan.
-- Local reranking is not currently available in this build. Keep rerank off in
-  the local view unless a supported provider is added.
+- Reranking can be disabled, run against a local Cohere-compatible `/rerank`
+  service, or use Cohere, Jina, or Aliyun DashScope in cloud mode. Local mode
+  requires a loopback or private-network endpoint.
 - TTS remains unavailable or read-only in this build. OCR is available only
   through the local Windows OCR engine and requires a matching installed language
   pack.
@@ -316,6 +317,27 @@ uv run python -m services.lightrag_shell.main
 Without `RAGKB_LIGHTRAG_BACKEND_URL`, the shell reports that the engine is not
 installed and rejects engine-dependent operations. The lifecycle launcher passes
 the actual engine address to the shell automatically.
+
+## Reranking
+
+The settings page exposes three modes:
+
+- `off`: reranking is disabled.
+- `local`: LightRAG uses its Cohere-compatible rerank adapter against a local or
+  private-LAN `/rerank` endpoint.
+- `cloud`: choose Cohere, Jina, or Aliyun DashScope and provide the API key.
+
+Local mode requires an explicit model and endpoint and rejects public hosts.
+Cloud mode uses the selected provider's default endpoint when the endpoint field
+is empty. The independent “测试重排服务” action sends a fixed query with two
+candidate documents and validates the returned index/score structure.
+
+Common model choices are shown in the page as light-gray guidance:
+`BAAI/bge-reranker-v2-m3` behind a local compatible service,
+`jina-reranker-v2-base-multilingual`, and `gte-rerank-v2`.
+
+Settings require a service restart before the running LightRAG engine uses the
+new rerank binding.
 
 ## Knowledge submission
 

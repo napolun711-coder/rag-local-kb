@@ -2,7 +2,8 @@
 const FIELDS = [
     ["llm", "binding"], ["llm", "model"], ["llm", "host"], ["llm", "api_key"],
     ["embedding", "binding"], ["embedding", "model"], ["embedding", "host"], ["embedding", "api_key"], ["embedding", "dim"], ["embedding", "send_dim"],
-    ["rerank", "binding"], ["rerank", "model"], ["rerank", "host"], ["rerank", "api_key"],
+    ["rerank", "mode"], ["rerank", "provider"], ["rerank", "model"], ["rerank", "host"],
+    ["rerank", "api_key"], ["rerank", "timeout"],
     ["vector_store", "type"], ["vector_store", "qdrant_url"],
     ["graph", "working_dir"], ["graph", "input_dir"],
     ["paths", "lightrag_home"],
@@ -115,6 +116,20 @@ function currentTtsVoicePreset() {
 function syncTtsVoicePreset() {
     const node = document.getElementById("tts_voice_preset");
     if (node) { node.value = currentTtsVoicePreset(); }
+}
+
+function syncRerankMode() {
+    const mode = (el("rerank", "mode") || {}).value || "off";
+    const off = mode === "off";
+    const cloud = mode === "cloud";
+    const provider = el("rerank", "provider");
+    if (provider) { provider.disabled = !cloud; }
+    ["model", "host", "api_key", "timeout"].forEach(function (key) {
+        const node = el("rerank", key);
+        if (node) { node.disabled = off; }
+    });
+    const testButton = document.getElementById("testRerankBtn");
+    if (testButton) { testButton.disabled = off; }
 }
 
 // 密钥字段的 id：留空 = 保持原值，所以"空"不算改动，
@@ -321,6 +336,7 @@ async function load(keepStatus) {
         });
         // 值都写完后，根据链路/模型反推出当前音色预设
         syncTtsVoicePreset();
+        syncRerankMode();
         // 值都写完了才拍快照：这是"磁盘上的配置"，之后与它不一致的就是未保存改动
         snapshotFields();
         renderRouteOverview();
@@ -476,7 +492,7 @@ async function test() {
 }
 
 async function testService(key, btn) {
-    const labels = { llm: "生成模型", embedding: "嵌入模型", knowledge: "知识服务" };
+    const labels = { llm: "生成模型", embedding: "嵌入模型", rerank: "重排模型", knowledge: "知识服务" };
     const statusNode = document.getElementById("serviceTest-" + key);
     const originalText = btn ? btn.textContent : "";
     if (btn && btn.disabled) { return; }
@@ -857,18 +873,19 @@ function renderRouteOverview() {
         mark("embedding", embedding);
     }
 
-    const rerankBinding = controlValue("rerank_binding");
-    const rerankLabels = { aliyun: "阿里云", cohere: "Cohere", jina: "Jina" };
-    if (!rerankBinding) {
-        mark("rerank", { kind: "unknown", label: "待确认", detail: "提供方未选择；可能沿用现有配置。" });
-    } else if (rerankBinding === "null") {
+    const rerankMode = controlValue("rerank_mode");
+    const rerankProvider = controlValue("rerank_provider");
+    const rerankLabels = { aliyun: "阿里云 DashScope", cohere: "Cohere", jina: "Jina" };
+    if (rerankMode === "off" || !rerankMode) {
         mark("rerank", { kind: "off", label: "关闭", detail: "重排序已关闭。" });
+    } else if (rerankMode === "local") {
+        mark("rerank", { kind: "local", label: "本地", detail: "Cohere 兼容的本地 /rerank 服务。" });
     } else {
         const rerankScope = endpointScope(controlValue("rerank_host"));
-        const provider = rerankLabels[rerankBinding] || rerankBinding;
+        const provider = rerankLabels[rerankProvider] || rerankProvider;
         mark("rerank", {
-            kind: rerankScope.kind === "local" ? "local" : "cloud",
-            label: rerankScope.kind === "local" ? "本地/局域网" : "云端",
+            kind: "cloud",
+            label: "云端",
             detail: rerankScope.kind === "unknown"
                 ? provider + "；接口地址按提供方默认配置。"
                 : provider + " · " + rerankScope.detail
@@ -938,6 +955,7 @@ function serviceCheckPattern(key) {
     return {
         llm: /生成模型/i,
         embedding: /嵌入模型/i,
+        rerank: /重排模型/i,
         knowledge: /知识服务|LightRAG|外壳/i
     }[key] || null;
 }
@@ -1135,12 +1153,15 @@ function renderDeploymentReadiness() {
     });
 
     const rerank = effectiveLightragValue("RERANK_BINDING");
+    const rerankCheck = serviceCheckResult("rerank");
     const ocrUnavailable = !!(document.getElementById("sec-ocr")
         && document.getElementById("sec-ocr").getAttribute("data-unavailable") === "true");
     setReadinessState("optional", {
         kind: "info",
         label: "部分未接入",
-        detail: "重排：" + ((!rerank || rerank.toLowerCase() === "null") ? "关闭" : "存在配置，无独立测试")
+        detail: "重排：" + ((!rerank || rerank.toLowerCase() === "null")
+            ? "关闭"
+            : (rerankCheck ? rerankCheck.detail : "已配置，待测试"))
             + " · OCR：" + (ocrUnavailable ? "未接入" : "请查看 OCR 卡片")
             + " · 朗读：未接入"
     });
@@ -1377,8 +1398,12 @@ function renderSummaries(data) {
     setSummary("sum-llm", [pick("llm", "binding"), pick("llm", "model") || norm(lr.LLM_MODEL)], "未设置");
     setSummary("sum-embedding", [pick("embedding", "binding"), pick("embedding", "model") || norm(lr.EMBEDDING_MODEL),
         lr.EMBEDDING_DIM ? (lr.EMBEDDING_DIM + " 维") : ""], "未设置");
-    setSummary("sum-rerank", [pick("rerank", "binding") || norm(lr.RERANK_BINDING),
-        pick("rerank", "model") || norm(lr.RERANK_MODEL)], "未启用");
+    const rerankMode = pick("rerank", "mode");
+    const rerankProvider = pick("rerank", "provider");
+    setSummary("sum-rerank", [
+        rerankMode === "off" ? "" : (rerankMode === "local" ? "本地" : ("云端 · " + (rerankProvider || "cohere"))),
+        pick("rerank", "model") || norm(lr.RERANK_MODEL)
+    ], "未启用");
     setSummary("sum-vector", [norm(lr.LIGHTRAG_VECTOR_STORAGE)], "—");
     setSummary("sum-paths", [norm(lr.WORKING_DIR)], "—");
     setSummary("sum-app", [uploadMb ? (Math.round(uploadMb / 1048576 * 10) / 10 + " MB 上限") : "",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import ipaddress
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -94,6 +95,32 @@ def _mask_secret(value: str) -> str:
     if not text:
         return ""
     return "••••" + text[-4:] if len(text) > 4 else "••••"
+
+
+def _private_or_local_url(value: str) -> bool:
+    try:
+        parsed = urlparse(str(value or ""))
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    host = parsed.hostname.strip().lower()
+    if host in {"localhost", "::1"} or host.endswith(".local"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_private
+
+
+def _rerank_binding_for(mode: str, provider: str) -> str:
+    normalized = str(mode or "off").lower()
+    if normalized == "off":
+        return "null"
+    if normalized == "local":
+        return "cohere"
+    return str(provider or "cohere").lower()
 
 
 def _engine_defaults() -> Dict[str, str]:
@@ -208,6 +235,17 @@ def _settings_groups(
             app_values,
             engine_values,
         )
+    if "RAGKB_RERANK_MODE" not in app_values:
+        binding = str(engine_values.get("RERANK_BINDING", "null") or "null").lower()
+        if binding in {"", "null", "none"}:
+            result.setdefault("rerank", {})["mode"] = "off"
+        else:
+            host = str(engine_values.get("RERANK_BINDING_HOST", "") or "")
+            result.setdefault("rerank", {})["mode"] = (
+                "local" if host and _private_or_local_url(host) else "cloud"
+            )
+        if binding in {"cohere", "jina", "aliyun"}:
+            result.setdefault("rerank", {})["provider"] = binding
     return result
 
 
@@ -316,6 +354,7 @@ def _lightrag_effective(engine_values: Mapping[str, str]) -> Dict[str, str]:
         "RERANK_BINDING": value("RERANK_BINDING"),
         "RERANK_MODEL": value("RERANK_MODEL"),
         "RERANK_BINDING_HOST": value("RERANK_BINDING_HOST"),
+        "RERANK_TIMEOUT": value("RERANK_TIMEOUT"),
         "LIGHTRAG_VECTOR_STORAGE": _vector_type_for_effective(
             value("LIGHTRAG_VECTOR_STORAGE")
         ),
@@ -618,6 +657,56 @@ def save_settings(payload: Mapping[str, Any], *, remote: bool = False) -> Dict[s
         target = engine_updates if spec.scope == "engine" else app_updates
         target[spec.env_key] = None
 
+    rerank_mode = str(
+        app_updates.get(
+            "RAGKB_RERANK_MODE",
+            app_values.get("RAGKB_RERANK_MODE", "off"),
+        )
+        or "off"
+    ).lower()
+    rerank_provider = str(
+        app_updates.get(
+            "RAGKB_RERANK_PROVIDER",
+            app_values.get("RAGKB_RERANK_PROVIDER", "cohere"),
+        )
+        or "cohere"
+    ).lower()
+    rerank_ui_changed = (
+        "RAGKB_RERANK_MODE" in app_updates
+        or "RAGKB_RERANK_PROVIDER" in app_updates
+    )
+    if rerank_ui_changed:
+        engine_updates["RERANK_BINDING"] = _rerank_binding_for(
+            rerank_mode,
+            rerank_provider,
+        )
+    if rerank_mode == "local":
+        rerank_host = _resolved_value(
+            FIELD_BY_PAIR[("rerank", "host")],
+            app_values,
+            engine_values,
+            {**app_updates, **engine_updates},
+        )
+        rerank_model = _resolved_value(
+            FIELD_BY_PAIR[("rerank", "model")],
+            app_values,
+            engine_values,
+            {**app_updates, **engine_updates},
+        )
+        if not rerank_host or not _private_or_local_url(rerank_host):
+            messages.append("本地重排必须填写本机或局域网接口地址")
+        if not rerank_model:
+            messages.append("本地重排必须填写模型名称")
+    elif rerank_mode == "cloud":
+        rerank_key = _resolved_value(
+            FIELD_BY_PAIR[("rerank", "api_key")],
+            app_values,
+            engine_values,
+            {**app_updates, **engine_updates},
+        )
+        if not rerank_key:
+            messages.append("云端重排必须填写 API Key")
+
     if messages:
         raise SettingsError(messages)
     _validate_resolved(app_values, engine_values, {**app_updates, **engine_updates})
@@ -750,6 +839,7 @@ def _http_json(
 
 
 def test_connections() -> Dict[str, Any]:
+    app_values = read_env_file(app_env_path())
     engine_values = read_env_file(engine_env_path())
     defaults = _engine_defaults()
 
@@ -850,6 +940,87 @@ def test_connections() -> Dict[str, Any]:
                 "name": "嵌入模型",
                 "ok": False,
                 "detail": "尚未配置可用的嵌入服务",
+            }
+        )
+
+    rerank_binding = value("RERANK_BINDING").lower()
+    if rerank_binding and rerank_binding != "null":
+        defaults = {
+            "cohere": (
+                "https://api.cohere.com/v2/rerank",
+                "rerank-v3.5",
+            ),
+            "jina": (
+                "https://api.jina.ai/v1/rerank",
+                "jina-reranker-v2-base-multilingual",
+            ),
+            "aliyun": (
+                "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
+                "gte-rerank-v2",
+            ),
+        }
+        default_url, default_model = defaults.get(
+            rerank_binding,
+            ("", ""),
+        )
+        rerank_host = value("RERANK_BINDING_HOST") or default_url
+        rerank_model = value("RERANK_MODEL") or default_model
+        rerank_key = value("RERANK_BINDING_API_KEY")
+        headers = {"Authorization": f"Bearer {rerank_key}"} if rerank_key else {}
+        documents = [
+            "本地知识库中的检索结果排序说明。",
+            "与查询无关的天气和旅行信息。",
+        ]
+        if rerank_binding == "aliyun":
+            body: Dict[str, Any] = {
+                "model": rerank_model,
+                "input": {"query": "本地 RAG 检索", "documents": documents},
+                "parameters": {"top_n": 2},
+            }
+        else:
+            body = {
+                "model": rerank_model,
+                "query": "本地 RAG 检索",
+                "documents": documents,
+                "top_n": 2,
+            }
+        try:
+            rerank_timeout = float(value("RERANK_TIMEOUT") or 30)
+        except ValueError:
+            rerank_timeout = 30.0
+        ok, detail, payload = _http_json(
+            "POST",
+            rerank_host,
+            headers=headers,
+            body=body,
+            timeout=max(5.0, min(60.0, rerank_timeout)),
+        )
+        if rerank_binding == "aliyun":
+            output = payload.get("output") if isinstance(payload.get("output"), dict) else {}
+            results = output.get("results") if isinstance(output.get("results"), list) else []
+        else:
+            results = payload.get("results") if isinstance(payload.get("results"), list) else []
+        valid = [
+            item for item in results
+            if isinstance(item, dict)
+            and isinstance(item.get("index"), int)
+            and isinstance(item.get("relevance_score"), (int, float))
+        ]
+        mode = str(app_values.get("RAGKB_RERANK_MODE", "off")).lower()
+        label = "本地重排" if mode == "local" else "云端重排"
+        checks.append(
+            {
+                "name": f"重排模型（{label}）",
+                "ok": bool(ok and valid),
+                "detail": (
+                    f"{rerank_model or rerank_binding} 可用，返回 {len(valid)} 条排序"
+                    if ok and valid
+                    else (
+                        f"接口可达但返回格式不符合 /rerank"
+                        if ok
+                        else f"{rerank_binding} 不可用（{detail}）"
+                    )
+                ),
             }
         )
 

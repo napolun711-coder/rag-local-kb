@@ -246,20 +246,28 @@
         <span class="sum" id="sum-rerank"></span>
         <span class="chev">▾</span>
     </div>
-    <p class="hint">可选：对检索结果再排序，提升准确度；不用时选“关闭”。当前服务端未提供重排独立连接测试。</p>
-    <p class="note-line warn local-only-note" data-local-only-note hidden>全本地提示：当前版本没有本地重排提供方，建议保持关闭；不要把它当作已可用的本地服务。</p>
+    <p class="hint">可选：对检索结果再排序。本地模式使用 Cohere 兼容的 <code>/rerank</code> 服务；云端模式支持 Cohere、Jina 和阿里云 DashScope。</p>
+    <p class="hint">常见模型：<span class="sub">BAAI/bge-reranker-v2-m3（本地兼容服务） · jina-reranker-v2-base-multilingual · gte-rerank-v2</span></p>
     <div class="row"><label>接入方式</label>
-        <select id="rerank_binding">
-            <option value="">（不修改）</option>
-            <option value="null">关闭</option>
-            <option value="local" disabled>本地重排（当前版本未提供）</option>
-            <option value="aliyun">阿里云</option>
+        <select id="rerank_mode" onchange="syncRerankMode()">
+            <option value="off">关闭</option>
+            <option value="local">本地重排</option>
+            <option value="cloud">云端重排</option>
+        </select></div>
+    <div class="row"><label>云端提供方</label>
+        <select id="rerank_provider">
             <option value="cohere">Cohere</option>
             <option value="jina">Jina</option>
+            <option value="aliyun">阿里云 DashScope</option>
         </select></div>
-    <div class="row"><label>模型名称</label><input type="text" id="rerank_model" placeholder="例如 qwen3-vl-rerank"></div>
-    <div class="row"><label>接口地址</label><input type="text" id="rerank_host"></div>
-    <div class="row"><label>API Key</label><input type="password" id="rerank_api_key" placeholder="留空表示保持现有值不变"><button type="button" class="btn-clear" data-clear-secret="rerank_api_key" hidden>清除</button></div>
+    <div class="row"><label>模型名称</label><input type="text" id="rerank_model" placeholder="本地示例：BAAI/bge-reranker-v2-m3"></div>
+    <div class="row"><label>接口地址</label><input type="text" id="rerank_host" placeholder="本地示例：http://127.0.0.1:9000/v2/rerank；云端可留空使用默认地址"></div>
+    <div class="row"><label>API Key</label><input type="password" id="rerank_api_key" placeholder="本地服务可留空；云端重排必填"><button type="button" class="btn-clear" data-clear-secret="rerank_api_key" hidden>清除</button></div>
+    <div class="row"><label>请求超时（秒）</label><input type="number" id="rerank_timeout" min="5" max="300" step="1" placeholder="默认 30"></div>
+    <div class="readiness-actions">
+        <button type="button" class="btn-clear service-test-button" id="testRerankBtn" onclick="testService('rerank', this)">测试重排服务</button>
+        <span class="service-test-status" id="serviceTest-rerank">尚未测试</span>
+    </div>
 </section>
 
 <section class="card" id="sec-vector">
