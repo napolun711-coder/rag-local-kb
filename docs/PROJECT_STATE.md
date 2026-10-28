@@ -287,3 +287,32 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   engine/shell/app healthy, and local session mode reported stop capability.
 - No save, delete, clear, purge, leave, stop, or formal data operation was run.
 - A real two-device LAN test and lifecycle stop test remain pending.
+
+## Isolated full-service ingestion smoke (2026-10-28)
+
+- Started the isolated engine/shell/app group with a temporary engine config and
+  temporary RAG/knowledge/data/log/runtime paths.
+- Uploaded `integration-smoke.md` through the real `/upload` API.
+- Local parsing and quality validation passed with score 100 and review state.
+- The explicit ingest action was accepted and submitted to the knowledge service.
+- Indexing failed because the configured Ollama chat model `qwen2.5:7b` is not
+  installed; engine logs report HTTP 404 `model 'qwen2.5:7b' not found`.
+- No question-answer call was attempted after the indexing failure.
+- No retry loop was entered after the model error.
+- Chat Q&A remains blocked until a local chat model is installed or the engine is
+  configured to use an available local/cloud chat model.
+
+### 3B local-model retry
+
+- Switched only the isolated engine configuration from `qwen2.5:7b` to the
+  installed `qwen2.5:3b`; the embedding model remained local `bge-m3`.
+- Restarted the isolated engine/shell/app group successfully.
+- A direct 3B OpenAI-compatible completion check passed.
+- Uploaded a new unique isolated test document and passed parsing and quality
+  validation.
+- LightRAG indexing completed successfully with the 3B model and produced graph
+  entities, relations, and embeddings.
+- Refreshing the application knowledge status reported `done`.
+- A single `/chat` call answered `ORBIT-LANTERN-3B-7419` and cited
+  `integration-smoke-3b.md`.
+- No cloud API key or cloud LLM was required for this smoke test.
