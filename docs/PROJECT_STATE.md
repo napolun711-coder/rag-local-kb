@@ -344,3 +344,19 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Remaining risk: after any failed start or restart, verify listener ownership
   before retrying so untracked service processes are not mistaken for stopped
   services.
+
+### Final isolated cold-start acceptance (2026-10-29)
+
+- Cold-started the isolated service group from
+  `.integration-run/20261028-234918-full/run-env.ps1`.
+- `engine`, `shell`, and `app` started on their preferred loopback ports
+  `19162`, `19161`, and `19180`.
+- All three health endpoints returned HTTP 200.
+- The local session endpoint returned HTTP 200 with `mode=local`,
+  `enabled=true`, and `can_stop=true`.
+- The access connect-info endpoint returned HTTP 200 with
+  `http://192.168.3.4:19180/web` and the actual request port.
+- The engine reported `qwen2.5:3b` with `bge-m3:latest`; no cloud LLM was used.
+- No ingestion, save, delete, purge, stop, or full regression was run during
+  this acceptance check.
+- The isolated service group remains running after acceptance.
