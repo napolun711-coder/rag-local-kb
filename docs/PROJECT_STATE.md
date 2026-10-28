@@ -488,6 +488,34 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   existing parser can extract their embedded images; no separate PDF renderer is
   bundled.
 
+## OCR provider routing (2026-10-29)
+
+- Added `auto`, `windows`, `local_model`, `cloud`, and `none` OCR provider modes.
+  Auto priority is: configured cloud API, configured private local model,
+  Windows built-in OCR, then disabled.
+- Explicit provider selection is strict and does not silently switch to another
+  provider.
+- Added a shared OCR HTTP contract for custom local and cloud endpoints:
+  `{model, language, mime_type, image_base64}` with response text at `text`,
+  `content`, or a nested `data/result/output.text`.
+- Custom local model endpoints must be loopback, private LAN, or `.local`.
+  Cloud mode requires endpoint, model, and API Token and is marked as external.
+- Provider controls now enable/disable endpoint, model, Token, and connection
+  testing based on the selected mode. Windows OCR remains the no-network default.
+- Added 4 provider-routing tests. OCR now has 10 focused tests, and the combined
+  focused suite passed 28/28.
+- Isolated end-to-end acceptance used a local compatible OCR service on
+  `127.0.0.1:19310`. `/api/ocr/test` succeeded, the request included the Token,
+  and an image upload produced `review`, `ocr.provider=local_model`,
+  `external=false`, 121 valid characters, and marker `OCR-MODEL-19310`.
+- The review job remained `knowledge.state=not_submitted`. No cloud provider was
+  contacted.
+- The service group was restarted without overrides and the mock process stopped;
+  port `19310` is no longer listening. Default OCR is off and provider defaults
+  to auto.
+- Current limitation: cloud OCR was contract-tested only, not against a real
+  external OCR provider in this checkout.
+
 ## Rerank integration (2026-10-29)
 
 - Replaced the ambiguous rerank binding control with explicit `off`, `local`, and

@@ -438,12 +438,26 @@ def settings_payload() -> Dict[str, Any]:
         },
         "ocr_providers": [
             {
-                "id": "local",
+                "id": "windows",
                 "label": "Windows 本机 OCR",
-                "available": bool(ocr_runtime.get("engine_available")),
-                "selected": ocr.provider == "local",
-                "detail": ocr_runtime["reason"],
-            }
+                "available": bool(ocr_runtime.get("windows_available")),
+                "selected": ocr_runtime.get("provider") == "windows",
+                "detail": "" if ocr_runtime.get("windows_available") else "Windows OCR 或语言包不可用",
+            },
+            {
+                "id": "local_model",
+                "label": "自定义本地 OCR 模型",
+                "available": bool(ocr_runtime.get("local_model_configured")),
+                "selected": ocr_runtime.get("provider") == "local_model",
+                "detail": "需要本机/局域网接口、模型名",
+            },
+            {
+                "id": "cloud",
+                "label": "云端 OCR",
+                "available": bool(ocr_runtime.get("cloud_configured")),
+                "selected": ocr_runtime.get("provider") == "cloud",
+                "detail": "需要接口地址、模型名和 API Key；启用后会外发图片",
+            },
         ],
         "runtime_effective": {"services": runtime_rows},
         "injected_env": {},
@@ -707,6 +721,50 @@ def save_settings(payload: Mapping[str, Any], *, remote: bool = False) -> Dict[s
         if not rerank_key:
             messages.append("云端重排必须填写 API Key")
 
+    ocr_mode = _resolved_value(
+        FIELD_BY_PAIR[("ocr", "mode")],
+        app_values,
+        engine_values,
+        {**app_updates, **engine_updates},
+    )
+    ocr_provider = _resolved_value(
+        FIELD_BY_PAIR[("ocr", "provider")],
+        app_values,
+        engine_values,
+        {**app_updates, **engine_updates},
+    )
+    if ocr_mode in {"manual", "auto"}:
+        ocr_base_url = _resolved_value(
+            FIELD_BY_PAIR[("ocr", "base_url")],
+            app_values,
+            engine_values,
+            {**app_updates, **engine_updates},
+        )
+        ocr_model = _resolved_value(
+            FIELD_BY_PAIR[("ocr", "model")],
+            app_values,
+            engine_values,
+            {**app_updates, **engine_updates},
+        )
+        ocr_token = _resolved_value(
+            FIELD_BY_PAIR[("ocr", "token")],
+            app_values,
+            engine_values,
+            {**app_updates, **engine_updates},
+        )
+        if ocr_provider == "local_model":
+            if not ocr_base_url or not _private_or_local_url(ocr_base_url):
+                messages.append("自定义本地 OCR 必须填写本机或局域网接口地址")
+            if not ocr_model:
+                messages.append("自定义本地 OCR 必须填写模型名称")
+        elif ocr_provider == "cloud":
+            if not ocr_base_url:
+                messages.append("云端 OCR 必须填写兼容接口地址")
+            if not ocr_model:
+                messages.append("云端 OCR 必须填写模型名称")
+            if not ocr_token:
+                messages.append("云端 OCR 必须填写 Token")
+
     if messages:
         raise SettingsError(messages)
     _validate_resolved(app_values, engine_values, {**app_updates, **engine_updates})
@@ -772,7 +830,7 @@ def save_settings(payload: Mapping[str, Any], *, remote: bool = False) -> Dict[s
         resolved_updates,
     )
     ocr_changed = any(key.startswith("RAGKB_OCR_") for key in resolved_updates)
-    ocr_desired = ocr_mode in {"manual", "auto"} and ocr_provider == "local"
+    ocr_desired = ocr_mode in {"manual", "auto"} and ocr_provider != "none"
     return {
         "ok": True,
         "note": " ".join([base_note, *warnings]),

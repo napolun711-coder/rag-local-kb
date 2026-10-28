@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -15,7 +16,7 @@ from app.features.ocr import service as ocr_service
 def _ocr_settings() -> OcrSettings:
     return OcrSettings(
         mode="auto",
-        provider="local",
+        provider="windows",
         image_ocr=True,
         language="zh-Hans-CN",
         max_file_mb=50,
@@ -109,7 +110,7 @@ class OcrTests(unittest.TestCase):
     def test_disabled_ocr_returns_explicit_error(self) -> None:
         disabled = OcrSettings(
             mode="off",
-            provider="local",
+            provider="windows",
             image_ocr=True,
             language="zh-Hans-CN",
             max_file_mb=50,
@@ -147,6 +148,114 @@ class OcrTests(unittest.TestCase):
 
         self.assertFalse(payload["ocr"]["enabled"])
         self.assertFalse(payload["can"]["ocr"])
+
+    def test_auto_provider_priority(self) -> None:
+        cloud = OcrSettings(
+            mode="auto",
+            provider="auto",
+            image_ocr=True,
+            language="zh-Hans-CN",
+            max_file_mb=50,
+            timeout_seconds=30,
+            base_url="https://ocr.example.com/v1/ocr",
+            model="cloud-model",
+            api_key="secret",
+        )
+        local_model = OcrSettings(
+            mode="auto",
+            provider="auto",
+            image_ocr=True,
+            language="zh-Hans-CN",
+            max_file_mb=50,
+            timeout_seconds=30,
+            base_url="http://127.0.0.1:9001/ocr",
+            model="local-model",
+        )
+        self.assertEqual(
+            ocr_service._resolve_provider(cloud, windows_available=True),
+            "cloud",
+        )
+        self.assertEqual(
+            ocr_service._resolve_provider(local_model, windows_available=True),
+            "local_model",
+        )
+        self.assertEqual(
+            ocr_service._resolve_provider(
+                replace(_ocr_settings(), provider="auto"),
+                windows_available=True,
+            ),
+            "windows",
+        )
+
+    def test_remote_ocr_contract_returns_text(self) -> None:
+        cfg = OcrSettings(
+            mode="auto",
+            provider="local_model",
+            image_ocr=True,
+            language="zh-Hans-CN",
+            max_file_mb=50,
+            timeout_seconds=30,
+            base_url="http://127.0.0.1:9001/ocr",
+            model="local-model",
+        )
+
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, _limit):
+                return b'{"text":"remote result"}'
+
+        with patch("app.features.ocr.service.urllib.request.urlopen", return_value=Response()):
+            result = ocr_service._remote_recognize(
+                b"image",
+                filename="test.png",
+                cfg=cfg,
+                provider="local_model",
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["text"], "remote result")
+
+    def test_cloud_provider_is_marked_external(self) -> None:
+        cfg = OcrSettings(
+            mode="auto",
+            provider="cloud",
+            image_ocr=True,
+            language="zh-Hans-CN",
+            max_file_mb=50,
+            timeout_seconds=30,
+            base_url="https://ocr.example.com/v1/ocr",
+            model="cloud-model",
+            api_key="secret",
+        )
+        with patch(
+            "app.features.ocr.service.probe",
+            return_value={"available": True, "languages": ["zh-Hans-CN"]},
+        ):
+            result = ocr_service.status(cfg)
+
+        self.assertTrue(result["enabled"])
+        self.assertEqual(result["provider"], "cloud")
+        self.assertTrue(result["external"])
+
+    def test_local_model_rejects_public_endpoint(self) -> None:
+        cfg = OcrSettings(
+            mode="auto",
+            provider="local_model",
+            image_ocr=True,
+            language="zh-Hans-CN",
+            max_file_mb=50,
+            timeout_seconds=30,
+            base_url="https://public.example.com/ocr",
+            model="local-model",
+        )
+        self.assertFalse(ocr_service._remote_configured(cfg, "local_model"))
 
 
 if __name__ == "__main__":

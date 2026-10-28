@@ -100,7 +100,7 @@ def _advice_for(
 
 def _ocr_candidate(parsed: parse_service.ParseResult, settings: IngestSettings) -> bool:
     cfg = get_ocr_settings()
-    if not cfg.enabled or not parsed.assets:
+    if not cfg.configured or not parsed.assets:
         return False
     if parsed.route == "image":
         return True
@@ -112,7 +112,7 @@ def _apply_ocr(
     settings: IngestSettings,
 ) -> Dict[str, Any]:
     cfg = get_ocr_settings()
-    if not cfg.enabled:
+    if not cfg.configured:
         return {"used": False, "attempted": False, "reason": "OCR 当前关闭"}
     if not _ocr_candidate(parsed, settings):
         reason = "文档没有可识别图片" if not parsed.assets else "内嵌图片 OCR 已关闭"

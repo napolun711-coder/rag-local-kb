@@ -447,8 +447,8 @@ FIELDS: Tuple[FieldSpec, ...] = (
         "app",
         "RAGKB_OCR_PROVIDER",
         "choice",
-        "local",
-        ("none", "local"),
+        "auto",
+        ("auto", "windows", "local_model", "cloud", "none"),
     ),
     FieldSpec(
         "ocr",
@@ -486,6 +486,27 @@ FIELDS: Tuple[FieldSpec, ...] = (
         "30",
         minimum=5,
         maximum=300,
+    ),
+    FieldSpec(
+        "ocr",
+        "base_url",
+        "app",
+        "RAGKB_OCR_BASE_URL",
+        "url",
+    ),
+    FieldSpec(
+        "ocr",
+        "model",
+        "app",
+        "RAGKB_OCR_MODEL",
+    ),
+    FieldSpec(
+        "ocr",
+        "token",
+        "app",
+        "RAGKB_OCR_TOKEN",
+        "secret",
+        secret=True,
     ),
     FieldSpec(
         "runtime",
@@ -540,9 +561,6 @@ UNSUPPORTED: Dict[Tuple[str, str], str] = {
     ("ingest", "confirm"): "always",
     ("ingest", "ttl_hours"): "24",
     ("ocr", "device"): "cpu",
-    ("ocr", "base_url"): "",
-    ("ocr", "model"): "",
-    ("ocr", "token"): "",
     ("ocr", "local_model_dir"): "",
     ("tts", "tts_cloud_host"): "",
     ("tts", "tts_cloud_api_key"): "",
@@ -553,7 +571,6 @@ UNSUPPORTED: Dict[Tuple[str, str], str] = {
 }
 
 UNSUPPORTED_SECRETS = {
-    ("ocr", "token"),
     ("tts", "tts_cloud_api_key"),
 }
 

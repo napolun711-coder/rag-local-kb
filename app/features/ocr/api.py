@@ -24,17 +24,7 @@ def ocr_status() -> Dict[str, Any]:
 
 @router.post("/test", dependencies=[Depends(_require_local)])
 def test_ocr() -> Dict[str, Any]:
-    service.reset_status_cache()
-    result = service.status()
-    return {
-        "ok": bool(result.get("enabled")),
-        "status": result,
-        "message": (
-            "Windows 本机 OCR 可用"
-            if result.get("enabled")
-            else result.get("reason") or "Windows 本机 OCR 不可用"
-        ),
-    }
+    return service.test_connection()
 
 
 __all__ = ["router"]

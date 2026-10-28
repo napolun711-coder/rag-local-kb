@@ -132,6 +132,23 @@ function syncRerankMode() {
     if (testButton) { testButton.disabled = off; }
 }
 
+function syncOcrProvider() {
+    const provider = (el("ocr", "provider") || {}).value || "auto";
+    const remote = ["auto", "local_model", "cloud"].indexOf(provider) >= 0;
+    ["base_url", "model"].forEach(function (key) {
+        const node = el("ocr", key);
+        if (node) { node.disabled = !remote; }
+    });
+    const token = el("ocr", "token");
+    if (token) { token.disabled = !remote; }
+    const clear = document.querySelector('[data-clear-secret="ocr_token"]');
+    if (clear) { clear.disabled = !remote; }
+    const test = document.getElementById("testOcrBtn");
+    if (test) {
+        test.disabled = (el("ocr", "mode") || {}).value === "off" || provider === "none";
+    }
+}
+
 // 密钥字段的 id：留空 = 保持原值，所以"空"不算改动，
 // 否则一打开页面什么都没做就会显示"有 N 项未保存"。
 const SECRET_IDS = {};
@@ -337,6 +354,7 @@ async function load(keepStatus) {
         // 值都写完后，根据链路/模型反推出当前音色预设
         syncTtsVoicePreset();
         syncRerankMode();
+        syncOcrProvider();
         // 值都写完了才拍快照：这是"磁盘上的配置"，之后与它不一致的就是未保存改动
         snapshotFields();
         renderRouteOverview();
@@ -554,7 +572,7 @@ async function testOcrLocal() {
         button.setAttribute("aria-busy", "true");
     }
     if (status) {
-        status.textContent = "正在检查 Windows 本机 OCR...";
+        status.textContent = "正在检查 OCR 提供方...";
         status.className = "service-test-status is-pending";
     }
     try {
@@ -564,19 +582,19 @@ async function testOcrLocal() {
         const ok = !!(response.ok && data && data.ok);
         const language = result.language_tag || result.lang || "";
         const detail = ok
-            ? ("可用 · 语言 " + language)
+            ? ("可用 · " + (result.provider || "OCR") + (language ? " · 语言 " + language : ""))
             : ((data && data.message) || result.reason || "不可用");
         if (status) {
             status.textContent = detail;
             status.className = "service-test-status " + (ok ? "is-ok" : "is-bad");
         }
-        notify("本机 OCR：" + detail, ok ? "ok" : "bad");
+        notify("OCR：" + detail, ok ? "ok" : "bad");
     } catch (err) {
         if (status) {
             status.textContent = "检查失败：" + err;
             status.className = "service-test-status is-bad";
         }
-        notify("本机 OCR 检查失败：" + err, "bad");
+        notify("OCR 检查失败：" + err, "bad");
     } finally {
         if (button) {
             button.disabled = false;
@@ -735,6 +753,9 @@ function renderEffective(data) {
         ["OCR 是否外发", ocr.external ? "会把文件发送到外部服务" : "不外发（本机或未启用）"],
         ["内嵌图片纳入 OCR", ocr.image_ocr ? "是（未识别图片会停下等确认）" : "否（忽略图片，只入库正文）"],
         ["OCR 引擎", ocr.engine || "—"],
+        ["OCR 接口", ocr.base_url || "Windows 内置"],
+        ["OCR 模型", ocr.model || "—"],
+        ["OCR Token", ocr.token_set ? "已配置" : "未配置"],
         ["OCR 语言", ocr.language_tag || ocr.lang || "—"],
         ["可用 OCR 语言包", (ocr.available_languages && ocr.available_languages.length)
             ? ocr.available_languages.join(" / ") : "—"],
@@ -908,8 +929,19 @@ function renderRouteOverview() {
         mark("ocr", { kind: "unsupported", label: "未接入", detail: "当前版本将 OCR 卡片标为只读。" });
     } else if (ocrMode === "off" || ocrProvider === "none") {
         mark("ocr", { kind: "off", label: "关闭", detail: "OCR 已关闭，不外发文件。" });
-    } else if (ocrProvider === "local") {
-        mark("ocr", { kind: "local", label: "本地", detail: "Windows 内置 OCR，不外发文件。" });
+    } else if (ocrProvider === "cloud") {
+        mark("ocr", { kind: "cloud", label: "云端", detail: "兼容 OCR 接口；识别时会发送图片。" });
+    } else if (ocrProvider === "local_model") {
+        mark("ocr", { kind: "local", label: "本地模型", detail: "本机或局域网兼容 OCR 接口。" });
+    } else if (ocrProvider === "windows") {
+        mark("ocr", { kind: "local", label: "Windows", detail: "Windows 内置 OCR，不外发文件。" });
+    } else if (ocrProvider === "auto") {
+        const effective = (LAST_SETTINGS && LAST_SETTINGS.ocr_effective) || {};
+        mark("ocr", {
+            kind: effective.external ? "cloud" : (effective.enabled ? "local" : "unknown"),
+            label: effective.external ? "云端" : (effective.enabled ? "自动/本地" : "自动"),
+            detail: effective.enabled ? ("当前选中：" + (effective.provider || "—")) : (effective.reason || "等待可用提供方")
+        });
     } else {
         mark("ocr", { kind: "unknown", label: "待确认", detail: "模式或提供方未选择；可能沿用现有配置。" });
     }
@@ -2059,12 +2091,9 @@ function markUnavailableSettings() {
         if (head && head.parentNode) { head.insertAdjacentElement("afterend", note); }
     });
     ["paths_lightrag_home", "app_skill_routing", "vector_store_qdrant_url",
-        "ocr_base_url", "ocr_model", "ocr_token", "ocr_device", "ocr_local_model_dir"].forEach(function (id) {
+        "ocr_device", "ocr_local_model_dir"].forEach(function (id) {
         const node = document.getElementById(id);
         if (node) { node.disabled = true; }
-    });
-    document.querySelectorAll('[data-clear-secret="ocr_token"]').forEach(function (node) {
-        node.disabled = true;
     });
 }
 

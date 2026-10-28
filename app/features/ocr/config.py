@@ -64,10 +64,13 @@ class OcrSettings:
     language: str
     max_file_mb: int
     timeout_seconds: int
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
 
     @property
-    def enabled(self) -> bool:
-        return self.mode in {"manual", "auto"} and self.provider == "local"
+    def configured(self) -> bool:
+        return self.mode in {"manual", "auto"} and self.provider != "none"
 
 
 def _build_settings() -> OcrSettings:
@@ -75,8 +78,10 @@ def _build_settings() -> OcrSettings:
     mode = _value("RAGKB_OCR_MODE", values, "off").lower()
     if mode not in {"off", "manual", "auto"}:
         mode = "off"
-    provider = _value("RAGKB_OCR_PROVIDER", values, "local").lower()
-    if provider not in {"none", "local"}:
+    provider = _value("RAGKB_OCR_PROVIDER", values, "auto").lower()
+    if provider == "local":
+        provider = "windows"
+    if provider not in {"auto", "windows", "local_model", "cloud", "none"}:
         provider = "none"
     language = _value("RAGKB_OCR_LANG", values, "zh-Hans-CN") or "zh-Hans-CN"
     return OcrSettings(
@@ -86,6 +91,9 @@ def _build_settings() -> OcrSettings:
         language=language,
         max_file_mb=_int("RAGKB_OCR_MAX_FILE_MB", values, 50, 1, 500),
         timeout_seconds=_int("RAGKB_OCR_TIMEOUT_SECONDS", values, 30, 5, 300),
+        base_url=_value("RAGKB_OCR_BASE_URL", values, ""),
+        model=_value("RAGKB_OCR_MODEL", values, ""),
+        api_key=_value("RAGKB_OCR_TOKEN", values, ""),
     )
 
 

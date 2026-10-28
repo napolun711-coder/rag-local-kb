@@ -163,9 +163,8 @@ Operational cautions:
 - Reranking can be disabled, run against a local Cohere-compatible `/rerank`
   service, or use Cohere, Jina, or Aliyun DashScope in cloud mode. Local mode
   requires a loopback or private-network endpoint.
-- TTS remains unavailable or read-only in this build. OCR is available only
-  through the local Windows OCR engine and requires a matching installed language
-  pack.
+- TTS remains unavailable or read-only in this build. OCR supports Windows,
+  private local model endpoints, and explicitly configured cloud endpoints.
 - Service-level tests use the existing settings test endpoint. Capabilities
   without an independent check are reported as having no independent test.
 
@@ -250,20 +249,32 @@ local-only and also requires the per-process control token. The “打开收件�
 action uses a separate local-only endpoint with the same token and always opens
 the configured inbox directory; it never accepts a client-supplied path.
 
-## Local OCR
+## OCR providers
 
-OCR uses the Windows built-in `Windows.Media.Ocr` engine through
-`scripts/windows_ocr.ps1`. It runs locally and never sends image content to a
-cloud service.
+OCR supports Windows built-in recognition, a custom local model endpoint, and a
+cloud-compatible endpoint.
 
-- OCR is disabled by default. Set `RAGKB_OCR_MODE=manual` or `auto`, keep
-  `RAGKB_OCR_PROVIDER=local`, and restart the application.
+- `RAGKB_OCR_PROVIDER=auto` selects a configured cloud API first, otherwise a
+  configured local model endpoint, otherwise Windows built-in OCR, otherwise
+  disabled.
+- Explicit `windows`, `local_model`, or `cloud` selection never silently switches
+  to another provider.
+- Windows recognition uses `Windows.Media.Ocr` through
+  `scripts/windows_ocr.ps1`.
+- Local model and cloud providers use the same JSON contract:
+  `{model, language, mime_type, image_base64}` and return `{"text": "..."}`.
+- A local model endpoint must use loopback, a private LAN address, or `.local`;
+  public endpoints are rejected.
+- Cloud OCR requires an explicit API key and is marked as external data transfer.
+  It is never used as an automatic fallback for an explicitly local provider.
+- OCR is disabled by default. Configure `manual` or `auto`, choose a provider,
+  and restart the application.
 - `manual` leaves image-based documents in `needs_ocr` until the user triggers
-  “识别图片”; `auto` runs local OCR during local parsing.
-- Embedded images in PDF, Word, Excel, and PowerPoint are processed only when
+  “识别图片”; `auto` runs the selected OCR provider during local parsing.
+- Embedded images in PDF, Word, Excel, and PowerPoint are processed when
   `RAGKB_OCR_IMAGE_OCR=true`. Standalone image uploads always require OCR.
-- The requested `RAGKB_OCR_LANG` must have a matching Windows OCR language pack.
-  The settings page reports available languages and provides a local test.
+- Windows mode requires a matching Windows OCR language pack. Remote providers
+  receive the configured language tag.
 - Per-image size and timeout limits are enforced. Missing OCR components,
   unsupported formats, timeouts, and empty recognition results produce explicit
   failures rather than empty successful text.
@@ -404,8 +415,9 @@ security.
 - Advanced topic rename, archive, and hierarchy management are not implemented.
 - Index compatibility depends on a baseline recorded by the current working
   directory; index changes made before that baseline cannot be reconstructed.
-- OCR is Windows-only and processes only image files or images extractable from
-  supported Office/PDF files; it does not render arbitrary PDF pages.
+- OCR processes only image files or images extractable from supported Office/PDF
+  files; it does not render arbitrary PDF pages. Cloud OCR has not been tested
+  against a real external provider in this checkout.
 
 See `docs/PROJECT_STATE.md` for the current implementation state and remaining
 release work.

@@ -400,27 +400,29 @@
     </div>
     <p class="hint">
         用于扫描件、图片，以及 Word / PPT / PDF 里的内嵌图片。默认 <b>OCR_MODE=off</b>。<br>
-        <b>本机 Windows OCR</b> 使用系统自带语言包在本机识别，不外发文件、不需要 API Key；
-        未安装对应语言包时会明确显示不可用。
+        自动模式按“云端 API 完整 → 自定义本地模型 → Windows 本机 OCR → 关闭”选择；
+        显式选择某个提供方时不会静默改道。
     </p>
-    <p class="hint">manual 模式会停在「需要 OCR」并等待手动操作；auto 模式会在本机自动识别，耗时取决于图片数量和 CPU。</p>
-    <p class="note-line warn">云端 OCR 字段只读保留；当前版本只开放本机 Windows OCR，不发送文件。</p>
+    <p class="hint">manual 模式会停在「需要 OCR」并等待手动操作；auto 模式会在解析阶段自动识别。</p>
+    <p class="hint">自定义/云端兼容协议：<span class="sub">POST JSON {model, language, mime_type, image_base64}，返回 {"text": "..."}；本地模型地址仅允许本机或局域网。</span></p>
     <p id="ocrState" class="note-line"></p>
     <div class="readiness-actions">
-        <button type="button" class="btn-clear service-test-button" id="testOcrBtn" onclick="testOcrLocal()">测试本机 OCR</button>
+        <button type="button" class="btn-clear service-test-button" id="testOcrBtn" onclick="testOcrLocal()">测试 OCR</button>
         <span class="service-test-status" id="ocrTestStatus">尚未测试</span>
     </div>
     <div class="row"><label>OCR 模式</label>
-        <select id="ocr_mode">
+        <select id="ocr_mode" onchange="syncOcrProvider()">
             <option value="">（跟随 .env，默认 off）</option>
             <option value="off">off：完全不启用（不外发）</option>
             <option value="manual">manual：网页上点按钮才识别（推荐）</option>
             <option value="auto">auto：检测到需要即在本机自动识别</option>
         </select></div>
     <div class="row"><label>OCR 提供方</label>
-        <select id="ocr_provider">
-            <option value="">（跟随 .env，默认 local）</option>
-            <option value="local">Windows 本机 OCR（不外发）</option>
+        <select id="ocr_provider" onchange="syncOcrProvider()">
+            <option value="auto">自动：云端 → 本地模型 → Windows</option>
+            <option value="windows">Windows 本机 OCR（不外发）</option>
+            <option value="local_model">自定义本地 OCR 模型（不外发）</option>
+            <option value="cloud">云端 OCR（会外发图片）</option>
             <option value="none">禁用（即使填了 Token 也不外发）</option>
         </select></div>
     <div class="row"><label>内嵌图片纳入 OCR</label>
@@ -436,9 +438,9 @@
             <option value="cpu">cpu</option>
             <option value="gpu">gpu</option>
         </select></div>
-    <div class="row"><label>云端作业地址</label><input type="text" id="ocr_base_url" placeholder="当前版本不启用" disabled></div>
-    <div class="row"><label>云端模型名</label><input type="text" id="ocr_model" placeholder="当前版本不启用" disabled></div>
-    <div class="row"><label>OCR Token</label><input type="password" id="ocr_token" placeholder="当前版本不启用" disabled><button type="button" class="btn-clear" data-clear-secret="ocr_token" hidden disabled>清除</button></div>
+    <div class="row"><label>OCR 接口地址</label><input type="text" id="ocr_base_url" placeholder="本地示例：http://127.0.0.1:9001/ocr；云端填完整兼容接口"></div>
+    <div class="row"><label>OCR 模型名</label><input type="text" id="ocr_model" placeholder="例如 PaddleOCR-VL / 自定义模型名"></div>
+    <div class="row"><label>OCR Token</label><input type="password" id="ocr_token" placeholder="本地模型可留空；云端 OCR 必填"><button type="button" class="btn-clear" data-clear-secret="ocr_token" hidden>清除</button></div>
     <div class="row"><label>OCR 单文件上限</label><input type="number" id="ocr_max_file_mb" min="1" step="1" placeholder="单位 MB，默认 50"></div>
     <div class="row"><label>单张识别超时（秒）</label><input type="number" id="ocr_timeout_seconds" min="5" max="300" step="1" placeholder="默认 30（5~300）"></div>
     <div class="row"><label>本机模型目录</label><input type="text" id="ocr_local_model_dir" placeholder="Windows 内置 OCR 不使用此字段" disabled></div>
