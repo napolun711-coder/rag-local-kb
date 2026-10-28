@@ -31,8 +31,24 @@ from app.platform.paths import BASE_DIR
 ROOT = BASE_DIR
 ENGINE_ENV_FILE = ROOT / "services" / "lightrag_engine" / ".env"
 DEFAULT_BACKUP_DIR = ROOT / "config" / "settings-backups"
-RUNTIME_STATE_FILE = ROOT / "logs" / "runtime" / "services.json"
 SERVICE_NAMES = ("engine", "shell", "app")
+
+
+def _runtime_path(name: str, default: Path) -> Path:
+    override = os.environ.get(name, "").strip()
+    if not override:
+        return default
+    path = Path(override).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    return path.resolve()
+
+
+LOG_ROOT = _runtime_path("RAGKB_LOG_DIR", ROOT / "logs")
+RUNTIME_DIR = _runtime_path("RAGKB_RUNTIME_DIR", LOG_ROOT / "runtime")
+RUNTIME_STATE_FILE = _runtime_path(
+    "RAGKB_RUNTIME_STATE_FILE", RUNTIME_DIR / "services.json"
+)
 
 
 class SettingsError(RuntimeError):
@@ -223,9 +239,9 @@ def _runtime_state() -> List[Dict[str, Any]]:
             port = 0
         if not port:
             port_file = {
-                "engine": ROOT / "logs" / "runtime" / "engine.port",
-                "shell": ROOT / "logs" / "lightrag-shell.port",
-                "app": ROOT / "logs" / "app.port",
+                "engine": RUNTIME_DIR / "engine.port",
+                "shell": LOG_ROOT / "lightrag-shell.port",
+                "app": LOG_ROOT / "app.port",
             }[name]
             try:
                 port = int(port_file.read_text(encoding="ascii").strip())

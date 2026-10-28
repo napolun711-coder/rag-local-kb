@@ -29,9 +29,22 @@ if str(ROOT) not in sys.path:
 from app.platform.ports import can_bind, select_port  # noqa: E402
 from app.features.settings.envfile import parse_env_text  # noqa: E402
 
-RUNTIME_DIR = ROOT / "logs" / "runtime"
-STATE_FILE = RUNTIME_DIR / "services.json"
 SERVICE_ORDER = ("engine", "shell", "app")
+
+
+def _resolve_path(value: str, default: Path) -> Path:
+    text = str(value or "").strip()
+    path = Path(text).expanduser() if text else default
+    if not path.is_absolute():
+        path = ROOT / path
+    return path.resolve()
+
+
+ENV_FILE = _resolve_path(os.environ.get("RAGKB_ENV_FILE", ""), ROOT / ".env")
+ENGINE_ENV_FILE = _resolve_path(
+    os.environ.get("RAGKB_LIGHTRAG_ENGINE_ENV_FILE", ""),
+    ROOT / "services" / "lightrag_engine" / ".env",
+)
 
 
 @dataclass
@@ -55,7 +68,7 @@ def _utc_now() -> str:
 
 
 def _load_root_env() -> Dict[str, str]:
-    path = ROOT / ".env"
+    path = ENV_FILE
     values: Dict[str, str] = {}
     if not path.is_file():
         return values
@@ -90,6 +103,17 @@ def _setting_int(name: str, default: int, minimum: int, maximum: int) -> int:
     except ValueError:
         value = default
     return max(minimum, min(maximum, value))
+
+
+LOG_ROOT = _resolve_path(
+    _setting("RAGKB_LOG_DIR", str(ROOT / "logs")),
+    ROOT / "logs",
+)
+RUNTIME_DIR = _resolve_path(
+    _setting("RAGKB_RUNTIME_DIR", str(LOG_ROOT / "runtime")),
+    LOG_ROOT / "runtime",
+)
+STATE_FILE = RUNTIME_DIR / "services.json"
 
 
 def _load_state() -> Dict[str, ServiceState]:
@@ -458,7 +482,7 @@ def _stop_service(service: ServiceState) -> str:
 def _cleanup_runtime_files() -> None:
     for name in ("app", "shell", "engine"):
         _remove_if_exists(RUNTIME_DIR / f"{name}.port")
-    for path in (ROOT / "logs" / "app.port", ROOT / "logs" / "lightrag-shell.port"):
+    for path in (LOG_ROOT / "app.port", LOG_ROOT / "lightrag-shell.port"):
         _remove_if_exists(path)
 
 
@@ -502,8 +526,8 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
     main_python = _main_python()
     engine_python = _engine_python()
     engine_root = ROOT / "services" / "lightrag_engine"
-    if not (engine_root / ".env").is_file():
-        print(f"Missing engine configuration: {engine_root / '.env'}")
+    if not ENGINE_ENV_FILE.is_file():
+        print(f"Missing engine configuration: {ENGINE_ENV_FILE}")
         return 2
 
     timeout = _startup_timeout()
@@ -535,7 +559,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
     engine_env_values: Dict[str, str] = {}
     try:
         engine_env_values = parse_env_text(
-            (engine_root / ".env").read_text(encoding="utf-8-sig")
+            ENGINE_ENV_FILE.read_text(encoding="utf-8-sig")
         )
     except OSError as exc:
         print(f"Unable to read engine configuration: {type(exc).__name__}")
@@ -590,7 +614,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
                 str(input_dir),
             ],
             cwd=engine_root,
-            env=_process_env(),
+            env=_process_env(engine_env_values),
         )
         engine_state = _state_for(
             "engine",
@@ -621,7 +645,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
             0,
             500,
         )
-        shell_port_file = ROOT / "logs" / "lightrag-shell.port"
+        shell_port_file = LOG_ROOT / "lightrag-shell.port"
         _remove_if_exists(shell_port_file)
         shell_process = _launch(
             "shell",
@@ -633,6 +657,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
                     "RAGKB_LIGHTRAG_SHELL_HOST": shell_host,
                     "RAGKB_LIGHTRAG_SHELL_PORT": str(shell_preferred),
                     "RAGKB_LIGHTRAG_SHELL_PORT_SCAN_LIMIT": str(shell_scan_limit),
+                    "RAGKB_LIGHTRAG_SHELL_LOG_DIR": str(LOG_ROOT),
                 }
             ),
         )
@@ -659,7 +684,7 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
         print(f"shell: started at {shell_state.url}")
 
         app_host = _setting("RAGKB_HOST", "127.0.0.1")
-        app_port_file = ROOT / "logs" / "app.port"
+        app_port_file = LOG_ROOT / "app.port"
         _remove_if_exists(app_port_file)
         app_process = _launch(
             "app",
@@ -668,6 +693,12 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
             env=_process_env(
                 {
                     "RAGKB_LIGHTRAG_URL": shell_state.url,
+                    "RAGKB_LOG_DIR": str(LOG_ROOT),
+                    "RAGKB_ENV_FILE": str(ENV_FILE),
+                    "RAGKB_SETTINGS_APP_ENV_FILE": str(ENV_FILE),
+                    "RAGKB_SETTINGS_ENGINE_ENV_FILE": str(ENGINE_ENV_FILE),
+                    "RAGKB_RUNTIME_DIR": str(RUNTIME_DIR),
+                    "RAGKB_RUNTIME_STATE_FILE": str(STATE_FILE),
                 }
             ),
         )

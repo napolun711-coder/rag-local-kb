@@ -266,3 +266,24 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - No process stop, leave, clear, purge, delete, or formal configuration write was
   executed during verification.
 - A real two-device LAN browser test and lifecycle stop test remain to be run.
+
+## Isolated full-service lifecycle (2026-10-28)
+
+- Added optional lifecycle isolation via `RAGKB_ENV_FILE`,
+  `RAGKB_LIGHTRAG_ENGINE_ENV_FILE`, `RAGKB_RUNTIME_DIR`, and
+  `RAGKB_RUNTIME_STATE_FILE`; normal startup defaults are unchanged.
+- Lifecycle state, service logs, engine data, RAG storage, knowledge input, app
+  settings, and engine settings now resolve under the selected run directory.
+- App child processes receive the resolved environment, runtime, and settings
+  paths; shell port publication uses the isolated log root.
+- Session and settings runtime readers now use the same runtime-state path as
+  lifecycle, so lifecycle-managed isolated apps report web-stop capability
+  correctly.
+- Started an isolated full engine/shell/app group at `127.0.0.1` using ports
+  `19162`/`19161`/`19180`.
+- Engine, shell, and app health checks passed; files overview/list and
+  access/session routes returned HTTP 200.
+- Settings source resolved to the isolated app.env; runtime services reported
+  engine/shell/app healthy, and local session mode reported stop capability.
+- No save, delete, clear, purge, leave, stop, or formal data operation was run.
+- A real two-device LAN test and lifecycle stop test remain pending.

@@ -9,7 +9,18 @@ from pathlib import Path
 
 from app.platform.paths import BASE_DIR, DATA_DIR, KNOWLEDGE_DIR, LOG_DIR, STATIC_DIR
 
-ENV_FILE = BASE_DIR / ".env"
+
+def _env_file() -> Path:
+    override = os.environ.get("RAGKB_ENV_FILE", "").strip()
+    if not override:
+        return BASE_DIR / ".env"
+    path = Path(override).expanduser()
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path.resolve()
+
+
+ENV_FILE = _env_file()
 _VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 

@@ -31,6 +31,12 @@ def token_matches(value: Any) -> bool:
 
 
 def _lifecycle_state_path() -> Path:
+    override = os.environ.get("RAGKB_RUNTIME_STATE_FILE", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    runtime_dir = os.environ.get("RAGKB_RUNTIME_DIR", "").strip()
+    if runtime_dir:
+        return Path(runtime_dir).expanduser().resolve() / "services.json"
     return get_settings().log_dir / "runtime" / "services.json"
 
 
