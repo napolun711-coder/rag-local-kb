@@ -1,0 +1,29 @@
+
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:2}
+h1{font-size:17px;margin:0}header .grow{flex:1}
+button,select,input,textarea{font:inherit;color:var(--text);background:var(--surface-input);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+button{cursor:pointer}button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}button.danger{color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}
+main{max-width:1200px;margin:0 auto;padding:14px 18px 30px}
+.status{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--muted);background:var(--panel)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}.toolbar input{min-width:220px;flex:1}
+.layout{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:14px;align-items:start}
+.list{display:flex;flex-direction:column;gap:8px;max-height:74vh;overflow:auto}
+.card{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:9px 11px;cursor:pointer}.card:hover{border-color:var(--brand)}.card.sel{border-color:var(--brand);background:var(--brand-soft)}
+.card .subject{font-weight:600;font-size:13px}.card .content{font-size:12.5px;color:var(--text);margin:4px 0;white-space:pre-wrap;word-break:break-word}.card .meta{font-size:11.5px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.badge{font-size:11px;border-radius:999px;padding:1px 7px;border:1px solid var(--line)}.badge.pending{color:var(--warn)}.badge.active{color:var(--ok)}.badge.conflicted{color:var(--bad)}.badge.deleted,.badge.superseded{color:var(--muted)}
+.detail{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px;min-height:300px}
+.detail h2{font-size:15px;margin:0 0 8px}.detail .muted{color:var(--muted);font-size:12px}
+.field{margin:10px 0}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.field input,.field textarea,.field select{width:100%}.field textarea{min-height:110px;resize:vertical}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.sources{border-top:1px dashed var(--line);margin-top:12px;padding-top:10px}.source{font-size:12px;background:var(--surface-input);border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin:6px 0;white-space:pre-wrap}
+.empty{color:var(--muted);font-size:12.5px}
+.supervisor{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px;margin-bottom:14px}
+.supervisor-head{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}.supervisor-head .grow{flex:1}.supervisor-head strong{font-size:14px}.supervisor-head .muted{font-size:12px;color:var(--muted)}
+.supervisor-actions{display:flex;gap:8px;flex-wrap:wrap}.findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-top:10px}
+.finding{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:var(--surface-input)}.finding .top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.finding .msg{font-size:12.5px;margin:5px 0}.finding .why{font-size:11.5px;color:var(--muted)}.finding .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.finding button{font-size:12px;padding:5px 8px}
+.severity{font-size:11px;border-radius:999px;padding:1px 7px;border:1px solid var(--line);text-transform:uppercase}.severity.critical{color:var(--bad);border-color:var(--bad)}.severity.high{color:var(--warn);border-color:var(--warn)}.severity.warning{color:var(--warn)}.severity.info{color:var(--muted)}
+@media(max-width:850px){.layout{grid-template-columns:1fr}.list{max-height:40vh}main{padding:12px}header{padding:12px}.toolbar input{min-width:0}}
+.memory-state-note{margin-top:8px}
+.memory-topic-select{min-width:220px;padding:6px 10px}
+.material-like{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.import-file-hidden{display:none}

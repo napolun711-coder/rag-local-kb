@@ -1,0 +1,470 @@
+"""Declarative mapping from web settings to runtime configuration keys."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Dict, Iterable, Optional, Tuple
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    group: str
+    key: str
+    scope: str
+    env_key: str
+    kind: str = "text"
+    default: str = ""
+    choices: Tuple[str, ...] = ()
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    secret: bool = False
+    required: bool = False
+
+    @property
+    def pair(self) -> Tuple[str, str]:
+        return self.group, self.key
+
+
+FIELDS: Tuple[FieldSpec, ...] = (
+    FieldSpec("llm", "binding", "engine", "LLM_BINDING", "choice", "openai", ("openai",)),
+    FieldSpec("llm", "model", "engine", "LLM_MODEL", required=True),
+    FieldSpec("llm", "host", "engine", "LLM_BINDING_HOST", "url", required=True),
+    FieldSpec("llm", "api_key", "engine", "LLM_BINDING_API_KEY", "secret", secret=True),
+    FieldSpec(
+        "embedding",
+        "binding",
+        "engine",
+        "EMBEDDING_BINDING",
+        "choice",
+        "ollama",
+        ("ollama", "openai"),
+    ),
+    FieldSpec("embedding", "model", "engine", "EMBEDDING_MODEL", "text", "bge-m3:latest", required=True),
+    FieldSpec(
+        "embedding",
+        "host",
+        "engine",
+        "EMBEDDING_BINDING_HOST",
+        "url",
+        "http://127.0.0.1:11434",
+        required=True,
+    ),
+    FieldSpec(
+        "embedding",
+        "api_key",
+        "engine",
+        "EMBEDDING_BINDING_API_KEY",
+        "secret",
+        secret=True,
+    ),
+    FieldSpec(
+        "embedding",
+        "dim",
+        "engine",
+        "EMBEDDING_DIM",
+        "integer",
+        "1024",
+        minimum=1,
+        maximum=65536,
+    ),
+    FieldSpec(
+        "embedding",
+        "send_dim",
+        "engine",
+        "EMBEDDING_SEND_DIM",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "rerank",
+        "binding",
+        "engine",
+        "RERANK_BINDING",
+        "choice",
+        "null",
+        ("null", "cohere", "jina", "aliyun"),
+    ),
+    FieldSpec("rerank", "model", "engine", "RERANK_MODEL"),
+    FieldSpec("rerank", "host", "engine", "RERANK_BINDING_HOST", "url"),
+    FieldSpec(
+        "rerank",
+        "api_key",
+        "engine",
+        "RERANK_BINDING_API_KEY",
+        "secret",
+        secret=True,
+    ),
+    FieldSpec(
+        "vector_store",
+        "type",
+        "engine",
+        "LIGHTRAG_VECTOR_STORAGE",
+        "choice",
+        "local",
+        ("local",),
+    ),
+    FieldSpec("vector_store", "qdrant_url", "engine", "QDRANT_URL", "url"),
+    FieldSpec("graph", "working_dir", "engine", "WORKING_DIR", "path", required=True),
+    FieldSpec("graph", "input_dir", "engine", "INPUT_DIR", "path", required=True),
+    FieldSpec(
+        "app",
+        "max_upload_size",
+        "app",
+        "RAGKB_INGEST_MAX_UPLOAD_SIZE",
+        "integer",
+        "104857600",
+        minimum=1,
+        maximum=2 * 1024 * 1024 * 1024,
+    ),
+    FieldSpec(
+        "app",
+        "allowed_extensions",
+        "app",
+        "RAGKB_INGEST_ALLOWED_EXTENSIONS",
+        "list",
+        ".txt,.md,.pdf,.docx,.csv,.xlsx,.xls,.pptx,.json,.html,.htm,.jpg,.jpeg,.png,.webp,.bmp",
+    ),
+    FieldSpec(
+        "app",
+        "log_level",
+        "app",
+        "RAGKB_LOG_LEVEL",
+        "choice",
+        "INFO",
+        ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
+    ),
+    FieldSpec(
+        "memory",
+        "enabled",
+        "app",
+        "RAGKB_MEMORY_ENABLED",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "memory",
+        "context_enabled",
+        "app",
+        "RAGKB_MEMORY_CONTEXT_ENABLED",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "memory",
+        "fast_memory",
+        "app",
+        "RAGKB_MEMORY_FAST_MEMORY",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "memory",
+        "context_budget",
+        "app",
+        "RAGKB_MEMORY_CONTEXT_BUDGET",
+        "integer",
+        "900",
+        minimum=100,
+        maximum=8000,
+    ),
+    FieldSpec(
+        "memory",
+        "recent_history_messages",
+        "app",
+        "RAGKB_MEMORY_RECENT_HISTORY_MESSAGES",
+        "integer",
+        "8",
+        minimum=0,
+        maximum=40,
+    ),
+    FieldSpec(
+        "memory",
+        "recent_history_tokens",
+        "app",
+        "RAGKB_MEMORY_RECENT_HISTORY_TOKENS",
+        "integer",
+        "1200",
+        minimum=0,
+        maximum=16000,
+    ),
+    FieldSpec(
+        "memory",
+        "upstream_history",
+        "app",
+        "RAGKB_MEMORY_UPSTREAM_HISTORY",
+        "choice",
+        "off",
+        ("off", "auto", "on"),
+    ),
+    FieldSpec(
+        "memory",
+        "upstream_memory",
+        "app",
+        "RAGKB_MEMORY_UPSTREAM_MEMORY",
+        "choice",
+        "off",
+        ("off", "auto", "on"),
+    ),
+    FieldSpec(
+        "memory",
+        "recall_enabled",
+        "app",
+        "RAGKB_MEMORY_RECALL_ENABLED",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "memory",
+        "recall_budget",
+        "app",
+        "RAGKB_MEMORY_RECALL_BUDGET",
+        "integer",
+        "400",
+        minimum=80,
+        maximum=2000,
+    ),
+    FieldSpec(
+        "memory",
+        "recall_max_items",
+        "app",
+        "RAGKB_MEMORY_RECALL_MAX_ITEMS",
+        "integer",
+        "5",
+        minimum=1,
+        maximum=20,
+    ),
+    FieldSpec(
+        "memory",
+        "auto_extract",
+        "app",
+        "RAGKB_MEMORY_AUTO_EXTRACT",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "memory",
+        "worker",
+        "app",
+        "RAGKB_MEMORY_WORKER",
+        "booltext",
+        "false",
+    ),
+    FieldSpec(
+        "memory",
+        "extract_every_turns",
+        "app",
+        "RAGKB_MEMORY_EXTRACT_EVERY_TURNS",
+        "integer",
+        "6",
+        minimum=1,
+        maximum=100,
+    ),
+    FieldSpec(
+        "memory",
+        "extract_max_messages",
+        "app",
+        "RAGKB_MEMORY_EXTRACT_MAX_MESSAGES",
+        "integer",
+        "20",
+        minimum=1,
+        maximum=200,
+    ),
+    FieldSpec(
+        "memory",
+        "extract_max_input_tokens",
+        "app",
+        "RAGKB_MEMORY_EXTRACT_MAX_INPUT_TOKENS",
+        "integer",
+        "4000",
+        minimum=200,
+        maximum=32000,
+    ),
+    FieldSpec(
+        "memory",
+        "extract_debounce_seconds",
+        "app",
+        "RAGKB_MEMORY_EXTRACT_DEBOUNCE_SECONDS",
+        "integer",
+        "300",
+        minimum=0,
+        maximum=86400,
+    ),
+    FieldSpec(
+        "quality",
+        "profile",
+        "app",
+        "RAGKB_INGEST_QUALITY_PROFILE",
+        "choice",
+        "standard",
+        ("standard", "strict", "loose", "custom"),
+    ),
+    FieldSpec(
+        "quality",
+        "min_chars",
+        "app",
+        "RAGKB_INGEST_QUALITY_MIN_CHARS",
+        "integer",
+        "50",
+        minimum=0,
+        maximum=1_000_000,
+    ),
+    FieldSpec(
+        "quality",
+        "min_readable_ratio",
+        "app",
+        "RAGKB_INGEST_QUALITY_MIN_READABLE_RATIO",
+        "number",
+        "0.60",
+        minimum=0,
+        maximum=1,
+    ),
+    FieldSpec(
+        "quality",
+        "max_garbled_ratio",
+        "app",
+        "RAGKB_INGEST_QUALITY_MAX_GARBLED_RATIO",
+        "number",
+        "0.05",
+        minimum=0,
+        maximum=1,
+    ),
+    FieldSpec(
+        "quality",
+        "max_repeat_ratio",
+        "app",
+        "RAGKB_INGEST_QUALITY_MAX_REPEAT_RATIO",
+        "number",
+        "0.40",
+        minimum=0,
+        maximum=1,
+    ),
+    FieldSpec(
+        "quality",
+        "min_chars_per_page",
+        "app",
+        "RAGKB_INGEST_QUALITY_MIN_CHARS_PER_PAGE",
+        "integer",
+        "100",
+        minimum=0,
+        maximum=1_000_000,
+    ),
+    FieldSpec(
+        "quality",
+        "pass_score",
+        "app",
+        "RAGKB_INGEST_QUALITY_PASS_SCORE",
+        "integer",
+        "70",
+        minimum=0,
+        maximum=100,
+    ),
+    FieldSpec(
+        "quality",
+        "max_unocr_images",
+        "app",
+        "RAGKB_INGEST_QUALITY_MAX_UNOCR_IMAGES",
+        "integer",
+        "0",
+        minimum=0,
+        maximum=1000,
+    ),
+    FieldSpec(
+        "runtime",
+        "app_port",
+        "app",
+        "RAGKB_PORT",
+        "integer",
+        "18080",
+        minimum=1,
+        maximum=65535,
+    ),
+    FieldSpec(
+        "runtime",
+        "app_port_scan_limit",
+        "app",
+        "RAGKB_PORT_SCAN_LIMIT",
+        "integer",
+        "50",
+        minimum=0,
+        maximum=500,
+    ),
+    FieldSpec(
+        "runtime",
+        "shell_port",
+        "app",
+        "RAGKB_LIGHTRAG_SHELL_PORT",
+        "integer",
+        "10261",
+        minimum=1,
+        maximum=65535,
+    ),
+    FieldSpec(
+        "runtime",
+        "engine_port",
+        "app",
+        "RAGKB_LIGHTRAG_ENGINE_PORT",
+        "integer",
+        "10262",
+        minimum=1,
+        maximum=65535,
+    ),
+)
+
+FIELD_BY_PAIR: Dict[Tuple[str, str], FieldSpec] = {item.pair: item for item in FIELDS}
+
+# Fields retained for compatibility with the copied page but not wired to a
+# runtime feature yet. Unchanged values are accepted; changing one is rejected.
+UNSUPPORTED: Dict[Tuple[str, str], str] = {
+    ("paths", "lightrag_home"): "",
+    ("app", "skill_routing"): "off",
+    ("app", "generation_mode"): "upstream",
+    ("ingest", "confirm"): "always",
+    ("ingest", "ttl_hours"): "24",
+    ("inbox", "enabled"): "false",
+    ("inbox", "poll_seconds"): "10",
+    ("inbox", "confirm"): "auto",
+    ("ocr", "mode"): "off",
+    ("ocr", "provider"): "none",
+    ("ocr", "image_ocr"): "false",
+    ("ocr", "lang"): "ch",
+    ("ocr", "device"): "cpu",
+    ("ocr", "base_url"): "",
+    ("ocr", "model"): "",
+    ("ocr", "token"): "",
+    ("ocr", "max_file_mb"): "50",
+    ("ocr", "local_model_dir"): "",
+    ("tts", "tts_cloud_host"): "",
+    ("tts", "tts_cloud_api_key"): "",
+    ("tts", "tts_cloud_model"): "",
+    ("tts", "tts_cloud_voice"): "",
+    ("tts", "tts_cloud_timeout"): "60",
+    ("tts", "tts_provider_chain"): "",
+}
+
+UNSUPPORTED_SECRETS = {
+    ("ocr", "token"),
+    ("tts", "tts_cloud_api_key"),
+}
+
+
+def group_defaults() -> Dict[Tuple[str, str], str]:
+    result = {item.pair: item.default for item in FIELDS}
+    result.update(UNSUPPORTED)
+    return result
+
+
+def iter_groups() -> Iterable[Tuple[str, str]]:
+    yield from FIELD_BY_PAIR
+    yield from UNSUPPORTED
+
+
+__all__ = [
+    "FIELDS",
+    "FIELD_BY_PAIR",
+    "FieldSpec",
+    "UNSUPPORTED",
+    "UNSUPPORTED_SECRETS",
+    "group_defaults",
+    "iter_groups",
+]
+

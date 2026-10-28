@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/access_gate.js"></script>
+<title>记忆管理</title>
+<link rel="icon" type="image/x-icon" href="/static/app.ico">
+<link rel="stylesheet" href="/static/theme.css">
+<script src="/static/theme.js"></script>
+<script src="/static/ui.js" defer></script>
+<link rel="stylesheet" href="/static/memory.css">
+</head>
+<body>
+<header>
+  <h1>记忆管理</h1>
+  <span class="muted" id="mode">本机可编辑 · 加载中…</span>
+  <span class="grow"></span>
+  <button id="themeBtn" class="theme-btn" type="button" data-theme-toggle title="外观"></button>
+  <button id="refresh" class="primary" type="button">刷新</button>
+</header>
+<nav class="app-nav" aria-label="应用页面">
+  <a href="/web">对话</a>
+  <a href="/files">文件</a>
+  <a href="/memory" aria-current="page">记忆</a>
+  <a href="/settings">设置</a>
+</nav>
+<main>
+  <div class="status" id="status"></div>
+  <section class="supervisor">
+    <div class="supervisor-head">
+      <div class="grow">
+        <strong>监督建议</strong>
+        <div class="muted">只提示可能过时、低置信、重复、敏感或来源缺失的记忆；“已处理 / 忽略”只更新建议状态，不会修改记忆本身。</div>
+      </div>
+      <div class="supervisor-actions">
+        <button id="supervisorRefresh" type="button">刷新建议</button>
+        <button id="supervisorScan" class="primary" type="button">立即扫描</button>
+      </div>
+    </div>
+    <div id="supervisorState" class="muted memory-state-note">读取中…</div>
+    <div id="supervisorList" class="findings"></div>
+  </section>
+    <section class="supervisor">
+    <div class="supervisor-head">
+      <div class="grow">
+        <strong>会话主题绑定</strong>
+        <div class="muted">为当前对话选择一个记忆主题；不绑定则仅使用全局记忆。主题在上方建议区与记忆条目中创建。</div>
+      </div>
+      <div class="supervisor-actions">
+        <select id="topicSelect" class="memory-topic-select"></select>
+      </div>
+    </div>
+  </section>
+<div class="toolbar">
+    <select id="statusFilter">
+      <option value="">全部状态</option>
+      <option value="pending">待确认 pending</option>
+      <option value="active">生效 active</option>
+      <option value="conflicted">冲突 conflicted</option>
+      <option value="superseded">已被替代 superseded</option>
+      <option value="deleted">已删除 deleted</option>
+    </select>
+    <select id="kindFilter">
+      <option value="">全部类型</option>
+      <option value="preference">偏好 preference</option>
+      <option value="goal">目标 goal</option>
+      <option value="fact">事实 fact</option>
+      <option value="constraint">约束 constraint</option>
+      <option value="decision">决定 decision</option>
+      <option value="habit">习惯 habit</option>
+      <option value="profile">画像 profile</option>
+      <option value="background">背景 background</option>
+    </select>
+    <input id="query" placeholder="搜索内容 / 主题词" maxlength="200">
+    <button id="search" class="primary" type="button">查询</button>
+    <button id="exportBtn" type="button">导出 JSON</button>
+    <label class="material-like">
+      导入 JSON
+      <input id="importFile" class="import-file-hidden" type="file" accept="application/json,.json">
+    </label>
+    <button id="clearBtn" class="danger" type="button">清空全部数据</button>
+  </div>
+  <div class="layout">
+    <section class="list" id="list"><div class="ui-state ui-loading">加载中…</div></section>
+    <section class="detail" id="detail"><div class="ui-state ui-empty">选择左侧一条记忆查看详情。</div></section>
+  </div>
+</main>
+<script src="/static/memory.js"></script>
+<script src="/static/session.js" defer></script>
+</body>
+</html>

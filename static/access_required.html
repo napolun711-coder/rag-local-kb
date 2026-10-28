@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>需要授权 · 本地 RAG 知识库</title>
+<link rel="icon" type="image/x-icon" href="/static/app.ico">
+<link rel="stylesheet" href="/static/access_required.css">
+</head>
+<body>
+<main class="card">
+  <div class="mark" aria-hidden="true">待</div>
+  <h1>这台设备等待授权</h1>
+  <p>为避免同一局域网中的其他设备读取会话、记忆和材料，本应用需要在电脑本机确认这台设备。</p>
+  <ol>
+    <li>在电脑上打开 <b>设置 → 局域网设备授权</b>。</li>
+    <li>在“等待允许”中找到这台设备。</li>
+    <li>点一次“允许”，不需要输入授权码或设备名。</li>
+    <li>这里检测到授权后会自动进入聊天页面。</li>
+  </ol>
+  <a class="link-btn" href="/pair">重新发送连接请求</a>
+  <button id="retry" class="plain-btn" type="button">重新检测授权状态</button>
+  <div id="status" class="hint" role="status" aria-live="polite">正在检查授权状态…</div>
+  <div class="hint">设备请求只在电脑本机确认；电脑端可随时删除已授权设备。</div>
+</main>
+<script src="/static/session.js" defer></script>
+<script src="/static/access_required.js"></script>
+</body>
+</html>

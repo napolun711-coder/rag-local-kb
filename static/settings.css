@@ -1,0 +1,273 @@
+
+/* 令牌、*{box-sizing}、[hidden]、body 基样式都在 theme.css。
+   本页原来那份 :root 只有部分令牌，而且 **--side-accent 用了却没定义**
+   （.nav-item.active 的左侧竖条、≤900px 的底部下划线都取它，实际一直回退到 currentColor）
+   —— 现在统一由 theme.css 提供。 */
+/* 字号只保留 6 档：11 / 12 / 13 / 14 / 15 / 16。
+   11 = 角标、12 = 辅助说明、13 = 次级正文、14 = 正文/表单、15 = 卡片标题、16 = 页面标题。 */
+html{scroll-behavior:smooth}
+a{color:var(--brand)}
+.header{position:sticky;top:0;z-index:30;height:60px;background:var(--panel);color:var(--text);display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);box-shadow:var(--shadow-header)}
+.header .logo{width:32px;height:32px;border-radius:9px;background:var(--logo-gradient);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--on-brand)}
+/* 顶栏标题从 <b> 换成 <h1>（原来整页没有一级标题），重置成原来的视觉 */
+.header h1{margin:0;font-size:16px;font-weight:700}
+.header .spacer{flex:1}
+.header a{color:var(--brand);font-size:14px}
+.header a:hover{color:var(--brand-2)}
+.layout{display:flex;align-items:flex-start;gap:18px;max-width:1180px;margin:18px auto 92px;padding:0 16px}
+.nav{position:sticky;top:78px;flex:0 0 188px;width:188px;max-height:calc(100vh - 156px);max-height:calc(100dvh - 156px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--side-line);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px 8px 8px}
+.nav-title{font-size:12px;color:var(--side-text-dim);padding:2px 8px 8px}
+#navlist{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:2px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;color:var(--side-text-dim);font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:background .15s ease}
+.nav-item:hover{background:var(--side-hover)}
+.nav-item.active{background:var(--side-accent-soft);color:var(--brand-2);font-weight:600;border-left-color:var(--side-accent)}
+.nav-item .ico{width:15px;text-align:center;font-size:12px;font-weight:600;color:var(--side-text-faint)}
+.nav-item.active .ico{color:var(--brand)}
+.nav-item .state{margin-left:auto;font-size:11px;color:var(--side-text-faint)}
+.nav-item .state.on{color:var(--ok-text)}
+.nav-item .state.warn{color:var(--warn-text)}
+.nav-actions{display:flex;flex:0 0 auto;gap:6px;padding:8px 2px 2px;margin-top:8px;border-top:1px solid var(--line);background:var(--panel);position:relative;z-index:1}
+.btn-mini{flex:1;background:var(--side-hover);color:var(--side-text-dim);border-radius:8px;padding:6px 0;font-size:12px}
+.btn-mini:hover{background:var(--grey-hover)}
+.bar .only-narrow{display:none}
+.main{flex:1;min-width:0}
+.card{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;padding:0 18px 16px;overflow:hidden;scroll-margin-top:74px;transition:box-shadow .18s ease}
+.card:hover{box-shadow:var(--shadow-card)}
+.card.collapsed{padding-bottom:0}
+.card-head{display:flex;align-items:center;gap:10px;margin:0 -18px;padding:13px 18px;cursor:pointer;user-select:none}
+.card-head:hover{background:var(--grey-bg)}
+.card:not(.collapsed) > .card-head{border-bottom:1px solid var(--grey-line-soft);margin-bottom:12px}
+.card-head .num{flex:0 0 24px;width:24px;height:24px;border-radius:8px;background:var(--brand-chip);color:var(--brand-2);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.card-head h2{margin:0;font-size:15px;font-weight:600}
+.card-head .sum{margin-left:auto;font-size:12px;color:var(--muted);max-width:48%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-head .chev{flex:0 0 12px;color:var(--grey-faint);font-size:11px;transition:transform .18s ease}
+.card.collapsed > .card-head .chev{transform:rotate(-90deg)}
+.card.collapsed > :not(.card-head){display:none}
+.hint{color:var(--muted);font-size:12px;margin:0 0 12px;line-height:1.7}
+.note-line{margin:-2px 0 12px;padding:9px 12px;border-radius:10px;background:var(--grey-bg);border:1px solid var(--brand-chip);font-size:12px;line-height:1.7;color:var(--grey-text)}
+.note-line.warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-text)}
+.note-line.ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-text)}
+.access-pair-box{
+  display:flex;gap:18px;align-items:center;flex-wrap:wrap;
+  margin:4px 0 14px;padding:14px;border:1px solid var(--line);
+  border-radius:12px;background:var(--panel);
+}
+.access-pair-box[hidden]{display:none}
+.access-pair-copy{flex:1;min-width:220px;font-size:13px;line-height:1.75;color:var(--grey-text)}
+.access-pair-copy p{margin:0 0 8px}
+.access-pair-copy p:last-child{margin-bottom:0}
+.access-pair-copy code{display:inline-block;max-width:100%;margin:3px 0;padding:2px 6px;border-radius:6px;background:var(--grey-bg);color:var(--brand-2);font-size:12px;word-break:break-all}
+.access-pair-copy .access-example{color:var(--text)}
+.access-connect-icon{
+  width:54px;height:54px;flex:0 0 54px;border-radius:16px;display:grid;place-items:center;
+  background:var(--brand-soft);color:var(--brand-2);font-size:24px;
+}
+.access-device-list{flex:1;min-width:260px;display:flex;flex-direction:column;gap:8px}
+.access-device{
+  display:flex;align-items:center;gap:10px;padding:9px 11px;
+  border:1px solid var(--line);border-radius:10px;background:var(--panel);
+}
+.access-device-main{flex:1;min-width:0}
+.access-device-name{font-weight:650;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.access-device-meta{font-size:11.5px;color:var(--muted);margin-top:2px}
+.access-device-empty{font-size:12px;color:var(--muted)}
+.access-request{border-color:var(--brand-line);background:var(--brand-soft)}
+.access-actions{display:flex;gap:7px;flex:0 0 auto}
+.access-actions button{margin:0;padding:6px 11px;min-height:32px;border-radius:8px;font-size:12px}
+.access-allow{background:var(--brand);color:#fff;border:1px solid var(--brand)}
+.access-ignore{background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.row{display:flex;margin-bottom:9px;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{width:158px;flex:0 0 158px;font-size:14px;color:var(--grey-text)}
+.row input[type=text],.row input[type=password],.row input[type=number],.row select{flex:1;min-width:200px;max-width:520px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:var(--panel);color:inherit}
+.row input:focus,.row select:focus{outline:none;border-color:var(--brand-line-focus);box-shadow:var(--focus-ring)}
+.row .sub{flex:1 1 100%;font-size:12px;color:var(--muted);padding-left:168px;margin-top:-3px}
+/* 已保存的密钥：留空 = 保持原值，所以清除必须单独表达（保存时随 clear_secrets 提交） */
+.row .btn-clear{flex:0 0 auto;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--muted);font-size:13px;min-height:38px}
+.row .btn-clear:hover{border-color:var(--bad-text);color:var(--bad-text)}
+.row .btn-clear.pending{border-color:var(--warn-line);background:var(--warn-soft);color:var(--warn-text)}
+/* 卡片内的二级小标题：原来 4 处 h2 各自写了内联 font-size，现统一到这里 */
+.subhead{margin:16px 0 4px;font-size:14px;font-weight:600}
+.subhead.tight{margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--grey-line-soft);vertical-align:top}
+th{color:var(--muted);font-weight:600;background:var(--grey-bg)}
+td:first-child{width:190px;color:var(--grey-text)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;background:var(--grey-soft);border-radius:999px;padding:3px 10px;color:var(--grey-text)}
+.test-list{margin:0;padding:0;list-style:none;font-size:13px}
+.test-list li{padding:6px 0;border-bottom:1px dashed var(--grey-line-soft)}
+.ok{color:var(--ok-text)}
+.bad{color:var(--bad-text)}
+.muted{color:var(--muted)}
+.file-info{font-size:13px}
+.injected-label{font-size:12px}
+.bar{position:sticky;bottom:0;z-index:20;background:var(--glass-strong);border-top:1px solid var(--line);padding:11px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar .status{margin-left:auto;font-size:12px;color:var(--muted)}
+/* 保存/测试的结果原来只有 .bad 一个分支，而 .bar .status{color} 的优先级高于全局 .bad，
+   失败时实际仍是灰的、成功与空闲完全同色 —— 用户看不出这一次到底成没成。这里补足三态。 */
+.bar .status.ok{color:var(--ok-text)}
+.bar .status.bad{color:var(--bad-text)}
+/* 未保存改动计数：跟着底栏一起常驻，所以不能写进 #status 的文本里（那条会被下一次操作覆盖） */
+.bar .dirty{flex:0 0 auto;font-size:12px;color:var(--warn-text);background:var(--warn-soft);border:1px solid var(--warn-line);border-radius:999px;padding:2px 10px}
+/* 键盘焦点：卡片头是负边距的全宽元素，卡片又 overflow:hidden，外描边会被裁掉 */
+.card-head:focus-visible,.nav-item:focus-visible{outline-offset:-2px}
+/* 按钮的进行中状态（测试连接要跑好几秒），没有禁用样式的话用户看不出它已经点了 */
+.bar button[disabled]{opacity:.55;cursor:default}
+.btn-primary{background:var(--brand);color:var(--on-brand);padding:10px 20px;border-radius:10px;font-weight:600}
+.btn-primary:hover{background:var(--brand-2)}
+.btn-plain{background:var(--brand-chip);color:var(--brand-chip-text);padding:10px 16px;border-radius:10px}
+.btn-plain:hover{background:var(--brand-fill)}
+/* 顶部部署方案：当前只决定本页的配置视图，不改变已保存的服务端配置。 */
+.scheme-picker{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);margin-bottom:12px;padding:16px 18px;scroll-margin-top:74px;
+}
+.scheme-heading{display:flex;align-items:flex-start;gap:18px;justify-content:space-between}
+.scheme-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-2);margin-bottom:3px}
+.scheme-heading h2{margin:0;font-size:16px;line-height:1.4}
+.scheme-lede{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.7;max-width:720px}
+.scheme-stage{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--muted);font-size:11px;white-space:nowrap}
+.scheme-fieldset{border:0;padding:0;margin:14px 0 0;min-width:0}
+.scheme-legend{font-size:12px;font-weight:600;color:var(--grey-text);padding:0;margin:0 0 7px}
+.scheme-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.scheme-option{
+  position:relative;display:block;min-width:0;border:1px solid var(--line);border-radius:12px;
+  background:var(--panel);cursor:pointer;transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.scheme-option:hover{border-color:var(--brand-line);background:var(--grey-bg)}
+.scheme-option:focus-within{outline:none;box-shadow:var(--focus-ring);border-color:var(--brand-line-focus)}
+.scheme-option.is-selected{border-color:var(--brand);background:var(--brand-soft);box-shadow:var(--shadow-card)}
+.scheme-option input{position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
+.scheme-option-body{display:flex;flex-direction:column;gap:6px;height:100%;padding:12px}
+.scheme-option-top{display:flex;align-items:center;gap:8px}
+.scheme-mark{flex:0 0 25px;width:25px;height:25px;border-radius:8px;display:grid;place-items:center;background:var(--brand-chip);color:var(--brand-2);font-size:12px;font-weight:700}
+.scheme-option.is-selected .scheme-mark{background:var(--brand);color:var(--on-brand)}
+.scheme-name{font-size:14px;font-weight:650;color:var(--text)}
+.scheme-choice{margin-left:auto;color:var(--brand);font-size:12px;font-weight:700;opacity:0}
+.scheme-option.is-selected .scheme-choice{opacity:1}
+.scheme-desc{display:block;font-size:12px;line-height:1.65;color:var(--grey-text)}
+.scheme-foot{display:block;margin-top:auto;padding-top:4px;font-size:11px;line-height:1.55;color:var(--muted)}
+.scheme-summary{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;margin-top:12px;padding-top:11px;border-top:1px solid var(--grey-line-soft);font-size:12px;line-height:1.6}
+.scheme-current{color:var(--grey-text)}
+.scheme-current strong{color:var(--brand-2)}
+.scheme-disclaimer{color:var(--muted)}
+.route-overview{margin-top:12px;padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--grey-bg)}
+.route-overview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px 14px;flex-wrap:wrap}
+.route-overview-title{display:block;font-size:12px;color:var(--text)}
+.route-overview-help{display:block;margin-top:2px;font-size:11px;line-height:1.55;color:var(--muted)}
+.route-count{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:2px 9px;background:var(--panel);font-size:11px;color:var(--grey-text);white-space:nowrap}
+.route-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px}
+.route-item{min-width:0;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.route-item-head{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.route-name{font-size:12px;font-weight:600;color:var(--grey-text)}
+.route-state{flex:0 0 auto;border:1px solid transparent;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.route-state.is-local{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-text)}
+.route-state.is-cloud{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-2)}
+.route-state.is-off{background:var(--grey-soft);border-color:var(--line);color:var(--muted)}
+.route-state.is-unknown{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-text)}
+.route-state.is-unsupported{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-text);border-style:dashed}
+.route-note{display:block;margin-top:4px;font-size:11px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.route-warning{margin:9px 0 0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:11px;line-height:1.6;color:var(--grey-text)}
+.route-warning.is-warn{border-color:var(--warn-line);background:var(--warn-soft);color:var(--warn-text)}
+/* 本地部署就绪卡：展示真实可得的状态，不把“已填写”误报成“已连通”。 */
+.readiness-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 12px;padding:14px 18px}
+.readiness-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px 18px;flex-wrap:wrap}
+.readiness-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-2);margin-bottom:3px}
+.readiness-head h2{margin:0;font-size:15px;line-height:1.4}
+.readiness-head p{margin:4px 0 0;font-size:12px;line-height:1.65;color:var(--muted);max-width:760px}
+.readiness-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.readiness-item{min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--grey-bg)}
+.readiness-item-head{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.readiness-name{font-size:12px;font-weight:600;color:var(--grey-text)}
+.readiness-state{flex:0 0 auto;border:1px solid transparent;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.readiness-state.is-ready{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-text)}
+.readiness-state.is-pending{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn-text)}
+.readiness-state.is-blocked{background:var(--panel);border-color:var(--bad-text);color:var(--bad-text)}
+.readiness-state.is-info{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-2)}
+.readiness-detail{display:block;margin-top:4px;font-size:11px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
+.readiness-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.readiness-actions .btn-clear{min-height:32px;padding:6px 10px;font-size:12px}
+.readiness-note{margin:9px 0 0;font-size:11px;line-height:1.6;color:var(--muted)}
+.service-test-row{margin-top:4px}
+.service-test-button{min-height:34px;padding:7px 11px;font-size:12px}
+.service-test-status{font-size:12px;line-height:1.6;color:var(--muted)}
+.service-test-status.is-ok{color:var(--ok-text)}
+.service-test-status.is-bad{color:var(--bad-text)}
+.service-test-status.is-pending{color:var(--warn-text)}
+/* 设置页的一级信息架构：卡片本身保持不变，只在上方增加纵向分组标题。 */
+.group-heading{display:flex;align-items:flex-start;gap:10px;margin:18px 2px 8px;scroll-margin-top:74px}
+.group-heading .group-index{
+  flex:0 0 26px;width:26px;height:26px;border-radius:9px;display:grid;place-items:center;
+  border:1px solid var(--brand-line);background:var(--brand-soft);color:var(--brand-2);
+  font-size:11px;font-weight:700;
+}
+.group-heading h2{margin:0;font-size:14px;line-height:1.4;color:var(--text)}
+.group-heading p{margin:2px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}
+.nav-group{margin:10px 8px 3px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--side-text-faint)}
+.nav-group:first-child{margin-top:2px}
+@media (max-width:620px){
+  .scheme-picker{padding:13px 12px}
+  .scheme-heading{display:block}
+  .scheme-stage{display:inline-block;margin-top:8px}
+  .scheme-options{grid-template-columns:repeat(3,minmax(210px,1fr));overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .scheme-option{scroll-snap-align:start}
+  .scheme-summary{display:block}
+  .scheme-disclaimer{display:block;margin-top:3px}
+  .route-grid{grid-template-columns:1fr}
+  .readiness-card{padding:13px 12px}
+  .readiness-grid{grid-template-columns:1fr}
+  .group-heading{margin-top:14px}
+}
+@media (max-width:900px){/* 移动版布局：页内导航由竖排变横向条 */
+    .layout{flex-direction:column;align-items:stretch;gap:12px}
+    .main{width:100%}
+    .nav{position:static;width:100%;flex:1 1 auto;display:flex;flex-direction:row;flex-wrap:nowrap;max-height:none;overflow-x:auto;overflow-y:hidden;gap:6px;padding:8px}
+    .nav-title,.nav-group{display:none}
+    #navlist{display:flex;flex:1 1 auto;min-width:0;min-height:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;overscroll-behavior-y:auto;gap:6px;padding-right:0;scrollbar-gutter:auto}
+    .nav-actions{position:static;flex:0 0 auto;border-top:none;margin:0;padding:0 2px;background:transparent}
+    .nav-item{border-left:none;border-bottom:2px solid transparent;white-space:nowrap;padding:6px 10px}
+    .nav-item.active{border-left:none;border-bottom-color:var(--side-accent)}
+    .nav-item .state{display:none}
+    .bar .only-narrow{display:inline-block}
+}
+/* 手机（≤620px）：单列排版、触控尺寸、表格自己横向滚动（不撑破页面） */
+@media (max-width:620px){
+    .header{height:56px;padding:0 12px}
+    .header h1{font-size:15px}
+    .header a{display:inline-flex;align-items:center;min-height:40px;padding:8px 4px}
+    .layout{gap:10px;margin:12px auto 160px;padding:0 10px}
+    /* 手机上的分组导航：一条可左右滑动的紧凑条（原来是 10 个条目竖着堆约 390px） */
+    .nav{padding:8px;flex-direction:column;overflow:visible;gap:6px}
+    #navlist{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;scrollbar-width:none}
+    #navlist::-webkit-scrollbar{display:none}
+    .nav-item{flex:0 0 auto;white-space:nowrap;min-height:40px;padding:9px 12px}
+    .nav-actions{flex-wrap:wrap}
+    .nav-actions button{min-height:36px}
+    .card{padding:0 12px 12px;scroll-margin-top:70px}
+    .card-head{margin:0 -12px;padding:12px;min-height:48px}
+    .card-head h2{font-size:15px}
+    .card-head .sum{max-width:40%}
+    .hint{font-size:12px}
+    .row{gap:6px;margin-bottom:12px}
+    .row label{width:100%;flex:1 1 100%;font-size:13px}
+    /* 字号 16px：iOS 聚焦时不会自动放大整页；高度 ≥44px 便于触控 */
+    .row input[type=text],.row input[type=password],.row input[type=number],.row select{width:100%;min-width:0;max-width:100%;font-size:16px;padding:10px 11px;min-height:44px}
+    .row .btn-clear{min-height:44px}
+    .row .sub{padding-left:0;font-size:12px}
+    table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    th,td{padding:8px 9px;font-size:12px}
+    td:first-child{width:auto;min-width:104px}
+    .chip{padding:5px 10px}
+    .bar{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+    .bar button{flex:1 1 calc(50% - 5px);min-height:44px}
+    .bar .status{flex:1 1 100%;margin-left:0;font-size:12px;line-height:1.6}
+    body{-webkit-text-size-adjust:100%}
+}
+/* 小屏手机（≤560px）：卡片头部的汇总文字让位，优先保证标题与表单 */
+@media (max-width:420px){
+    .layout{padding:0 8px}
+    .card{padding:0 10px 10px}
+    .card-head{margin:0 -10px;padding:11px 10px}
+    .card-head .sum{display:none}
+    .card-head h2{font-size:14px}
+}

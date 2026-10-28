@@ -1,0 +1,1 @@
+"""Read-only document catalog contracts and services."""

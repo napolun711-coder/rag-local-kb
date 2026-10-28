@@ -1,0 +1,1 @@
+"""Shared utilities with no feature-specific dependencies."""

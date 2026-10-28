@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/access_gate.js"></script>
+<title>设置 - 本地 RAG 知识库</title>
+<link rel="icon" type="image/x-icon" href="/static/app.ico">
+<!-- 设计令牌的唯一来源：配色 / 圆角 / 阴影 / 字号 / 断点约定全在这里 -->
+<link rel="stylesheet" href="/static/theme.css">
+<!-- 外观模式（auto / light / dark）：head 同步执行，避免深色下闪浅色 -->
+<script src="/static/theme.js"></script>
+<link rel="stylesheet" href="/static/settings.css">
+<!-- 全站共用的反馈组件（RAGKB.toast / RAGKB.confirm / RAGKB.confirmText）；样式在 theme.css -->
+<script src="/static/ui.js" defer></script>
+</head>
+<body>
+<div class="header">
+    <div class="logo">RAG</div>
+    <h1>设置</h1>
+    <span class="spacer"></span>
+    <!-- 外观：自动 → 浅色 → 深色（theme.js 接管） -->
+    <button id="themeBtn" class="theme-btn" type="button" data-theme-toggle></button>
+</div>
+
+<nav class="app-nav" aria-label="应用页面">
+    <a href="/web">对话</a>
+    <a href="/files">文件</a>
+    <a href="/memory">记忆</a>
+    <a href="/settings" aria-current="page">设置</a>
+</nav>
+
+<div class="layout">
+<nav class="nav">
+    <div class="nav-title">设置分组（点击跳转 / 展开）</div>
+    <div id="navlist"></div>
+    <div class="nav-actions">
+        <button type="button" class="btn-mini" onclick="expandAll(true)">全部展开</button>
+        <button type="button" class="btn-mini" onclick="expandAll(false)">全部收起</button>
+    </div>
+</nav>
+
+<main class="main" data-settings-profile="local">
+
+<section class="scheme-picker" id="sec-scheme" aria-labelledby="schemeTitle">
+    <div class="scheme-heading">
+        <div>
+            <div class="scheme-kicker">配置视图</div>
+            <h2 id="schemeTitle">先选择你的配置视图</h2>
+            <p class="scheme-lede">按使用场景组织下面的配置。这里不安装、不启动服务，也不改变已经保存的服务端配置。</p>
+        </div>
+        <span class="scheme-stage">仅影响本页</span>
+    </div>
+    <fieldset class="scheme-fieldset">
+        <legend class="scheme-legend">使用场景</legend>
+        <div class="scheme-options">
+            <label class="scheme-option" data-profile-option="local">
+                <input type="radio" name="settings-profile" value="local">
+                <span class="scheme-option-body">
+                    <span class="scheme-option-top">
+                        <span class="scheme-mark" aria-hidden="true">本</span>
+                        <span class="scheme-name">全本地</span>
+                        <span class="scheme-choice" aria-hidden="true">✓</span>
+                    </span>
+                    <span class="scheme-desc">适合离线、隐私优先或模型部署在本机的场景。</span>
+                    <span class="scheme-foot">需要本机服务已安装并启动，不代表已经完成部署</span>
+                </span>
+            </label>
+            <label class="scheme-option" data-profile-option="cloud">
+                <input type="radio" name="settings-profile" value="cloud">
+                <span class="scheme-option-body">
+                    <span class="scheme-option-top">
+                        <span class="scheme-mark" aria-hidden="true">云</span>
+                        <span class="scheme-name">云端服务</span>
+                        <span class="scheme-choice" aria-hidden="true">✓</span>
+                    </span>
+                    <span class="scheme-desc">适合使用外部模型、OCR 或语音服务的场景。</span>
+                    <span class="scheme-foot">需要外部服务与凭据，配置视图不会自动连接</span>
+                </span>
+            </label>
+            <label class="scheme-option" data-profile-option="hybrid">
+                <input type="radio" name="settings-profile" value="hybrid">
+                <span class="scheme-option-body">
+                    <span class="scheme-option-top">
+                        <span class="scheme-mark" aria-hidden="true">混</span>
+                        <span class="scheme-name">混合</span>
+                        <span class="scheme-choice" aria-hidden="true">✓</span>
+                    </span>
+                    <span class="scheme-desc">适合本地与云端能力并存的场景，例如本地索引加云端生成。</span>
+                    <span class="scheme-foot">按能力组合本地与云端，实际路由待后续接入</span>
+                </span>
+            </label>
+        </div>
+    </fieldset>
+    <div class="scheme-summary">
+        <span class="scheme-current">当前视图：<strong id="schemeCurrent">全本地</strong></span>
+        <span class="scheme-disclaimer">选择只保存在本浏览器，不代表已安装或已连通，也不会切换实际运行方式。</span>
+    </div>
+    <div class="route-overview" aria-labelledby="routeOverviewTitle">
+        <div class="route-overview-head">
+            <div>
+                <strong class="route-overview-title" id="routeOverviewTitle">当前服务分布</strong>
+                <span class="route-overview-help">根据本页当前字段推导；留空项不猜测 .env 的实际值。</span>
+            </div>
+            <span class="route-count" id="routeCount">读取中</span>
+        </div>
+        <div class="route-grid">
+            <div class="route-item">
+                <div class="route-item-head"><span class="route-name">生成模型</span><span class="route-state is-unknown" id="route-llm">待确认</span></div>
+                <span class="route-note" id="route-llm-note">正在读取接口地址</span>
+            </div>
+            <div class="route-item">
+                <div class="route-item-head"><span class="route-name">嵌入模型</span><span class="route-state is-unknown" id="route-embedding">待确认</span></div>
+                <span class="route-note" id="route-embedding-note">正在读取接口地址</span>
+            </div>
+            <div class="route-item">
+                <div class="route-item-head"><span class="route-name">重排序</span><span class="route-state is-unknown" id="route-rerank">待确认</span></div>
+                <span class="route-note" id="route-rerank-note">正在读取提供方</span>
+            </div>
+            <div class="route-item">
+                <div class="route-item-head"><span class="route-name">向量存储</span><span class="route-state is-unknown" id="route-vector">待确认</span></div>
+                <span class="route-note" id="route-vector-note">正在读取存储类型</span>
+            </div>
+            <div class="route-item">
+                <div class="route-item-head"><span class="route-name">OCR</span><span class="route-state is-unknown" id="route-ocr">待确认</span></div>
+                <span class="route-note" id="route-ocr-note">正在读取模式与提供方</span>
+            </div>
+            <div class="route-item">
+                <div class="route-item-head"><span class="route-name">朗读</span><span class="route-state is-unsupported" id="route-tts">未接入</span></div>
+                <span class="route-note" id="route-tts-note">当前版本尚未接入朗读后端</span>
+            </div>
+        </div>
+        <p class="route-warning" id="routeWarning" hidden></p>
+    </div>
+</section>
+
+<section class="readiness-card" id="localReadiness" aria-labelledby="localReadinessTitle">
+    <div class="readiness-head">
+        <div>
+            <div class="readiness-kicker">本地部署</div>
+            <h2 id="localReadinessTitle">本地部署就绪卡</h2>
+            <p>依据当前已加载的生效配置、运行状态和最近一次连接测试推导。这里不负责安装或启动服务，也不把“字段已填写”当成“服务已连通”。</p>
+        </div>
+        <span class="readiness-state is-info" id="readinessOverall" aria-live="polite">待检查</span>
+    </div>
+    <div class="readiness-grid">
+        <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">应用与知识服务</span><span class="readiness-state is-info" id="readiness-app">待检查</span></div>
+            <span class="readiness-detail" id="readiness-app-detail">正在读取运行状态</span>
+        </div>
+        <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">生成模型</span><span class="readiness-state is-info" id="readiness-llm">待检查</span></div>
+            <span class="readiness-detail" id="readiness-llm-detail">正在读取生效配置</span>
+        </div>
+        <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">嵌入模型</span><span class="readiness-state is-info" id="readiness-embedding">待检查</span></div>
+            <span class="readiness-detail" id="readiness-embedding-detail">正在读取生效配置</span>
+        </div>
+        <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">向量存储</span><span class="readiness-state is-info" id="readiness-vector">待检查</span></div>
+            <span class="readiness-detail" id="readiness-vector-detail">正在读取存储类型</span>
+        </div>
+        <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">本地数据目录</span><span class="readiness-state is-info" id="readiness-paths">待检查</span></div>
+            <span class="readiness-detail" id="readiness-paths-detail">正在读取路径</span>
+        </div>
+        <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">可选能力</span><span class="readiness-state is-info" id="readiness-optional">待检查</span></div>
+            <span class="readiness-detail" id="readiness-optional-detail">正在检查重排、OCR 与朗读</span>
+        </div>
+    </div>
+    <div class="readiness-actions">
+        <button type="button" class="btn-clear service-test-button" onclick="testService('knowledge', this)">测试知识服务</button>
+        <button type="button" class="btn-clear" onclick="gotoSection('sec-runtime')">查看运行与端口</button>
+    </div>
+    <p class="readiness-note">目录可写性、模型是否已下载、依赖是否安装等状态，需要由启动器、健康检查或实际入库验证确认。</p>
+</section>
+
+<div class="group-heading" id="group-retrieval">
+    <span class="group-index">01</span>
+    <div>
+        <h2>检索与生成</h2>
+        <p>组织生成、嵌入、重排和向量存储，决定资料如何被检索并生成回答。</p>
+    </div>
+</div>
+
+<section class="card" id="sec-llm">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-llm')" title="点击展开 / 收起">
+        <span class="num">①</span>
+        <h2>生成模型（LLM）</h2>
+        <span class="sum" id="sum-llm"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">负责把检索到的资料组织成回答（RAG 流程的<b>生成</b>环节）。
+        使用 OpenAI 兼容接口，可连接本机服务或兼容的云端服务。本地示例通常来自 Ollama、vLLM、LM Studio 等兼容服务。</p>
+    <div class="row"><label>接入方式</label>
+        <select id="llm_binding">
+            <option value="openai" selected>OpenAI 兼容接口</option>
+        </select>
+        <span class="sub">当前版本使用标准 OpenAI Chat Completions 协议。</span>
+    </div>
+    <div class="row"><label>模型名称</label><input type="text" id="llm_model" placeholder="例如 qwen2.5:7b（本地）或 gpt-4.1-mini（云端）"></div>
+    <div class="row"><label>接口地址</label><input type="text" id="llm_host" placeholder="本地示例 http://127.0.0.1:11434/v1"><span class="sub">本地示例：http://127.0.0.1:11434/v1；云端示例：https://api.openai.com/v1。以实际服务根地址为准。</span></div>
+    <div class="row"><label>API Key</label><input type="password" id="llm_api_key" placeholder="留空表示保持现有值不变"><button type="button" class="btn-clear" data-clear-secret="llm_api_key" hidden>清除</button><span class="sub">本地服务若不需要鉴权可留空；云端服务通常必须填写。</span></div>
+    <div class="row service-test-row">
+        <label>连接检查</label>
+        <button type="button" class="btn-clear service-test-button" onclick="testService('llm', this)">测试生成模型</button>
+        <span class="service-test-status" id="serviceTest-llm">尚未测试</span>
+    </div>
+</section>
+
+<section class="card" id="sec-embedding">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-embedding')" title="点击展开 / 收起">
+        <span class="num">②</span>
+        <h2>嵌入模型（Embedding）</h2>
+        <span class="sum" id="sum-embedding"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">负责把文档编码成向量（RAG 流程的<b>检索</b>环节）。换模型或维度会让旧向量失效，需要重建知识库。</p>
+    <p class="hint">默认使用本机 Ollama 的 <b>bge-m3:latest</b>。嵌入服务与生成模型相互独立。</p>
+    <div class="row"><label>接入方式</label>
+        <select id="embedding_binding" disabled>
+            <option value="ollama" selected>本机 Ollama</option>
+        </select></div>
+    <div class="row"><label>模型名称</label><input type="text" id="embedding_model" placeholder="例如 bge-m3:latest"></div>
+    <div class="row"><label>接口地址</label><input type="text" id="embedding_host" placeholder="例如 http://127.0.0.1:11434"></div>
+    <input type="hidden" id="embedding_api_key" value="">
+    <div class="row"><label>向量维度</label><input type="number" id="embedding_dim" min="1" step="1" placeholder="例如 1024"></div>
+    <div class="row"><label>发送维度参数</label><select id="embedding_send_dim"><option value="">（不修改）</option><option value="true">是</option><option value="false">否</option></select></div>
+    <div class="row service-test-row">
+        <label>连接检查</label>
+        <button type="button" class="btn-clear service-test-button" onclick="testService('embedding', this)">测试嵌入模型</button>
+        <span class="service-test-status" id="serviceTest-embedding">尚未测试</span>
+    </div>
+</section>
+
+<section class="card" id="sec-rerank">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-rerank')" title="点击展开 / 收起">
+        <span class="num">③</span>
+        <h2>重排序模型（Rerank）</h2>
+        <span class="sum" id="sum-rerank"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">可选：对检索结果再排序，提升准确度；不用时选“关闭”。当前服务端未提供重排独立连接测试。</p>
+    <p class="note-line warn local-only-note" data-local-only-note hidden>全本地提示：当前版本没有本地重排提供方，建议保持关闭；不要把它当作已可用的本地服务。</p>
+    <div class="row"><label>接入方式</label>
+        <select id="rerank_binding">
+            <option value="">（不修改）</option>
+            <option value="null">关闭</option>
+            <option value="local" disabled>本地重排（当前版本未提供）</option>
+            <option value="aliyun">阿里云</option>
+            <option value="cohere">Cohere</option>
+            <option value="jina">Jina</option>
+        </select></div>
+    <div class="row"><label>模型名称</label><input type="text" id="rerank_model" placeholder="例如 qwen3-vl-rerank"></div>
+    <div class="row"><label>接口地址</label><input type="text" id="rerank_host"></div>
+    <div class="row"><label>API Key</label><input type="password" id="rerank_api_key" placeholder="留空表示保持现有值不变"><button type="button" class="btn-clear" data-clear-secret="rerank_api_key" hidden>清除</button></div>
+</section>
+
+<section class="card" id="sec-vector">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-vector')" title="点击展开 / 收起">
+        <span class="num">④</span>
+        <h2>向量存储（Vector Store）</h2>
+        <span class="sum" id="sum-vector"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">当前版本使用<b>本地文件向量库</b>，无需 Docker 或外部向量数据库。</p>
+    <p class="note-line">Qdrant 或云端向量库当前不可选。启用前需要后端适配、数据迁移/重建方案和独立连接测试；当前服务端也未提供向量库独立测试。</p>
+    <div class="row"><label>存储类型</label>
+        <select id="vector_store_type">
+            <option value="">（不修改，沿用 LightRAG 配置）</option>
+            <option value="local">本地文件（当前版本支持）</option>
+            <option value="qdrant" disabled>Qdrant / 云端向量库（暂未接入）</option>
+        </select></div>
+    <div class="row"><label>Qdrant 地址</label><input type="text" id="vector_store_qdrant_url" placeholder="当前版本不启用" disabled></div>
+</section>
+
+<div class="group-heading" id="group-data">
+    <span class="group-index">02</span>
+    <div>
+        <h2>数据与入库</h2>
+        <p>组织知识库位置、入库质量门槛、确认流程、文件夹轮询和 OCR。</p>
+    </div>
+</div>
+
+<section class="card" id="sec-paths">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-paths')" title="点击展开 / 收起">
+        <span class="num">⑤</span>
+        <h2>存储路径</h2>
+        <span class="sum" id="sum-paths"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">知识库落地在磁盘上的位置。换电脑或搬家时只需要改这里的路径；数据目录留空表示沿用 LightRAG 自身设置。</p>
+    <div class="row"><label>LightRAG 目录</label><input type="text" id="paths_lightrag_home" placeholder="当前版本不启用" disabled></div>
+    <div class="row"><label>知识库数据目录</label><input type="text" id="graph_working_dir" placeholder="可填相对路径，如 ./rag_storage（相对项目根）"></div>
+    <div class="row"><label>文档输入目录</label><input type="text" id="graph_input_dir" placeholder="可填相对路径，如 ./knowledge（相对项目根）"></div>
+</section>
+
+<section class="card" id="sec-quality">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-quality')" title="点击展开 / 收起">
+        <span class="num">⑥</span>
+        <h2>入库质量校验（Quality Gate）</h2>
+        <span class="sum" id="sum-quality"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">上传的文件先在本地解析为 Markdown 再做质量校验：<b>只有通过校验的内容才会进入知识库</b>。
+        <b>这道门没有总开关</b>（ QUALITY_ENABLED 已失效）：校验恒定运行，没通过的文件只能在
+        上传卡片上点「仍要入库」由你自己放行，档案里会留下「人工放行」记录。
+        留空表示沿用 .env / 内置默认值；选择 standard / strict / loose 时，下面的具体阈值由预设决定（自定义数值会被忽略）。</p>
+    <div class="row"><label>严格程度预设</label>
+        <select id="quality_profile">
+            <option value="">（跟随 .env，默认 standard）</option>
+            <option value="standard">standard（与历史默认一致）</option>
+            <option value="strict">strict（更严格：短文档也会被拦下）</option>
+            <option value="loose">loose（更宽松：适合零散笔记）</option>
+            <option value="custom">custom（使用下面的自定义阈值）</option>
+        </select></div>
+    <div class="row"><label>最少有效字符数</label><input type="number" id="quality_min_chars" min="0" step="1" placeholder="默认 50"></div>
+    <div class="row"><label>可读字符占比下限</label><input type="number" id="quality_min_readable_ratio" min="0" max="1" step="0.01" placeholder="默认 0.60（0~1 之间）"></div>
+    <div class="row"><label>乱码比例上限</label><input type="number" id="quality_max_garbled_ratio" min="0" max="1" step="0.01" placeholder="默认 0.05"></div>
+    <div class="row"><label>重复行比例上限</label><input type="number" id="quality_max_repeat_ratio" min="0" max="1" step="0.01" placeholder="默认 0.40"></div>
+    <div class="row"><label>每页字符数下限</label><input type="number" id="quality_min_chars_per_page" min="0" step="1" placeholder="默认 100（PDF/图片，低于此值提示 OCR）"></div>
+    <div class="row"><label>综合质量分及格线</label><input type="number" id="quality_pass_score" min="0" max="100" step="1" placeholder="默认 70"></div>
+    <div class="row"><label>未识别图片容忍数</label><input type="number" id="quality_max_unocr_images" min="0" step="1" placeholder="默认 0：有一张未识别的内嵌图片就停下等你确认"></div>
+</section>
+
+<section class="card" id="sec-ingest">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-ingest')" title="点击展开 / 收起">
+        <span class="num">⑦</span>
+        <h2>入库确认（Ingest Confirm）</h2>
+        <span class="sum" id="sum-ingest"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">质量校验通过<b>不等于</b>直接入库：文件会停在「待确认」，由你点「入库」或「跳过」——中间那一步永远由你决定。<br>
+        <b>always</b> 每个文件都问你（默认，最稳）；<b>auto</b> 让建议说话——「建议直接入库」的自动放行，
+        提示「再看一眼 / 谨慎入库」的仍会停下问你；<b>off</b> 通过校验就直接入库（不推荐：错内容也会写进知识库）。<br>
+        留空表示沿用 .env / 内置默认值；改完需重启服务生效。上传卡片上还有「本次运行内全部允许」的临时开关（重启即失效）。</p>
+    <p id="ingestState" class="note-line"></p>
+    <div class="row"><label>入库确认方式</label>
+        <select id="ingest_confirm">
+            <option value="">（跟随 .env，默认 always）</option>
+            <option value="always">always：每个文件都停下来等我确认（推荐）</option>
+            <option value="auto">auto：建议入库的自动放行，其余停下来问我</option>
+            <option value="off">off：不再确认，通过校验就直接入库</option>
+        </select></div>
+    <div class="row"><label>待确认保留时长</label><input type="number" id="ingest_ttl_hours" min="0" step="1" placeholder="小时，默认 24；超时按「跳过」处理（不删资料，可随时补确认）"></div>
+</section>
+
+<section class="card" id="sec-inbox">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-inbox')" title="点击展开 / 收起">
+        <span class="num">⑧</span>
+        <h2>文件夹轮询（收件箱自动入库）</h2>
+        <span class="sum" id="sum-inbox"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">把文件<b>复制或移动到 <code>data\inbox\</code></b> 就会自动入库：程序每 N 秒扫一次，
+        等文件「长稳」（连续两轮大小不变）后受理，原件移动到 <code>data\originals\年月\</code> 留档，
+        内容完全相同（sha256 一致）的文件不再入库第二次（归档到 <code>data\inbox\_taken\</code>）。<br>
+        它与网页上传<b>走同一条流水线</b>：解析、质检、留档规则完全一致；不一样的只有
+        <b>入库确认</b>（本卡片单独设置，默认 auto）。受理不了的文件（类型不支持 / 超过上传上限）
+        会移进 <code>data\inbox\_failed\</code> 并附一份 <code>.reason.txt</code>，<b>不会删除</b>。<br>
+        留空表示沿用 .env / 内置默认值（开关 true、间隔 10 秒、确认 auto）；改完需重启服务生效。
+        看进度请打开 <a href="/files">文件管理</a> 页。</p>
+    <p id="inboxState" class="note-line"></p>
+    <div class="row"><label>启用文件夹轮询</label>
+        <select id="inbox_enabled">
+            <option value="">（跟随 .env，默认 开启）</option>
+            <option value="true">开启：放进 data\inbox\ 的文件自动入库</option>
+            <option value="false">关闭：收件箱不再被扫描（文件原样留着）</option>
+        </select></div>
+    <div class="row"><label>扫描间隔（秒）</label>
+        <input type="number" id="inbox_poll_seconds" min="3" max="600" step="1" placeholder="默认 10（3~600）；间隔越短越及时，也越频繁读盘"></div>
+    <div class="row"><label>收件箱入库确认</label>
+        <select id="inbox_confirm">
+            <option value="">（跟随 .env，默认 auto）</option>
+            <option value="always">always：文件夹来的文件也逐个问我</option>
+            <option value="auto">auto：建议入库的自动放行，其余停下来问我（推荐）</option>
+            <option value="off">off：通过质检就直接入库（不推荐）</option>
+        </select></div>
+</section>
+
+<section class="card" id="sec-ocr">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-ocr')" title="点击展开 / 收起">
+        <span class="num">⑨</span>
+        <h2>OCR 文字识别</h2>
+        <span class="sum" id="sum-ocr"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">
+        用于扫描件、图片，以及 Word / PPT / PDF 里的内嵌图片。默认 <b>OCR_MODE=off</b>：程序不向任何外部服务发送文件，需要识别的文件只会被拦下并提示。<br>
+        <b>云端 PaddleOCR-VL（paddle）</b>会把文件发送到外部服务；<b>本机 PaddleOCR（local）</b>在本机识别、不出网（需自行安装）。
+        内嵌图片默认会先把文档停在「需要识别」状态，只有你点「识别图片」才真正外发。
+    </p>
+    <p class="hint">当前服务端未提供 OCR 独立连接测试；OCR 未接入时请保持关闭。</p>
+    <p class="note-line warn local-only-note" data-local-only-note hidden>全本地提示：当前设置页把 OCR 标为未接入或只读；本机 PaddleOCR 需要安装并接入后端后才算可用的本地能力。</p>
+    <p id="ocrState" class="note-line"></p>
+    <div class="row"><label>OCR 模式</label>
+        <select id="ocr_mode">
+            <option value="">（跟随 .env，默认 off）</option>
+            <option value="off">off：完全不启用（不外发）</option>
+            <option value="manual">manual：网页上点按钮才识别（推荐）</option>
+            <option value="auto">auto：检测到需要即自动识别（会消耗配额）</option>
+        </select></div>
+    <div class="row"><label>OCR 提供方</label>
+        <select id="ocr_provider">
+            <option value="">（跟随 .env，默认 paddle）</option>
+            <option value="paddle">云端 PaddleOCR-VL（会外发文件）</option>
+            <option value="local">本机 PaddleOCR（不外发，需安装 paddleocr）</option>
+            <option value="stub">离线替身（仅测试，不识别真实内容）</option>
+            <option value="none">禁用（即使填了 Token 也不外发）</option>
+        </select></div>
+    <div class="row"><label>内嵌图片纳入 OCR</label>
+        <select id="ocr_image_ocr">
+            <option value="">（跟随 .env，默认纳入）</option>
+            <option value="true">是：Word/PPT/PDF 里的图片要先识别才放行</option>
+            <option value="false">否：忽略图片，只入库正文</option>
+        </select></div>
+    <div class="row"><label>识别语言</label><input type="text" id="ocr_lang" placeholder="默认 ch（中文）；英文可填 en"></div>
+    <div class="row"><label>本机识别设备</label>
+        <select id="ocr_device">
+            <option value="">（跟随 .env，默认 cpu）</option>
+            <option value="cpu">cpu</option>
+            <option value="gpu">gpu</option>
+        </select></div>
+    <div class="row"><label>云端作业地址</label><input type="text" id="ocr_base_url" placeholder="默认官方 PaddleOCR-VL 作业地址；可换成自建服务"></div>
+    <div class="row"><label>云端模型名</label><input type="text" id="ocr_model" placeholder="默认 PaddleOCR-VL-1.6"></div>
+    <div class="row"><label>OCR Token</label><input type="password" id="ocr_token" placeholder="留空表示保持现有值不变（只写在这里，不会出现在代码里）"><button type="button" class="btn-clear" data-clear-secret="ocr_token" hidden>清除</button></div>
+    <div class="row"><label>OCR 单文件上限</label><input type="number" id="ocr_max_file_mb" min="1" step="1" placeholder="单位 MB，默认 50"></div>
+    <div class="row"><label>本机模型目录</label><input type="text" id="ocr_local_model_dir" placeholder="留空=用 PaddleOCR 默认缓存目录"></div>
+</section>
+
+<div class="group-heading" id="group-app">
+    <span class="group-index">03</span>
+    <div>
+        <h2>应用与安全</h2>
+        <p>组织上传限制、记忆、局域网设备授权和本地运行端口。</p>
+    </div>
+</div>
+
+<section class="card" id="sec-app">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-app')" title="点击展开 / 收起">
+        <span class="num">⑩</span>
+        <h2>上传与运行参数</h2>
+        <span class="sum" id="sum-app"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">上传限额、允许的文件类型、日志级别、问答技能路由与回答生成方式（服务端参数，改完需重启生效）。</p>
+    <div class="row"><label>上传大小上限</label><input type="number" id="app_max_upload_size" min="1" step="1" placeholder="单位字节，例如 20971520=20MB；留空=默认100MB"></div>
+    <div class="row"><label>允许的扩展名</label><input type="text" id="app_allowed_extensions" placeholder="逗号分隔，例如 .txt,.md,.pdf,.docx"></div>
+    <div class="row"><label>日志级别</label>
+        <select id="app_log_level">
+            <option value="">（不修改）</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+        </select></div>
+    <div class="row"><label>问答技能路由</label>
+        <select id="app_skill_routing" disabled>
+            <option value="">（不修改：跟随 .env / 默认关闭）</option>
+            <option value="off">关闭：/chat 直通 LightRAG</option>
+        </select>
+        <span class="sub">当前版本固定关闭；技能路由将在后续阶段接入。</span>
+    </div>
+    <div class="row"><label>回答生成方式</label>
+        <select id="app_generation_mode" disabled>
+            <option value="upstream" selected>知识服务（OpenAI 兼容生成模型）</option>
+        </select>
+        <span class="sub">生成与嵌入分别配置；嵌入使用独立的向量模型。</span>
+    </div>
+</section>
+
+<section class="card" id="sec-access">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-access')" title="点击展开 / 收起">
+        <span class="num">A</span>
+        <h2>局域网设备授权</h2>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">允许同一局域网内的平板或手机通过聊天地址访问。设备请求只在电脑本机确认，设置接口继续保持仅本机可写。</p>
+    <div class="row"><label>局域网设备授权</label>
+        <button type="button" id="accessDevicesRefresh" class="btn-clear">刷新设备</button>
+        <span class="sub">平板直接打开聊天地址；这里出现设备后点一次“允许”，无需输入授权码或设备名。</span>
+    </div>
+    <div class="access-pair-box" id="accessPairBox">
+        <div class="access-connect-icon">↗</div>
+        <div class="access-pair-copy">
+            <strong>局域网访问说明</strong>
+            <p>通用格式：<code>http://&lt;电脑局域网IPv4&gt;:18080/web</code></p>
+            <p class="access-example">示例（不是当前地址）：<code>http://192.168.1.100:18080/web</code></p>
+            <p>在电脑的网络设置中查看当前 Wi-Fi 或以太网的 IPv4 地址；Windows 也可以运行 <code>ipconfig</code> 查看，把示例中的 IP 换成实际地址。</p>
+            <p>平板和电脑需要处于同一局域网。</p>
+            <p>平板打开地址后会自动发送连接请求，请在电脑端局域网授权“等待允许”中确认授权使用。</p>
+        </div>
+    </div>
+    <div class="row"><label>等待允许</label>
+        <div class="access-device-list" id="accessRequestList">
+            <div class="access-device-empty">读取中…</div>
+        </div>
+    </div>
+    <div class="row"><label>已授权设备</label>
+        <div class="access-device-list" id="accessDeviceList">
+            <div class="access-device-empty">读取中…</div>
+        </div>
+    </div>
+</section>
+
+<section class="card" id="sec-memory">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-memory')" title="点击展开 / 收起">
+        <span class="num">M</span>
+        <h2>记忆系统</h2>
+        <span class="sum" id="sum-memory"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">
+        原始对话持久化、Tier 1 快记忆、历史召回与上下文注入。保存后需重启服务生效。
+        记忆管理页支持查看、确认、拒绝、编辑、失效、删除和监督建议，写操作仅限本机。
+    </p>
+    <h2 class="subhead tight">运行参数</h2>
+    <div class="row"><label>启用记忆</label>
+        <select id="memory_enabled">
+            <option value="">（跟随默认：关闭）</option>
+            <option value="true">开启：持久化会话并启用长期记忆</option>
+            <option value="false">关闭：不创建或打开记忆库</option>
+        </select>
+    </div>
+    <div class="row"><label>上下文注入</label>
+        <select id="memory_context_enabled">
+            <option value="">（跟随默认：关闭）</option>
+            <option value="true">开启：把相关记忆与近期历史带入回答</option>
+            <option value="false">关闭：只持久化，不注入上下文</option>
+        </select>
+        <span class="sub">必须先启用记忆；关闭时聊天请求保持最简形式。</span>
+    </div>
+    <div class="row"><label>Tier 1 快记忆</label>
+        <select id="memory_fast_memory">
+            <option value="">（跟随默认：关闭）</option>
+            <option value="true">开启：从当前消息即时提取明确偏好/约束</option>
+            <option value="false">关闭</option>
+        </select>
+    </div>
+    <div class="row"><label>长期记忆预算</label><input type="number" id="memory_context_budget" min="100" max="8000" step="1" placeholder="默认 900 tokens"></div>
+    <div class="row"><label>近期历史条数</label><input type="number" id="memory_recent_history_messages" min="0" max="40" step="1" placeholder="默认 8 条"></div>
+    <div class="row"><label>近期历史预算</label><input type="number" id="memory_recent_history_tokens" min="0" max="16000" step="1" placeholder="默认 1200 tokens"></div>
+    <div class="row"><label>上游历史模式</label>
+        <select id="memory_upstream_history">
+            <option value="off">off：不向上游发送会话历史</option>
+            <option value="auto">auto：按上下文装配结果决定</option>
+            <option value="on">on：允许发送近期历史</option>
+        </select>
+    </div>
+    <div class="row"><label>上游长期记忆模式</label>
+        <select id="memory_upstream_memory">
+            <option value="off">off：不向上游发送长期记忆</option>
+            <option value="auto">auto：按上下文装配结果决定</option>
+            <option value="on">on：允许发送长期记忆摘要</option>
+        </select>
+    </div>
+    <div class="row"><label>历史召回</label>
+        <select id="memory_recall_enabled">
+            <option value="">（跟随默认：关闭）</option>
+            <option value="true">开启：从当前会话之外的本地历史中召回相关片段</option>
+            <option value="false">关闭</option>
+        </select>
+    </div>
+    <div class="row"><label>历史召回预算</label><input type="number" id="memory_recall_budget" min="80" max="2000" step="1" placeholder="默认 400 tokens"></div>
+    <div class="row"><label>历史召回条数</label><input type="number" id="memory_recall_max_items" min="1" max="20" step="1" placeholder="默认 5 条"></div>
+
+    <h2 class="subhead">自动提取</h2>
+    <div class="row"><label>自动提取</label>
+        <select id="memory_auto_extract">
+            <option value="">（跟随默认：关闭）</option>
+            <option value="true">开启：把符合条件的对话加入提取任务</option>
+            <option value="false">关闭</option>
+        </select>
+    </div>
+    <div class="row"><label>后台 worker</label>
+        <select id="memory_worker">
+            <option value="">（跟随默认：关闭）</option>
+            <option value="true">开启：后台执行提取任务</option>
+            <option value="false">关闭</option>
+        </select>
+        <span class="sub">只有“启用记忆 + 自动提取 + worker”同时开启，后台任务才会启动。</span>
+    </div>
+    <div class="row"><label>每多少轮触发</label><input type="number" id="memory_extract_every_turns" min="1" max="100" step="1" placeholder="默认 6 轮"></div>
+    <div class="row"><label>每批最大消息数</label><input type="number" id="memory_extract_max_messages" min="1" max="200" step="1" placeholder="默认 20 条"></div>
+    <div class="row"><label>每批最大输入</label><input type="number" id="memory_extract_max_input_tokens" min="200" max="32000" step="1" placeholder="默认 4000 tokens"></div>
+    <div class="row"><label>普通提取延迟</label><input type="number" id="memory_extract_debounce_seconds" min="0" max="86400" step="1" placeholder="默认 300 秒"></div>
+    <p class="note-line">当前版本自动提取使用本地规则，不调用额外 LLM。监督策略仍在后台配置文件中维护，不在本页开放修改。</p>
+
+    <h2 class="subhead">当前状态</h2>
+    <div class="row"><label>持久化状态</label><span id="memoryState" class="muted">读取中...</span></div>
+    <div class="row"><label>记忆条数</label><span id="memoryCount" class="muted">—</span></div>
+    <div class="row"><label>上下文注入</label><span id="memoryContext" class="muted">—</span></div>
+    <div class="row"><label>提取队列</label><span id="memoryQueue" class="muted">—</span></div>
+    <div class="row"><label>自动监督</label><span id="memorySupervisor" class="muted">—</span><span class="sub">只给操作建议，不直接修改记忆</span></div>
+    <div class="row"><label>数据库</label><span id="memoryPath" class="muted">—</span></div>
+    <div class="row"><label>管理页面</label><a href="/memory" target="_blank" rel="noopener">打开记忆管理</a><span class="sub">写操作仅限本机</span></div>
+    <div class="row"><label>管理接口</label><a href="/api/memory/admin/items" target="_blank" rel="noopener">/api/memory/admin/items</a><span class="sub">只读 JSON；写接口见 /docs</span></div>
+</section>
+
+<section class="card" id="sec-runtime">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-runtime')" title="点击展开 / 收起">
+        <span class="num">R</span>
+        <h2>运行与端口</h2>
+        <span class="sum" id="sum-runtime"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">端口修改保存后需要重启服务。首选端口不可用时，程序会按扫描上限自动寻找后续可用端口。</p>
+    <p id="runtimeState" class="note-line">读取运行状态中...</p>
+    <div class="row"><label>应用首选端口</label><input type="number" id="runtime_app_port" min="1" max="65535" step="1" placeholder="默认 18080"></div>
+    <div class="row"><label>应用端口扫描上限</label><input type="number" id="runtime_app_port_scan_limit" min="0" max="500" step="1" placeholder="默认 50"></div>
+    <div class="row"><label>HTTP 外壳首选端口</label><input type="number" id="runtime_shell_port" min="1" max="65535" step="1" placeholder="默认 10261"></div>
+    <div class="row"><label>LightRAG 引擎首选端口</label><input type="number" id="runtime_engine_port" min="1" max="65535" step="1" placeholder="默认 10262"></div>
+    <table id="runtimeTable">
+        <thead><tr><th>服务</th><th>地址</th><th>状态</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</section>
+
+<div class="group-heading" id="group-voice">
+    <span class="group-index">04</span>
+    <div>
+        <h2>语音</h2>
+        <p>组织朗读服务的接入、音色和降级方式。</p>
+    </div>
+</div>
+
+<section class="card" id="sec-tts">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-tts')" title="点击展开 / 收起">
+        <span class="num">⑪</span>
+        <h2>朗读（TTS）</h2>
+        <span class="sum" id="sum-tts"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">当前版本尚未接入朗读后端。以下字段仅保留页面结构，不会保存或影响运行。</p>
+    <p class="note-line warn local-only-note" data-local-only-note hidden>全本地提示：朗读后端尚未接入；设备语音和云端 TTS 都只是状态占位，不代表当前版本可用。</p>
+    <p id="ttsState" class="note-line"></p>
+    <div class="row">
+        <label>朗读方式</label>
+        <select id="tts_voice_preset" onchange="applyTtsVoicePreset(this.value)">
+            <option value="auto">自动（默认）：云端优先，设备语音兜底</option>
+            <option value="device">仅设备/浏览器语音</option>
+            <option value="custom">自定义链路（高级）</option>
+        </select>
+        <span class="sub">当前版本不保存朗读设置</span>
+        <input type="hidden" id="tts_tts_provider_chain">
+    </div>
+    <div class="row"><label>云端服务地址</label><input type="text" id="tts_tts_cloud_host" placeholder="例如 https://api.openai.com/v1（可带可不带末尾斜杠；已带 /audio/speech 也不会重复拼）"><span class="sub">留空 = 不用云端 TTS，直接用本设备语音</span></div>
+    <div class="row"><label>云端 API Key</label><input type="password" id="tts_tts_cloud_api_key" placeholder="留空表示保持现有值不变"><button type="button" class="btn-clear" data-clear-secret="tts_tts_cloud_api_key" hidden>清除</button><span class="sub">只存在本机的 config\user-settings.json 里，不会写进日志、也不会回显明文</span></div>
+    <div class="row"><label>云端模型名</label><input type="text" id="tts_tts_cloud_model" placeholder="例如 gpt-4o-mini-tts"><span class="sub">必填：缺它同样视为「未配置」，会跳过云端</span></div>
+    <div class="row"><label>云端音色</label><input type="text" id="tts_tts_cloud_voice" placeholder="例如 alloy；留空 = 请求体里不带 voice 字段"><span class="sub">由服务商决定可用取值</span></div>
+    <div class="row"><label>云端超时</label><input type="number" id="tts_tts_cloud_timeout" min="3" max="600" step="1" placeholder="默认 60（秒），允许 3 ~ 600"><span class="sub">太短会在大段文本上超时；超时后会自动改用本设备语音</span></div>
+</section>
+
+<div class="group-heading" id="group-diagnostics">
+    <span class="group-index">05</span>
+    <div>
+        <h2>诊断</h2>
+        <p>查看实际生效配置，并集中检查服务连接状态。</p>
+    </div>
+</div>
+
+<section class="card" id="sec-status">
+    <div class="card-head" role="button" tabindex="0" aria-expanded="true" onclick="toggleSection('sec-status')" title="点击展开 / 收起">
+        <span class="num">⑫</span>
+        <h2>生效配置（只读）</h2>
+        <span class="sum" id="sum-status"></span>
+        <span class="chev">▾</span>
+    </div>
+    <p class="hint">左边是项目，右边是当前实际生效值；显示“—”表示该项未设置。</p>
+    <div class="row"><label>配置文件</label><span id="fileinfo" class="muted file-info">读取中...</span></div>
+    <h2 class="subhead tight">知识库侧（LightRAG）</h2>
+    <table id="effectiveTable"><tbody></tbody></table>
+    <h2 class="subhead">应用侧</h2>
+    <table id="appTable"><tbody></tbody></table>
+    <h2 class="subhead">解析 · 质量校验 · OCR</h2>
+    <table id="qualityTable"><tbody></tbody></table>
+    <div id="injected" class="chips"></div>
+
+    <h2 class="subhead">连接测试</h2>
+        <ul id="testresult" class="test-list"><li class="muted">（尚未测试连接）</li></ul>
+</section>
+
+</main>
+</div>
+
+<div class="bar">
+    <button class="btn-primary" id="saveBtn" onclick="save()">保存配置</button>
+    <button class="btn-plain" id="testBtn" onclick="test()">测试全部服务</button>
+    <button class="btn-plain" onclick="reload()">重新加载</button>
+    <button class="btn-plain only-narrow" onclick="expandAll(true)">展开全部</button>
+    <span id="status" class="status" role="status" aria-live="polite">提示：保存后需重启服务才生效（重启服务后生效）</span>
+    <!-- 未保存改动计数：单独一个元素，否则被后面的操作文案覆盖掉就再也看不见了。
+         刻意不给它 aria-live：每敲一个字都会播报一遍，读屏用户会被淹掉。 -->
+    <span id="dirty" class="dirty" hidden></span>
+</div>
+
+<script src="/static/settings.js"></script>
+
+<script src="/static/session.js" defer></script>
+</body>
+</html>

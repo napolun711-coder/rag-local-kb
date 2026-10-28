@@ -1,0 +1,153 @@
+
+  /* 令牌、*{box-sizing}、[hidden]、body 基样式都在 theme.css（唯一来源）。
+     本页原来的 :root 只有 10 个变量、缺 --radius/--shadow/--read，
+     而且 --bg 是 #f6f7f9、--text 是 #1f2937、--ok 是 #059669 —— 与对话页/设置页各不相同。
+     现在统一：--bg 取 #f4f6fb、--text 取 #111827，正文字号 14px → 15px（与应用其余部分一致）。 */
+  a{color:var(--brand)}
+  header.bar{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 20px;
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  header.bar h1{font-size:16px;margin:0}
+  header.bar .sub{color:var(--muted);font-size:12.5px}
+  header.bar .grow{flex:1 1 auto}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:8px;
+    padding:6px 12px;color:var(--text)}
+  button:hover{background:var(--grey-bg)}
+  button.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+  button.primary:hover{background:var(--brand-2)}
+  button.danger{border-color:var(--bad-line);color:var(--bad-text)}
+  button.danger:hover{background:var(--bad-soft)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .wrap{padding:18px 20px 60px;max-width:1240px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .card h2{font-size:14px;margin:0 0 10px}
+  .card .hint{color:var(--muted);font-size:12.5px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .stat{background:var(--grey-soft);border-radius:10px;padding:10px 12px}
+  .stat .k{color:var(--grey-text-dim);font-size:12px}   /* --muted 在这个灰底上只有 4.39:1，差 0.11 不达 AA */
+  .stat .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .chip{background:var(--grey-soft);border-radius:999px;padding:3px 10px;font-size:12.5px;color:var(--grey-text)}
+  .chip.ok{background:var(--ok-soft);color:var(--ok-text)}
+  .chip.warn{background:var(--warn-soft);color:var(--warn-text)}
+  .chip.bad{background:var(--bad-soft);color:var(--bad-text)}
+  .notice{background:var(--warn-soft);border:1px solid var(--warn-line);color:var(--warn-text);border-radius:10px;
+    padding:9px 12px;margin-bottom:12px;font-size:13px}
+  .notice.bad{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad-text)}
+  .notice.ok{background:var(--ok-soft);border-color:var(--ok-line);color:var(--ok-text)}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  input[type=search],select{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;background:var(--panel)}
+  input[type=search]{min-width:200px}
+  .topic-select{max-width:132px;padding:4px 6px;font-size:12px}
+  /* 宽表格在窄窗口里自己滚（原来是整页横向滚动） */
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border-bottom:1px solid var(--line);padding:8px 8px;text-align:left;vertical-align:middle}
+  th{color:var(--muted);font-weight:600;font-size:12.5px;white-space:nowrap}
+  tbody tr:hover{background:var(--grey-bg)}
+  td.name{max-width:320px;word-break:break-all}
+  td.name .path{display:block;color:var(--muted);font-size:12px}
+  .badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;background:var(--grey-soft);color:var(--grey-text)}
+  .badge.ok{background:var(--ok-soft);color:var(--ok-text)}
+  .badge.warn{background:var(--warn-soft);color:var(--warn-text)}
+  .badge.bad{background:var(--bad-soft);color:var(--bad-text)}
+  .badge.info{background:var(--info-soft);color:var(--brand-2)}
+  .open{background:none;border:0;color:var(--brand);padding:0;cursor:pointer;white-space:nowrap}   /* "打开原件" 别折成两行 */
+  .open[disabled]{color:var(--muted);cursor:not-allowed;text-decoration:none}
+  .muted{color:var(--muted)}
+  .nowrap{white-space:nowrap}
+  /* 分页条：中间那句文案会很长（"共 50 条已载入 · 另有 13 条未载入（接口单次上限 50 条）"），
+     窄屏上必须由**文案**去换行，不能让按钮被压成竖排 —— 所以按钮 nowrap 且不参与收缩。 */
+  .pager{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
+  .pager button{flex:0 0 auto;white-space:nowrap}
+  .pager #pageInfo,.pager #localPageInfo{flex:1 1 auto;min-width:0}
+  .delbar{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px 14px;margin-top:12px;box-shadow:var(--shadow-bar)}
+  .delbar .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .delbar label{display:flex;gap:6px;align-items:center;font-size:13px}
+  .confirm{background:var(--warn-soft);border:1px solid var(--warn-line);border-radius:10px;padding:12px;margin-top:10px;font-size:13px}
+  .confirm ul{margin:6px 0 0 18px;padding:0}
+  /* 确认框里"哪一条会真的被删"的着色：默认态 = 不会动它，加了类才是"会删" */
+  #confirmLocal{color:var(--muted)}
+  #confirmOriginals{color:var(--ok-text)}
+  #confirmLocal.warn{color:var(--warn-text)}
+  #confirmOriginals.danger{color:var(--bad-text)}
+  .confirm .ask{margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .events{list-style:none;margin:8px 0 0;padding:0;max-height:190px;overflow:auto;font-size:12.5px}
+  .events li{border-top:1px dashed var(--line);padding:5px 0;color:var(--grey-text)}
+  .events .t{color:var(--muted);margin-right:6px}
+  .folder-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .folder-row:last-child{border-bottom:0}
+  .folder-row .nm{min-width:180px}
+  .folder-row .pt{color:var(--muted);font-size:12px}
+  /* 「正在停止 / 服务已停止」遮罩（与对话页同一套样式，用户在哪一页看到的提示都一样） */
+  .stopping{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+    padding:24px;background:var(--overlay)}
+  .stopping-box{width:100%;max-width:440px;background:var(--panel);border-radius:16px;padding:22px 24px;
+    box-shadow:var(--shadow-modal)}
+  .stopping-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:8px}
+  .stopping-text{font-size:13.5px;color:var(--grey-text);line-height:1.75}
+  .stopping-hint{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);font-size:12.5px;
+    color:var(--muted);line-height:1.75}
+  .stopping-box.warn .stopping-title{color:var(--bad-text)}
+  .stopping-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:16px}
+  .stopping-actions button{padding:8px 16px;border-radius:999px;font-size:13.5px;font-weight:600;
+    background:var(--grey-soft);color:var(--grey-text)}
+  .stopping-actions button.primary{background:var(--brand);color:var(--on-brand)}
+  .stopping-actions button.primary:hover{background:var(--brand-2)}
+  /* 触控：本页按钮实高约 31px（padding:6px 12px + 正文行高），手机 / 平板上偏矮。
+     只在小屏抬到 38px，桌面保持原来的紧凑观感（不加 min-width：中文按钮本来就够宽）。 */
+  /* ≤900px 起就收起冗余列：这一档放不下全部列，行高会飙到 390px
+     （实测 621px 处整页 14405px —— 比 500px 的 6418px 还高一倍多）。
+     .hide-sm 要到 ≤620px 才生效，中间这一段反而是最差的。
+     因此两张表都用 .hide-md：本机表的「原件」、知识库表的「本机留档 / 原件」
+     在 ≤900px 一并收起；原件仍可从「操作」列的「打开原件」进入。 */
+  @media (max-width:900px){
+    th.hide-md,td.hide-md{display:none}
+    button{min-height:38px}
+    /* 文件名 / 路径不再逐字换行（word-break:break-all）：一行长路径能把一张表顶到上万像素高。
+       621~800px 尤其明显 —— 收起两列后文件名列仍只有约 100px，长名字会把行高撑到 135px。
+       所以单行省略跟着列收起一起放到 ≤900px；完整内容在 title 里。
+       桌面宽表格（≥901px）仍按原来的方式换行。 */
+    td.name{max-width:180px}
+    td.name,td.name .path{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  }
+  @media (max-width:620px){
+    .stopping{padding:16px}
+    .stopping-box{padding:18px 16px}
+    .stopping-actions button{flex:1 1 auto;text-align:center}
+    .wrap{padding:12px}
+    th.hide-sm,td.hide-sm{display:none}
+  }
+
+/* Document catalog */
+body.catalog-mode #inboxCard,
+body.catalog-mode #foldersCard,
+body.catalog-mode #scanBtn,
+body.catalog-mode #openInboxBtn,
+body.catalog-mode #openOriginalsBtn,
+body.catalog-mode #stopBtn,
+body.catalog-mode #offline,
+body.catalog-mode #stopping { display:none !important; }
+body.catalog-mode #readonlyBanner { display:block !important; }
+.detail-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:70}
+.detail-panel{position:fixed;right:0;top:0;bottom:0;width:min(560px,94vw);background:var(--panel);color:var(--text);border-left:1px solid var(--line);box-shadow:-18px 0 40px rgba(0,0,0,.18);z-index:71;overflow:auto;padding:18px 20px}
+.detail-head{display:flex;align-items:center;gap:12px;position:sticky;top:-18px;background:var(--panel);padding:10px 0;border-bottom:1px solid var(--line)}
+.detail-head h2{font-size:18px;margin:0;flex:1}
+.detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.detail-actions a{display:inline-flex;align-items:center;padding:7px 11px;border:1px solid var(--line);border-radius:8px;color:var(--brand);text-decoration:none;background:var(--surface-input)}
+.detail-grid{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px 12px;margin-top:14px;font-size:13px}
+.detail-grid .k{color:var(--muted)}
+.detail-grid .v{word-break:break-word}
+.detail-section{margin-top:18px;padding-top:12px;border-top:1px solid var(--line)}
+.detail-section h3{font-size:14px;margin:0 0 8px}
+.toolbar.spaced-top{margin-top:10px}
+.card-subhead{margin-top:12px}
+.col-check{width:34px}
+.col-topic{width:140px}
+.col-status{width:96px}
+.col-chunks{width:78px}
+.col-archive{width:120px}
+.col-original{width:150px}
+.col-updated{width:150px}
+.col-actions{width:90px}
+.col-local-status{width:110px}
+.table-spaced{margin-top:8px}

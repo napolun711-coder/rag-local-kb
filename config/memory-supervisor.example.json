@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "scan_interval_seconds": 3600,
+  "stale_days": 180,
+  "min_confidence": 0.45,
+  "max_active_memories": 200
+}

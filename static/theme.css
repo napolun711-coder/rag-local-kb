@@ -1,0 +1,544 @@
+/* ============================================================================
+ * theme.css —— 全站唯一的设计令牌源
+ * ----------------------------------------------------------------------------
+ * 为什么要有这个文件：改造前有三份各自为政的 :root，外加 voice.js 在运行时
+ * **往 <head> 注入**的一段 <style>，四份令牌的语义色还对不上：
+ *
+ *   index.html     --bg #f4f6fb  --text #111827  --ok #16a34a
+ *   files.html     --bg #f6f7f9  --text #1f2937  --ok #059669（还缺 --radius/--shadow/--read）
+ *   settings.html  --bg #f4f6fb  --text #111827  --ok #15803d（--side-accent 用了却没定义）
+ *   voice.js       硬编码 #dcfce7/#15803d/#86efac…
+ *
+ * 于是同一个"成功绿"在三个页面是三种颜色；改一处配色要动四个地方。
+ * 现在：**换配色只改这个文件**。各页都在 <head> 里先引它、再引自己的页面样式。
+ *
+ * 语义色的两类角色（这是三份令牌打架的根源，必须分开）：
+ *   --ok / --warn / --bad      = 信号色。实心点、实心徽标、图标 —— 做"颜色块"用，
+ *                                不承担文字可读性，可以取鲜艳的那一档。
+ *   --ok-text / …-text         = 文字色。浅色底上的小字必须是这一档，
+ *                                白底对比度 ≥4.5:1（#16a34a 只有 3.3:1，当小字发灰）。
+ * 原来 files.html 拿 #059669 同时干这两件事、settings.html 又自己调深了一档，
+ * 谁也没错，只是没把角色拆开。现在拆开，两边各取所需。
+ * ========================================================================= */
+
+:root {
+  /* ---------- 结构 ---------- */
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --line: #e5e7eb;
+  --radius: 14px;
+  --shadow: 0 6px 24px rgba(17, 24, 39, .08);
+  /* 阅读栏宽度：对话消息、输入框、上传卡片共用同一列，视觉上对齐成一个阅读区 */
+  --read: 760px;
+
+  /* ---------- 文字 ---------- */
+  --text: #111827;
+  --muted: #6b7280;
+  --grey-text: #374151;      /* 比 --muted 重一档的正文灰（表单标签、表格首列） */
+  --grey-text-dim: #4b5563;  /* 表格单元格、卡片内说明 */
+  --grey-faint: #9aa4b2;     /* 图标、装饰性小字 */
+
+  /* ---------- 中性面（表单底、次要块、斑马纹） ---------- */
+  --grey-soft: #f3f4f6;
+  --grey-hover: #e5e7eb;
+  --grey-line-soft: #f1f5f9;
+  --grey-bg: #fafbff;
+
+  /* ---------- 品牌 ---------- */
+  --brand: #2563eb;
+  --brand-2: #1d4ed8;
+  --brand-soft: #e8efff;     /* 浅底：主按钮的软底、选中态 */
+  --brand-fill: #dbe7ff;     /* 悬停再深一档 */
+  --brand-line: #cddcff;     /* 描边 */
+  --brand-line-focus: #bfd3ff;  /* 聚焦态描边（输入框 focus / focus-within） */
+  --brand-line-2: #d3e0fb;
+  --brand-chip: #eef2ff;     /* 序号徽标、浅色胶囊 */
+  --brand-chip-text: #1e40af;
+
+  /* ---------- 语义：信号色（点 / 实心块） ---------- */
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+
+  /* ---------- 语义：文字色（浅底小字，白底对比度 ≥4.5:1） ---------- */
+  --ok-text: #15803d;
+  --warn-text: #b45309;
+  --bad-text: #b91c1c;
+
+  /* ---------- 语义：浅底 + 描边 ---------- */
+  --ok-soft: #ecfdf5;   --ok-line: #a7f3d0;
+  --warn-soft: #fffbeb; --warn-line: #fde68a;
+  --bad-soft: #fef2f2;  --bad-line: #fecaca;
+  --info-soft: #eff6ff; --info-line: #dbe4ff;
+
+  /* ---------- 侧栏：浅色「资料台」（主区同明度，靠 1px 分隔线与卡片层次区分） ---------- */
+  --side-bg: #ffffff;
+  --side-line: #e8ebf2;
+  --side-card: #f7f9fc;
+  --side-hover: #f1f4f9;
+  --side-text: #1f2937;
+  --side-text-dim: #5b6472;
+  --side-text-faint: #868fa3;
+  --side-accent: #2563eb;      /* settings.html 一直在用 var(--side-accent) 却没定义它 */
+  --side-accent-soft: #e8efff;
+
+  /* ---------- 表面 / 覆盖层 / 阴影（深色模式的前置令牌化） ----------
+     这些值原来散落在三页的样式区里（index.html 87 处、settings 4 处、files 2 处），
+     深色模式下会露白。收进令牌后，浅色值保持**逐字节不变**（见 6C 的样式指纹比对），
+     深色只覆盖本块里需要变化的那些。 */
+  --on-brand: #ffffff;              /* 品牌蓝 / 绿 / 红底上的文字 */
+  --surface-input: #ffffff;         /* 输入框、内嵌白底面板 */
+  --surface-subtle: #f4f6fa;        /* 浅灰胶囊、次级块 */
+  --surface-subtle-2: #f6f8fc;      /* 再浅一档的块 */
+  --surface-inset: #fbfbfd;         /* 卡片内的极浅底 */
+  --surface-hover-2: #eef1f6;       /* 消息操作按钮悬停 */
+  --bubble-user: #eef1f6;           /* 用户消息气泡 */
+  --table-stripe: #fcfdff;          /* Markdown 表格斑马纹 */
+  --glass: rgba(255,255,255,.93);   /* 图谱图例 */
+  --glass-strong: rgba(255,255,255,.97);  /* 图谱悬停浮层、设置底栏 */
+  --overlay: rgba(17,24,39,.55);    /* 停服遮罩、确认框遮罩 */
+  --overlay-strong: rgba(17,24,39,.32);
+  --overlay-weak: rgba(17,24,39,.18);
+  --shadow-pop: 0 14px 40px rgba(17,24,39,.18);
+  --shadow-pop-strong: 0 18px 50px rgba(17,24,39,.22);
+  --shadow-modal: 0 18px 50px rgba(17,24,39,.28);
+  --shadow-toast: 0 10px 30px rgba(17,24,39,.14);
+  --shadow-header: 0 1px 3px rgba(17,24,39,.04);
+  --shadow-card: 0 8px 24px rgba(17,24,39,.11);
+  --shadow-soft: 0 1px 2px rgba(15,23,42,.10);
+  --shadow-soft-2: 0 6px 20px rgba(15,23,42,.12);
+  --shadow-bar: 0 -2px 12px rgba(0,0,0,.04);
+  --focus-ring: 0 0 0 4px rgba(37,99,235,.10);
+  --focus-ring-sm: 0 0 0 3px rgba(37,99,235,.10);
+  --ring-ok: 0 0 0 3px rgba(34,197,94,.22);
+  --ring-grey: 0 0 0 3px rgba(107,114,128,.18);
+  --mic-ring-a: 0 0 0 0 rgba(220,38,38,.30);
+  --mic-ring-b: 0 0 0 7px rgba(220,38,38,0);
+  --grey-ring-weak: rgba(148,163,184,.12);
+  --brand-ring-weak: rgba(59,130,246,.25);
+  --brand-spinner: #3b82f6;
+  --brand-shadow: 0 6px 16px rgba(59,130,246,.26);
+  --brand-shadow-strong: 0 10px 30px rgba(59,130,246,.30);
+  --brand-disabled: #c7d2fe;
+  --brand-strong: #1e3a8a;          /* 品牌蓝底上的深色小字 */
+  --brand-deep: #3730a3;
+  --logo-gradient: linear-gradient(135deg,#3b82f6,#8b5cf6);
+  --bg-transparent: rgba(244,246,251,0);  /* 输入区顶部的渐隐起点 */
+  --scrollbar: #dfe4ec;
+  --scrollbar-hover: #cfd6e0;
+  --scrollbar-thin: #d7dce6;
+  --scrollbar-thumb: #cbd5e1;
+  --bad-soft-hover: #fde2e2;
+  --warn-soft-2: #fff7ed;
+  --warn-line-2: #fdba74;
+  --warn-soft-3: #fffaf0;
+  --warn-line-3: #f3d9a4;
+  --warn-badge-bg: #fef3c7;
+  --warn-badge-text: #92400e;
+  --info-soft-2: #f8faff;
+  --think-bg: #f8fafc;
+  --think-bg-active: #f7faff;
+  --think-line: #e2e8f0;
+  --think-text: #64748b;
+  --code-bg: #0f172a;               /* 代码块：深浅主题都保持深色 */
+  --code-text: #e2e8f0;
+  --step-mark: #cbd5e1;
+  /* 图谱画布（Canvas 读不到 CSS 变量，由 index.html 的 gvColors() 读取并缓存） */
+  --graph-bg: #ffffff;
+  --graph-label-bg: rgba(255,255,255,.94);
+  --graph-label-stroke: #cddcff;
+  --graph-label-halo: rgba(255,255,255,.94);
+  --graph-label-text: #475569;
+  --graph-label-hot: #1d4ed8;
+  --graph-node-stroke: rgba(255,255,255,.92);
+  --graph-node-selected: #1d4ed8;
+  --graph-node-hover: #60a5fa;
+  --graph-node-gloss: rgba(255,255,255,.34);
+  --graph-node-shadow: rgba(15,23,42,.20);
+  --graph-edge: rgba(148,163,184,.38);
+  --graph-edge-arrow: rgba(148,163,184,.62);
+  --graph-focus: rgba(37,99,235,.68);
+  --graph-focus-arrow: rgba(37,99,235,.8);
+  --graph-focus-shadow: rgba(37,99,235,.35);
+  --graph-halo: rgba(37,99,235,.30);
+  --graph-halo-0: rgba(37,99,235,0);
+  --graph-glow-1: rgba(37,99,235,.085);
+  --graph-glow-2: rgba(37,99,235,.024);
+  --graph-glow-0: rgba(37,99,235,0);
+  --graph-star: rgba(148,163,184,.22);
+  --graph-orbit: rgba(37,99,235,.05);
+
+  /* ---------- 字体 ---------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+  --font-mono: ui-monospace, Consolas, "Cascadia Mono", monospace;
+  --fs-base: 15px;
+  --lh-base: 1.6;
+}
+
+/* ============================================================================
+ * 深色主题
+ * ----------------------------------------------------------------------------
+ * theme.js 会把 <html data-theme> 解析成 light / dark（auto 模式下跟随系统），
+ * 所以这里只需要覆盖"深色时真正需要变"的令牌。浅色模式**不受影响**。
+ *
+ * 取值原则：
+ *   · 背景是带一点蓝的中性深色（#0d121a / #151c26），不用纯黑 —— 纯黑会把
+ *     阴影与卡片层次吃掉；
+ *   · 品牌色提亮一档（#2563eb → #3b82f6），语义文字色也提亮（深色底上要够亮）；
+ *   · 语义浅底改成同色系的半透明，描边同步提亮；
+ *   · 代码块仍保持深色（两个主题下都是"代码 = 深底"），只把底色再压深一点。
+ * ------------------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0d121a;
+  --panel: #151c26;
+  --line: #273243;
+  --shadow: 0 6px 24px rgba(0,0,0,.50);
+
+  --text: #e6ebf3;
+  --muted: #9aa6b8;
+  --grey-text: #c3ccda;
+  --grey-text-dim: #aab5c5;
+  /* #728096 在 --grey-soft 上只有 3.94:1（低于 AA）；提到 #8592a6 后
+     grey-soft 5.01:1 / panel 5.43:1。仍比 --muted 暗，层级不变。 */
+  --grey-faint: #8592a6;
+
+  --grey-soft: #1b2330;
+  --grey-hover: #243141;
+  --grey-line-soft: #1a2230;
+  --grey-bg: #111823;
+
+  --brand: #3b82f6;
+  --brand-2: #60a5fa;
+  --brand-soft: rgba(59,130,246,.16);
+  --brand-fill: rgba(59,130,246,.24);
+  --brand-line: rgba(96,165,250,.32);
+  --brand-line-focus: rgba(96,165,250,.55);
+  --brand-line-2: rgba(96,165,250,.28);
+  --brand-chip: rgba(59,130,246,.18);
+  --brand-chip-text: #93c5fd;
+
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --ok-text: #4ade80;
+  --warn-text: #fbbf24;
+  --bad-text: #f87171;
+  --ok-soft: rgba(34,197,94,.14);    --ok-line: rgba(34,197,94,.32);
+  --warn-soft: rgba(245,158,11,.14); --warn-line: rgba(245,158,11,.32);
+  --bad-soft: rgba(239,68,68,.14);   --bad-line: rgba(239,68,68,.32);
+  --info-soft: rgba(59,130,246,.14); --info-line: rgba(96,165,250,.32);
+
+  --side-bg: #111823;
+  --side-line: #243147;
+  --side-card: #17202c;
+  --side-hover: #1d2735;
+  --side-text: #dbe3ee;
+  --side-text-dim: #a6b1c1;
+  --side-text-faint: #7b8798;
+  --side-accent: #60a5fa;
+  --side-accent-soft: rgba(59,130,246,.16);
+
+  --on-brand: #ffffff;
+  --surface-input: #0f151e;
+  --surface-subtle: #1a2230;
+  --surface-subtle-2: #171f2b;
+  --surface-inset: #141b25;
+  --surface-hover-2: #223043;
+  --bubble-user: #1e2837;
+  --table-stripe: #141c27;
+  --glass: rgba(21,28,38,.93);
+  --glass-strong: rgba(21,28,38,.97);
+  --overlay: rgba(0,0,0,.66);
+  --overlay-strong: rgba(0,0,0,.45);
+  --overlay-weak: rgba(0,0,0,.28);
+  --shadow-pop: 0 14px 40px rgba(0,0,0,.55);
+  --shadow-pop-strong: 0 18px 50px rgba(0,0,0,.60);
+  --shadow-modal: 0 18px 50px rgba(0,0,0,.65);
+  --shadow-toast: 0 10px 30px rgba(0,0,0,.55);
+  --shadow-header: 0 1px 3px rgba(0,0,0,.35);
+  --shadow-card: 0 8px 24px rgba(0,0,0,.45);
+  --shadow-soft: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-soft-2: 0 6px 20px rgba(0,0,0,.45);
+  --shadow-bar: 0 -2px 12px rgba(0,0,0,.35);
+  --focus-ring: 0 0 0 4px rgba(96,165,250,.18);
+  --focus-ring-sm: 0 0 0 3px rgba(96,165,250,.18);
+  --ring-ok: 0 0 0 3px rgba(34,197,94,.30);
+  --ring-grey: 0 0 0 3px rgba(148,163,184,.22);
+  --mic-ring-a: 0 0 0 0 rgba(239,68,68,.40);
+  --mic-ring-b: 0 0 0 7px rgba(239,68,68,0);
+  --grey-ring-weak: rgba(148,163,184,.12);
+  --brand-ring-weak: rgba(96,165,250,.32);
+  --brand-spinner: #60a5fa;
+  --brand-shadow: 0 6px 16px rgba(0,0,0,.45);
+  --brand-shadow-strong: 0 10px 30px rgba(0,0,0,.50);
+  --brand-disabled: rgba(59,130,246,.35);
+  --brand-strong: #93c5fd;
+  --brand-deep: #a5b4fc;
+  --logo-gradient: linear-gradient(135deg,#3b82f6,#8b5cf6);
+  --bg-transparent: rgba(13,18,26,0);
+  --scrollbar: #2b3748;
+  --scrollbar-hover: #3a4a61;
+  --scrollbar-thin: #2b3748;
+  --scrollbar-thumb: #3a4a61;
+  --bad-soft-hover: rgba(239,68,68,.22);
+  --warn-soft-2: rgba(245,158,11,.14);
+  --warn-line-2: rgba(245,158,11,.45);
+  --warn-soft-3: rgba(245,158,11,.12);
+  --warn-line-3: rgba(245,158,11,.35);
+  --warn-badge-bg: rgba(245,158,11,.18);
+  --warn-badge-text: #fcd34d;
+  --info-soft-2: rgba(59,130,246,.12);
+  --think-bg: #141b25;
+  --think-bg-active: rgba(59,130,246,.10);
+  --think-line: #2a3546;
+  --think-text: #9aa6b8;
+  --code-bg: #0a0f17;
+  --code-text: #dbe4f0;
+  --step-mark: #3a4a61;
+
+  --graph-bg: #0c1118;
+  --graph-label-bg: rgba(17,24,39,.92);
+  --graph-label-stroke: rgba(96,165,250,.42);
+  --graph-label-halo: rgba(12,17,24,.92);
+  --graph-label-text: #cbd5e1;
+  --graph-label-hot: #93c5fd;
+  --graph-node-stroke: rgba(12,17,24,.90);
+  --graph-node-selected: #93c5fd;
+  --graph-node-hover: #60a5fa;
+  --graph-node-gloss: rgba(255,255,255,.22);
+  --graph-node-shadow: rgba(0,0,0,.55);
+  --graph-edge: rgba(148,163,184,.28);
+  --graph-edge-arrow: rgba(148,163,184,.55);
+  --graph-focus: rgba(96,165,250,.75);
+  --graph-focus-arrow: rgba(96,165,250,.85);
+  --graph-focus-shadow: rgba(96,165,250,.40);
+  --graph-halo: rgba(96,165,250,.32);
+  --graph-halo-0: rgba(96,165,250,0);
+  --graph-glow-1: rgba(96,165,250,.10);
+  --graph-glow-2: rgba(96,165,250,.03);
+  --graph-glow-0: rgba(96,165,250,0);
+  --graph-star: rgba(148,163,184,.16);
+  --graph-orbit: rgba(96,165,250,.06);
+}
+
+/* ---------------------------------------------------------------------------
+ * 全局基元。只放"各页都必须一致、谁也不会想去覆盖"的那几条。
+ *
+ * `[hidden]{display:none !important}` 单独说明：作者样式里的 display
+ * （.icon-btn / .toolbar button 之类）优先级高于浏览器默认的 [hidden]{display:none}，
+ * 会让 element.hidden = true 失效 —— index.html 当初就是踩了这个坑才补的这条
+ * （顶栏「停止全部服务」该隐没隐、流式光标定稿后不消失）。files / settings
+ * 之前只做了单点兜底（.stopping[hidden]），现在一并收进这里。
+ * ------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+}
+
+button { font-family: inherit; font-size: inherit; cursor: pointer; border: none; }
+a { text-decoration: none; }
+
+/* 二级主页面共享导航：对话 / 文件 / 记忆 / 设置。 */
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.app-nav::-webkit-scrollbar { display: none; }
+.app-nav a {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.app-nav a:hover { background: var(--grey-soft); color: var(--text); }
+.app-nav a[aria-current="page"] {
+  background: var(--brand-soft);
+  color: var(--brand-2);
+}
+.app-nav a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * 焦点可见性
+ * 全站默认给键盘用户一个清晰的焦点环。原来只有 index.html 的 6 处
+ * 手写 :focus-visible，files / settings 一处都没有（grep = 0）——
+ * 用 Tab 走一遍那两页完全看不出焦点在哪。页面自己的规则更具体时会覆盖这条。
+ * ------------------------------------------------------------------------- */
+/* 只给焦点环，**不设 border-radius**：那会顺带改掉被聚焦元素自身的圆角
+   （实测：对话页输入框聚焦时圆角从 0 变成 4px —— 元素自己没写圆角就"继承"了这个值）。 */
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------------
+ * 外观切换按钮
+ * 三页顶栏共用；图标由 theme.js 按「自动 / 浅色 / 深色」三种模式替换。
+ * ------------------------------------------------------------------------- */
+.theme-btn {
+  width: 32px; height: 32px; flex: 0 0 32px;
+  border: 0; background: none; border-radius: 9px;
+  color: var(--grey-faint);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.theme-btn:hover { background: var(--grey-soft); color: var(--grey-text); }
+.theme-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.theme-btn svg { display: block; }
+@media (max-width: 900px) {
+  .theme-btn { width: 38px; height: 38px; flex-basis: 38px; }
+}
+
+/* ---------------------------------------------------------------------------
+ * 反馈组件：toast + 自绘确认框
+ * 由 static/ui.js 创建，全站共用。放 theme.css 而不是各页样式文件，
+ * 是因为各页都要用同一套外观与同一套令牌。
+ * ------------------------------------------------------------------------- */
+.ragkb-toasts {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  top: 74px;                                /* 顶栏之下：桌面 62px / 手机 56px 都够 */
+  z-index: 55; display: flex; flex-direction: column; gap: 8px;
+  align-items: center; pointer-events: none;
+  max-width: min(560px, calc(100vw - 24px));
+}
+.ragkb-toast {
+  display: flex; align-items: flex-start; gap: 9px;
+  max-width: 100%; padding: 10px 14px;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-left: 3px solid var(--grey-faint);
+  border-radius: 10px; box-shadow: var(--shadow-toast);
+  font-size: 13.5px; line-height: 1.6; pointer-events: auto;
+  animation: ragkbToastIn .22s cubic-bezier(.22,.61,.36,1) both;
+}
+.ragkb-toast.out { animation: ragkbToastOut .18s ease both; }
+.ragkb-toast .pt-ico { flex: 0 0 15px; margin-top: 2px; display: inline-flex; }
+.ragkb-toast .pt-txt { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+.ragkb-toast .pt-close {
+  flex: 0 0 auto; margin: -2px -4px -2px 2px; padding: 2px 4px;
+  color: var(--muted); font-size: 15px; line-height: 1; border-radius: 6px;
+}
+.ragkb-toast .pt-close:hover { background: var(--grey-soft); color: var(--text); }
+.ragkb-toast.ok { border-left-color: var(--ok); }
+.ragkb-toast.ok .pt-ico { color: var(--ok-text); }
+.ragkb-toast.bad { border-left-color: var(--bad); }
+.ragkb-toast.bad .pt-ico { color: var(--bad-text); }
+.ragkb-toast.info { border-left-color: var(--brand); }
+.ragkb-toast.info .pt-ico { color: var(--brand-2); }
+@keyframes ragkbToastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes ragkbToastOut { to { opacity: 0; transform: translateY(-6px); } }
+
+.ragkb-modal {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: var(--overlay);
+}
+.ragkb-modal[hidden] { display: none; }
+.ragkb-modal-box {
+  width: 100%; max-width: 460px; max-height: 84vh; overflow: auto;
+  background: var(--panel); border-radius: 16px; padding: 20px 22px;
+  box-shadow: var(--shadow-modal);
+  animation: ragkbModalIn .2s cubic-bezier(.22,.61,.36,1) both;
+}
+@keyframes ragkbModalIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.ragkb-modal-title { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+.ragkb-modal-title.danger { color: var(--bad-text); }
+.ragkb-modal-body { font-size: 13.5px; line-height: 1.75; color: var(--grey-text); white-space: pre-wrap; }
+.ragkb-modal-detail {
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line);
+  font-size: 12.5px; line-height: 1.7; color: var(--muted);
+}
+.ragkb-modal-field { margin-top: 12px; }
+.ragkb-modal-field[hidden] { display: none; }
+.ragkb-modal-label {
+  display: block; margin-bottom: 6px;
+  color: var(--text); font-size: 12.5px; font-weight: 600;
+}
+.ragkb-modal-input {
+  width: 100%; min-height: 42px; padding: 8px 11px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface-input); color: var(--text);
+  font: inherit; font-size: 14px; outline: none;
+}
+.ragkb-modal-input:focus {
+  border-color: var(--brand-line-focus);
+  box-shadow: var(--focus-ring);
+}
+.ragkb-modal-input.bad {
+  border-color: var(--bad-text);
+  box-shadow: 0 0 0 3px var(--bad-soft);
+}
+.ragkb-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.ragkb-modal-actions button {
+  padding: 9px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
+  background: var(--grey-soft); color: var(--grey-text);
+}
+.ragkb-modal-actions button:hover { background: var(--grey-hover); }
+.ragkb-modal-actions button.primary { background: var(--brand); color: var(--on-brand); }
+.ragkb-modal-actions button.primary:hover { background: var(--brand-2); }
+.ragkb-modal-actions button.danger { background: var(--bad); color: var(--on-brand); }
+.ragkb-modal-actions button.danger:hover { background: var(--bad-text); }
+
+/* 通用状态块：loading / empty / error / success */
+.ui-state {
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+.ui-state.ui-loading { border-style: solid; }
+.ui-state.ui-error {
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
+  color: var(--bad-text);
+}
+.ui-state.ui-success {
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+  color: var(--ok-text);
+}
+
+@media (max-width: 620px) {
+  .ragkb-toasts { top: 64px; }
+  .ragkb-modal { padding: 16px; }
+  .ragkb-modal-box { padding: 18px 16px; }
+  .ragkb-modal-actions button { flex: 1 1 auto; text-align: center; }
+  .app-nav { padding: 6px 10px; }
+  .app-nav a { min-height: 40px; padding: 8px 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ragkb-toast, .ragkb-modal-box { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * 断点约定（三页统一，见 docs/交接_UI改造清单）
+ *   ≤900px  移动版布局：应用侧栏变抽屉 / 页内导航变横向条 / 顶栏进紧凑模式
+ *   ≤620px  手机：单列、触控尺寸 ≥40px、iOS 输入框 16px 防缩放
+ *   ≤420px  小屏手机：进一步压缩内边距与字号
+ * 页面需要"仅桌面"或"仅移动"时用这两个工具类，不要各写各的 media query。
+ * ------------------------------------------------------------------------- */
+@media (min-width: 901px) { .only-mobile { display: none !important; } }
+@media (max-width: 900px) { .only-desktop { display: none !important; } }

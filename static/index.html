@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/access_gate.js"></script>
+<title>本地 RAG 知识库</title>
+<link rel="icon" type="image/x-icon" href="/static/app.ico">
+<!-- 设计令牌的唯一来源：配色 / 圆角 / 阴影 / 字号 / 断点约定全在这里，换配色只改这一个文件 -->
+<link rel="stylesheet" href="/static/theme.css">
+<!-- 外观模式（auto / light / dark）：必须在 head 同步执行，避免深色下先闪一帧浅色 -->
+<script src="/static/theme.js"></script>
+<link rel="stylesheet" href="/static/index.css">
+</head><body>
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+          <!-- 开关与品牌同一行：不再为开关单独空占一行（省下的高度还给对话记录） -->
+          <div class="side-head-row">
+        <div class="brand">
+      <div class="logo">资料</div>
+      <div class="brand-text">
+        <strong>智能分析助手</strong>
+      </div>
+    </div>
+        <button id="sideToggle" class="icon-btn" type="button" title="隐藏 / 显示侧栏" aria-label="隐藏或显示侧栏" aria-expanded="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
+        </button>
+      </div>
+
+    <!-- ① 对话：新对话 + 「对话记录」（侧栏里唯一可伸缩的区块） -->
+    <button id="newChat" class="side-btn">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <span>新建对话</span>
+    </button>
+    
+
+    <div class="side-history">
+      <div class="side-title">历史会话</div>
+      <div class="session-list" id="sessionList"></div>
+    </div>
+
+    <div class="side-nav side-group">
+      <div class="side-title">资料入库</div>
+      <!-- 两个入口，各管一件事：
+           ①「上传资料」= 什么都收（文档 / PDF / 图片），类型与处理方式由系统判断；
+           ②「上传图片」= 图片 / 扫描件（可 OCR，也可「写描述」直接入库）。
+           原来的「文档 / PDF / 图片 / 跳过质检」4 个入口已收敛：
+           前三个与 ① 走同一条流水线，第 4 个是"跳过质检"，而质检恒定运行 —— 入口不该替用户做这个决定。 -->
+      <button id="uploadBtn" class="side-btn primary-soft" data-policy="unified"
+              title="上传资料：文档 / PDF / 图片都能传（可一次选多个），自动判断类型；本地解析 → 质量校验 → 等你确认是否入库">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        <span class="txt">上传资料<small>文档 / PDF / 图片都能传，可多选</small></span>
+      </button>
+      <button id="uploadImageBtn" class="side-btn primary-soft" data-policy="scan"
+              title="上传图片：图片 / 扫描件可以走 OCR 识别文字，也可以直接写一段描述入库（可一次选多张；图片里没有文字时，你写的描述就是入库内容）">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span class="txt">上传图片<small>图片 / 扫描件：OCR 或写描述，可多选</small></span>
+      </button>
+      <div class="ingest-state" id="ingestState"></div>
+    </div>
+
+    <!-- ③ 工具：桌面侧栏保留设置入口；手机端设置统一走顶栏「⋯」菜单。 -->
+    <div class="side-nav">
+      <div class="side-title">工具</div>
+      <button id="historyBtn" class="side-item" title="历史检索：只读检索过去会话中的原话（不写入长期记忆，不自动注入）">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg>
+        </span>
+        <span class="txt">历史检索<small>只读 · 跨会话找原话</small></span>
+      </button>
+      <a id="memoryBtn" class="side-item" href="/memory" target="_blank" rel="noopener" title="记忆管理：查看/确认/拒绝/编辑/删除记忆与来源（写操作仅限本机）">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9"/><path d="M4 8h9M4 12h9M4 16h7"/><path d="M7 4v16"/></svg>
+        </span>
+        <span class="txt">记忆管理<small>待确认 · 来源 · 删除</small></span>
+      </a>
+      <a id="sideFiles" class="side-item" href="/files" title="文件管理：知识库文档、原件、本机留档与删除">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8h8.4A1.5 1.5 0 0 1 20 9.3v8.2A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5Z"/></svg>
+        </span>
+        <span class="txt">文件管理<small>原件 · 留档 · 删除</small></span>
+      </a>
+      <button id="graphBtn" class="side-item" title="浏览知识图谱（实体与关系，只读）">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="13" r="2.5"/><path d="M7.9 15.9 10.4 14.5M13.6 11.4 16.4 8.3"/></svg>
+        </span>
+        <span class="txt">知识图谱<small>实体与关系浏览</small></span>
+      </button>
+      <a id="sideSettings" class="side-item only-desktop" href="/settings" title="设置：解析 · OCR · 入库确认 · 文件夹轮询 · 朗读">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.3"/><path d="M2 3.4v2.1M12 18.5v2.1M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M3.4 12h2.1M18.5 12h2.1M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/></svg>
+        </span>
+        <span class="txt">设置<small>解析 · OCR · 入库 · 轮询</small></span>
+      </a>
+    </div>
+
+    <div class="side-status">
+      <div class="side-title side-title-status">系统状态</div>
+      <div class="status-row"><span>知识库服务</span><b><i id="stLightrag" class="dot gray"></i><em id="txLightrag" class="status-text">检查中</em></b></div>
+      <div class="status-row"><span>本地模型</span><b><i id="stOllama" class="dot gray"></i><em id="txOllama" class="status-text">检查中</em></b></div>
+      <div class="status-row"><span>向量数据库</span><b><i id="stQdrant" class="dot gray"></i><em id="txQdrant" class="status-text">检查中</em></b></div>
+    </div>
+
+          <div class="side-version" id="appVersion">v0.1.0</div>
+</aside>
+
+  <!-- 手机端侧栏抽屉的遮罩：只在 ≤900px 显示，点它收起侧栏 -->
+  <div class="side-mask" id="sideMask" hidden></div>
+
+      <!-- 收起态图标栏：桌面端侧栏收起后仅留这条窄栏，高频入口直接可达 -->
+    <nav class="side-rail" id="sideRail" aria-label="常用入口">
+      <button class="rail-btn rail-first" id="railExpand" type="button" title="展开侧栏" aria-label="展开侧栏">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
+      </button>
+      <div class="rail-sep" aria-hidden="true"></div>
+      <button class="rail-btn" id="railChat" type="button" title="回到对话" aria-label="回到对话">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      </button>
+      <button class="rail-btn" id="railUpload" type="button" title="上传资料" aria-label="上传资料">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/><path d="M4 21h16"/></svg>
+      </button>
+      <a class="rail-btn" href="/files" title="文件管理" aria-label="文件管理">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8h8.4A1.5 1.5 0 0 1 20 9.3v8.2A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5Z"/></svg>
+      </a>
+      <a class="rail-btn" href="/memory" title="记忆管理" aria-label="记忆管理">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9"/><path d="M4 8h9M4 12h9M4 16h7"/><path d="M7 4v16"/></svg>
+      </a>
+      <a class="rail-btn" href="/settings" title="设置" aria-label="设置">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+      </a>
+    </nav>
+<main class="main">
+    <header class="topbar">
+      <!-- 手机端侧栏开关：>900px 时 display:none，桌面端完全不出现 -->
+      <button id="menuBtn" class="icon-btn menu-btn" type="button" title="打开侧栏（对话记录 / 上传 / 文件管理 / 系统状态）" aria-label="打开侧栏" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+
+      <h1 class="title" hidden><span class="gen-badge" id="genModeBadge" hidden><span class="gb-dot"></span>本机生成<small>首字约 1 分钟</small></span></h1>
+        <div class="top-actions">
+        <!-- 顶栏按使用频率排布：清空对话（高频）→ 自动朗读（中频，运行时插入此处后面）→ 外观（低频）→ 停止 -->
+        <button id="clearBtn" class="mini">清空对话</button>
+
+        <button id="themeBtn" class="theme-btn" type="button" data-theme-toggle title="外观"></button>
+        <button id="stopBtn" class="icon-btn danger" type="button" title="停止全部服务（关闭本窗口约 25 秒后也会自动停止）" aria-label="停止全部服务" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+        </button>
+        <!-- 手机端溢出菜单开关：>620px 时 display:none，桌面端完全不出现 -->
+        <button id="moreBtn" class="icon-btn more-btn" type="button" title="更多：朗读 / 文件管理 / 设置 / 停止服务"
+                aria-label="更多" aria-expanded="false" aria-controls="moreMenu">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+        </button>
+        
+      </div>
+
+      <!-- 手机端溢出菜单。菜单项都是"委托"：点它们等于点顶栏上那批被 CSS 隐藏的按钮，
+           因此确认框、canStop 判断、生成中不许清空等规则全部沿用同一份实现，没有第二套逻辑。 -->
+      <div class="more-menu" id="moreMenu" hidden>
+        <button type="button" class="mm-item" id="mmSpeak">
+          <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></span>
+          <span class="mm-txt">自动朗读</span>
+          <span class="mm-state" id="mmSpeakState">关</span>
+        </button>
+        <a class="mm-item" href="/files">
+          <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8h8.4A1.5 1.5 0 0 1 20 9.3v8.2A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5Z"/></svg></span>
+          <span class="mm-txt">文件管理</span>
+        </a>
+        <a class="mm-item" href="/settings">
+          <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 9.4a1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0-3.4Z"/><path d="M9.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span>
+          <span class="mm-txt">设置</span>
+        </a>
+        <button type="button" class="mm-item" id="mmStop" hidden>
+          <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v3.5"/><path d="M7.2 6.6a7.5 7.5 0 1 0 9.6 0"/></svg></span>
+          <span class="mm-txt">停止全部服务</span>
+        </button>
+        <div class="mm-sep" id="mmSep" hidden></div>
+        <button type="button" class="mm-item danger" id="mmClear" hidden>
+          <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg></span>
+          <span class="mm-txt">清空当前对话</span>
+        </button>
+      </div>
+    </header>
+    <!-- 点菜单外面收起（不压暗太多：它是下拉菜单，不是模态框） -->
+    <div class="more-mask" id="moreMask" hidden></div>
+
+    <!-- 手机 / 局域网页面：电脑上的窗口都关了但你还在用手机时，提示服务会保持运行 -->
+    <div class="svc-bar" id="svcBar" hidden role="status" aria-live="polite">
+      <span class="dot ok" id="svcDot"></span>
+      <span class="txt" id="svcBarText"></span>
+    </div>
+
+    <!-- 工作伙伴：状态只由真实任务更新；没有可靠阶段时保持待机或“待确认”。 -->
+    <section class="work-dock" id="workDock" aria-label="虚拟助手工作状态">
+      <div class="work-companion" id="workCompanion" data-state="idle"
+           role="status" aria-live="polite" aria-atomic="true" aria-busy="false">
+        <div class="wc-copy">
+          <div class="wc-label" id="workLabel">随时可以帮你整理资料</div>
+          <div class="wc-sub" id="workSub" hidden></div>
+          <button type="button" class="wc-details" id="workDetails" hidden>查看原因</button>
+        </div>
+        <div class="wc-cube-shell">
+          <div class="wc-cube-stage" id="workCubeStage" tabindex="0" role="img"
+               aria-label="可交互线框立方体：拖动旋转，方向键调整角度，双击复位">
+            <div class="wc-cube" id="workCubeModel">
+              <div class="wc-face wc-face--front" aria-hidden="true"></div>
+              <div class="wc-face wc-face--back" aria-hidden="true"></div>
+              <div class="wc-face wc-face--right" aria-hidden="true"></div>
+              <div class="wc-face wc-face--left" aria-hidden="true"></div>
+              <div class="wc-face wc-face--top" aria-hidden="true"></div>
+              <div class="wc-face wc-face--bottom" aria-hidden="true"></div>
+              <div class="wc-cube-core" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chat" id="chatArea">
+      <div class="chat-inner" id="messages"></div>
+      <!-- 用户上滑查看历史时出现；点了才回到底部（流式生成不再把视口硬拽走） -->
+      <div class="jump-wrap"><button type="button" id="jumpBottom" class="jump-bottom" hidden
+        title="回到最新内容并继续自动跟随" aria-label="回到最新内容并继续自动跟随">↓ 回到底部</button></div>
+    </section>
+
+    <!-- 知识图谱：自建只读视图（不再嵌 LightRAG 自带的 WebUI）。
+         只画图：左侧搜索/热门实体 → 中间画布 → 右侧实体详情与联动。
+         刻意不提供任何会改动知识库的操作（上传/删除/清空/重建/删实体）。 -->
+    <section class="graph-view" id="graphView" hidden>
+      <div class="graph-bar">
+        <!-- 标题交给顶栏（setTopbarTitle("知识图谱", "实体与关系浏览（只读）")）——
+             这里原来又写了一遍「知识图谱 / 实体与关系浏览」，同一句话在同一屏出现两次。
+             这一行只留"现在看的是哪张图"，也就是作用域信息。 -->
+        <span class="g-sub" id="graphSub">正在读取…</span>
+        <span class="g-actions">
+          <span class="g-modes" id="graphModes">
+            <button type="button" data-mode="2d" class="on" title="平面视图：同心圆环，最好读">平面</button>
+            <button type="button" data-mode="3d" title="三维视图：拖动旋转，适合看层级与解缠绕">三维</button>
+          </span>
+          <button type="button" id="graphBackGlobal" class="mini">返回全局</button>
+          <button type="button" id="graphRelayout" class="mini">复位视角</button>
+          <button type="button" id="graphClose" class="mini">返回对话</button>
+        </span>
+      </div>
+      <div class="graph-3d-hint" id="graph3dHint" hidden>
+        单击节点＝选中并高亮它的直接关联（其余节点微下沉）· 双击节点＝以它为中心展开 · 「返回全局」回到整张图 ｜ 三维：拖动旋转 · Shift+拖动平移 · 滚轮缩放
+      </div>
+      <div class="graph-body">
+        <aside class="graph-rail">
+          <div class="gr-search">
+            <input id="graphSearchInput" type="search" placeholder="搜索实体…" autocomplete="off" spellcheck="false">
+            <div class="gr-suggest" id="graphSuggest" hidden></div>
+          </div>
+          <button type="button" class="gr-global on" id="graphGlobalBtn">
+            <span class="gg-name">全局知识图谱</span>
+            <span class="gg-meta" id="graphGlobalMeta">整张图 · 正在统计…</span>
+          </button>
+          <div class="gr-title">热门实体</div>
+          <div class="gr-chips" id="graphPopular"></div>
+          <div class="gr-hint">图谱是只读的：这里没有上传、删除或重建索引的入口。</div>
+        </aside>
+        <div class="graph-canvas-wrap">
+          <canvas id="graphCanvas"></canvas>
+          <div class="graph-tip" id="graphTip" hidden></div>
+          <div class="graph-overlay" id="graphEmpty">
+            <div class="go-title">从左边搜一个实体开始</div>
+            <div class="go-sub">也可以直接点「热门实体」。选中节点后，右侧会显示它的描述与来源文档，并可以就它提问。</div>
+          </div>
+          <div class="graph-overlay" id="graphBusy" hidden>
+            <span class="spinner"></span>
+            <div class="go-sub" id="graphBusyText">正在读取图谱…</div>
+          </div>
+          <div class="graph-overlay" id="graphError" hidden>
+            <div class="go-title">图谱加载失败</div>
+            <div class="go-err" id="graphErrorText"></div>
+            <div class="stopping-actions is-centered">
+              <button type="button" id="graphRetry" class="primary">重试</button>
+            </div>
+          </div>
+          <div class="graph-zoom">
+            <button type="button" id="graphZoomIn" title="放大">＋</button>
+            <button type="button" id="graphZoomOut" title="缩小">－</button>
+            <button type="button" id="graphFit" title="适应窗口">⤢</button>
+          </div>
+          <div class="graph-legend" id="graphLegend" hidden></div>
+        </div>
+        <aside class="graph-panel" id="graphPanel" hidden>
+          <div class="gp-head">
+            <span class="gp-kind">实体</span>
+            <button type="button" class="gp-close" id="graphPanelClose" title="关闭">×</button>
+          </div>
+          <div class="gp-name" id="gpName"></div>
+          <div class="gp-type" id="gpType"></div>
+          <div class="gp-desc" id="gpDesc"></div>
+          <div class="gp-block-title">来源文档</div>
+          <div class="gp-files" id="gpFiles"></div>
+          <div class="gp-block-title">直接关联</div>
+          <div class="gp-files" id="gpNear"></div>
+          <div class="gp-actions">
+            <button type="button" id="gpAsk" class="mini strong">就这个实体提问</button>
+            <button type="button" id="gpCenter" class="mini">以它为中心</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 开场编排（阶段 D / Batch 1）：会话为空时显示居中问候 + ChatGPT 入口，整组逐级上浮淡入；
+         发出第一条消息后整块平滑收起，把版面交给对话（对话内容与接口都不受影响）。 -->
+    <section class="hero" id="hero" hidden>
+      <div class="hero-wrap">
+        <div class="hero-inner">
+          <div class="hero-badge">资料</div>
+          <h2 class="hero-title">你好，我是本地 RAG 知识库</h2>
+          <p class="hero-sub">上传文档即可建立你的资料库：先本地解析、过质量校验，再由你确认是否入库。也可以直接提问，我会基于你的资料回答。</p>
+          <div class="hero-chips" id="heroChips"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="composer" id="composer">
+      <div class="composer-inner" id="dropZone">
+        <!-- 回形针，不是 ↑：右侧发送键也是 ↑，同一个箭头驱动两个完全不同的动作，
+             手机端的提示文案甚至要用文字去解释这个歧义（"点输入框左侧的 ↑ 按钮选择文件"）。 -->
+        <button id="attachBtn" class="ic-btn" type="button" title="上传资料，支持拖拽" aria-label="上传资料">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <textarea id="input" rows="1" inputmode="text" enterkeyhint="send"
+          autocomplete="off" spellcheck="true" aria-label="聊天消息输入框"
+          placeholder="输入消息…"></textarea>
+        <button id="send" class="send" type="button" data-mode="send" aria-label="发送" title="发送（Enter）">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V6"/><path d="m5.5 12.5 6.5-6.5 6.5 6.5"/></svg>
+        </button>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<input type="file" id="file" hidden multiple>
+
+<!-- 停止 / 服务已停止 遮罩：必须放在脚本之前，脚本里要用 $("stopping") 取到它们 -->
+<div class="stopping" id="stopping" hidden role="dialog" aria-modal="true" aria-labelledby="stoppingTitle">
+  <div class="stopping-box">
+    <div class="stopping-title" id="stoppingTitle">正在停止服务…</div>
+    <div class="stopping-text" id="stoppingText">本应用与知识库服务将在这台电脑上停止。</div>
+    <div class="stopping-hint">想再次使用：从项目根目录重新启动服务（或项目根目录的 服务启动脚本）。<br>直接关闭聊天窗口约 25 秒后也会自动停止；手机端不能停止服务，只会在你还在用手机时让服务继续运行。</div>
+  </div>
+</div>
+
+<!-- -mini：只读历史检索（不写入记忆、不自动注入） -->
+<div class="material-modal" id="historyModal" hidden role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+  <div class="material-box">
+    <div class="material-head">
+      <h2 id="historyTitle">历史检索</h2>
+      <span class="sub">只读 · 不写入长期记忆 · 不自动注入</span>
+      <span class="grow"></span>
+      <button type="button" id="historyClose" aria-label="关闭历史检索">×</button>
+    </div>
+    <div class="material-body is-single-column">
+      <section class="material-main">
+        <div class="material-label">关键词（至少 2 个字）</div>
+        <input type="text" id="historyQuery" class="material-input" maxlength="200" placeholder="例如：项目 说明 会议记录">
+        <div class="material-actions">
+          <button type="button" id="historySearchBtn" class="primary">检索</button>
+        </div>
+        <div class="material-status" id="historyStatus"></div>
+        <div class="history-results" id="historyResults"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="stopping" id="offline" hidden role="dialog" aria-modal="true" aria-labelledby="offlineTitle">
+  <div class="stopping-box warn">
+    <div class="stopping-title" id="offlineTitle">服务已停止</div>
+    <div class="stopping-text" id="offlineText"></div>
+    <div class="stopping-hint" id="offlineHint"></div>
+    <div class="stopping-actions">
+      <button type="button" id="offlineRetry" class="primary">重新检测</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script src="/static/companion.js"></script>
+<script src="/static/index.js"></script>
+
+<script src="/static/ui.js" defer></script>
+<script src="/static/session.js" defer></script>
+<script src="/static/voice.js?v=20261027-1" defer></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

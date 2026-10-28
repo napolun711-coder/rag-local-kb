@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>连接电脑 · 本地 RAG 知识库</title>
+<link rel="icon" type="image/x-icon" href="/static/app.ico">
+<link rel="stylesheet" href="/static/pair.css">
+</head>
+<body>
+<main class="card">
+  <div class="mark waiting" id="mark">🔗</div>
+  <h1 id="title">正在连接电脑<span class="dots"></span></h1>
+  <p>不需要输入授权码或设备名称。请在电脑打开 <b>设置 → 局域网设备授权</b>，看到一个设备请求后点一次“允许”。</p>
+  <ol class="steps">
+    <li><b>1</b><span>这台设备自动发出连接请求</span></li>
+    <li><b>2</b><span>电脑打开 设置 → 局域网设备授权，并点一次“允许”</span></li>
+    <li><b>3</b><span>这里自动进入聊天，以后同设备可直接打开</span></li>
+  </ol>
+  <div id="message" class="note" role="status" aria-live="polite">正在发送连接请求…</div>
+  <button id="retryBtn" class="retry" type="button" hidden>重新发送连接请求</button>
+</main>
+<script src="/static/session.js" defer></script>
+<script src="/static/pair.js"></script>
+</body>
+</html>
