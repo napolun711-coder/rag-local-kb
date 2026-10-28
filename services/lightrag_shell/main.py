@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import os
 from pathlib import Path
 from typing import Any, Dict
@@ -110,6 +111,29 @@ def health() -> Dict[str, Any]:
         reachable = response.status_code == 200
     except requests.RequestException:
         reachable = False
+    engine_identity: Dict[str, Any] = {}
+    if reachable:
+        try:
+            engine_health = response.json()
+            configuration = engine_health.get("configuration")
+            if isinstance(configuration, dict):
+                working_directory = str(engine_health.get("working_directory") or "")
+                index_key = ""
+                if working_directory:
+                    normalized = os.path.normcase(
+                        str(Path(working_directory).resolve(strict=False))
+                    )
+                    index_key = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+                engine_identity = {
+                    "index_key": index_key,
+                    "embedding_binding": configuration.get("embedding_binding"),
+                    "embedding_model": configuration.get("embedding_model"),
+                    "embedding_dim": configuration.get("embedding_dim"),
+                    "embedding_binding_host": configuration.get("embedding_binding_host"),
+                    "vector_storage": configuration.get("vector_storage"),
+                }
+        except (TypeError, ValueError):
+            engine_identity = {}
     return {
         "status": "ok" if reachable else "degraded",
         "service": "lightrag-shell",
@@ -117,6 +141,7 @@ def health() -> Dict[str, Any]:
         "backend_configured": True,
         "backend_reachable": reachable,
         "state": "ready" if reachable else "engine_unreachable",
+        "engine_identity": engine_identity,
     }
 
 

@@ -8,7 +8,12 @@ from typing import Any, Dict, Iterator, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
-from app.adapters.lightrag.errors import KnowledgeEngineNotInstalled, KnowledgeHTTPError, KnowledgeUnavailable
+from app.adapters.lightrag.errors import (
+    KnowledgeEngineNotInstalled,
+    KnowledgeHTTPError,
+    KnowledgeIndexMismatch,
+    KnowledgeUnavailable,
+)
 from app.features.chat import sessions
 from app.features.chat.contracts import (
     ChatRequest,
@@ -34,6 +39,11 @@ def _knowledge_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=503, detail={"error": "knowledge_unavailable", "message": str(exc)})
     if isinstance(exc, KnowledgeHTTPError):
         return HTTPException(status_code=502, detail={"error": "knowledge_error", "message": str(exc)})
+    if isinstance(exc, KnowledgeIndexMismatch):
+        return HTTPException(
+            status_code=409,
+            detail={"error": "index_rebuild_required", "message": str(exc)},
+        )
     return HTTPException(status_code=502, detail={"error": "chat_failed", "message": type(exc).__name__})
 
 

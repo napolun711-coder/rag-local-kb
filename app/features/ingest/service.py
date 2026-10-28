@@ -15,6 +15,7 @@ from app.features.ingest import storage
 from app.adapters.lightrag.errors import (
     KnowledgeEngineNotInstalled,
     KnowledgeHTTPError,
+    KnowledgeIndexMismatch,
     KnowledgeUnavailable,
 )
 from app.features.knowledge.service import get_knowledge_gateway
@@ -392,6 +393,14 @@ def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Di
     try:
         response = get_knowledge_gateway().upload_document(
             document_name, content.encode("utf-8"), "text/markdown"
+        )
+    except KnowledgeIndexMismatch as exc:
+        return _knowledge_failure(
+            settings,
+            result,
+            code="index_rebuild_required",
+            message=str(exc),
+            http_status=409,
         )
     except KnowledgeEngineNotInstalled as exc:
         return _knowledge_failure(settings, result, code="engine_not_installed", message=str(exc) or "The knowledge engine is not installed", http_status=503)

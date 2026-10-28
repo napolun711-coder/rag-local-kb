@@ -10,9 +10,11 @@ from app.adapters.lightrag.config import LightRagSettings, get_lightrag_settings
 from app.adapters.lightrag.errors import (
     KnowledgeEngineNotInstalled,
     KnowledgeHTTPError,
+    KnowledgeIndexMismatch,
     KnowledgeUnavailable,
 )
 from app.features.knowledge.contracts import KnowledgeGateway, KnowledgeHealth
+from app.features.knowledge import index_guard
 
 
 class LightRagHttpClient(KnowledgeGateway):
@@ -45,6 +47,17 @@ class LightRagHttpClient(KnowledgeGateway):
         if code == "engine_not_installed":
             raise KnowledgeEngineNotInstalled(message)
         raise KnowledgeHTTPError(response.status_code, message)
+
+    def _assert_index_compatible(self) -> None:
+        health = self.health()
+        try:
+            index_guard.require_compatible(health.service)
+        except KnowledgeIndexMismatch:
+            raise
+        except Exception as exc:
+            raise KnowledgeIndexMismatch(
+                f"Index compatibility could not be verified: {type(exc).__name__}"
+            ) from exc
 
     def health(self) -> KnowledgeHealth:
         try:
@@ -84,6 +97,7 @@ class LightRagHttpClient(KnowledgeGateway):
         )
 
     def query(self, question: str, *, mode: str = "mix", **options: Any) -> Dict[str, Any]:
+        self._assert_index_compatible()
         body: Dict[str, Any] = {"query": question, "mode": mode, **options}
         try:
             response = self.session.post(
@@ -99,6 +113,7 @@ class LightRagHttpClient(KnowledgeGateway):
         return payload if isinstance(payload, dict) else {"data": payload}
 
     def stream_query(self, question: str, *, mode: str = "mix", **options: Any) -> Iterator[bytes]:
+        self._assert_index_compatible()
         body: Dict[str, Any] = {"query": question, "mode": mode, **options}
         try:
             response = self.session.post(
@@ -119,6 +134,7 @@ class LightRagHttpClient(KnowledgeGateway):
             response.close()
 
     def upload_document(self, filename: str, content: bytes, content_type: str = "") -> Dict[str, Any]:
+        self._assert_index_compatible()
         try:
             response = self.session.post(
                 self._url("/documents/upload"),

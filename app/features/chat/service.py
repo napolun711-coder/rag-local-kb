@@ -6,7 +6,11 @@ import logging
 import time
 from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple
 
-from app.adapters.lightrag.errors import KnowledgeEngineNotInstalled, KnowledgeUnavailable
+from app.adapters.lightrag.errors import (
+    KnowledgeEngineNotInstalled,
+    KnowledgeIndexMismatch,
+    KnowledgeUnavailable,
+)
 from app.features.chat.contracts import ChatRequest
 from app.features.chat.streaming import frontend_events
 from app.features.knowledge.contracts import KnowledgeGateway
@@ -117,6 +121,13 @@ class ChatService:
                 yield {"type": "end"}
             except KnowledgeUnavailable:
                 yield {"type": "error", "message": "知识服务不可达，请检查引擎与外壳状态。"}
+                yield {"type": "done", "response_time": round(time.perf_counter() - started, 3)}
+                yield {"type": "end"}
+            except KnowledgeIndexMismatch:
+                yield {
+                    "type": "error",
+                    "message": "嵌入模型或向量索引身份已变化。请先重建索引，并在设置页确认兼容性。",
+                }
                 yield {"type": "done", "response_time": round(time.perf_counter() - started, 3)}
                 yield {"type": "end"}
             except Exception as exc:  # noqa: BLE001 - streaming errors become protocol events

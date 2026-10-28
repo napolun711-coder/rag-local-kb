@@ -15,6 +15,10 @@ class KnowledgeEngineNotInstalled(KnowledgeError):
     pass
 
 
+class KnowledgeIndexMismatch(KnowledgeError):
+    pass
+
+
 class KnowledgeHTTPError(KnowledgeError):
     def __init__(self, status_code: int, message: str) -> None:
         super().__init__(message)
@@ -25,5 +29,6 @@ __all__ = [
     "KnowledgeEngineNotInstalled",
     "KnowledgeError",
     "KnowledgeHTTPError",
+    "KnowledgeIndexMismatch",
     "KnowledgeUnavailable",
 ]

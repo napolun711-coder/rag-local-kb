@@ -157,6 +157,10 @@
             <span class="readiness-detail" id="readiness-embedding-detail">正在读取生效配置</span>
         </div>
         <div class="readiness-item">
+            <div class="readiness-item-head"><span class="readiness-name">索引兼容性</span><span class="readiness-state is-info" id="readiness-index">待检查</span></div>
+            <span class="readiness-detail" id="readiness-index-detail">正在核对嵌入模型与索引基线</span>
+        </div>
+        <div class="readiness-item">
             <div class="readiness-item-head"><span class="readiness-name">向量存储</span><span class="readiness-state is-info" id="readiness-vector">待检查</span></div>
             <span class="readiness-detail" id="readiness-vector-detail">正在读取存储类型</span>
         </div>
@@ -171,9 +175,10 @@
     </div>
     <div class="readiness-actions">
         <button type="button" class="btn-clear service-test-button" onclick="testService('knowledge', this)">测试知识服务</button>
+        <button type="button" class="btn-clear" id="indexAcceptButton" onclick="acceptIndexCompatibility()" hidden>重建后记录当前索引身份</button>
         <button type="button" class="btn-clear" onclick="gotoSection('sec-runtime')">查看运行与端口</button>
     </div>
-    <p class="readiness-note">目录可写性、模型是否已下载、依赖是否安装等状态，需要由启动器、健康检查或实际入库验证确认。</p>
+    <p class="readiness-note">目录可写性、模型是否已下载、依赖是否安装等状态，需要由启动器、健康检查或实际入库验证确认。索引身份不兼容时，问答和新增入库会被拒绝；查看、下载和删除仍保留。</p>
 </section>
 
 <div class="group-heading" id="group-retrieval">

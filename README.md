@@ -275,6 +275,24 @@ Runtime configuration is stored in `.env` and is not committed. Use
 generation, embedding, memory, upload, quality, and port settings. Changes require
 a service restart.
 
+## Index compatibility
+
+The application records the non-secret identity of the active vector index in
+`data/index-compatibility.json`. The identity includes a hash of the engine
+working directory, embedding binding, model, dimension, endpoint, and vector
+storage type.
+
+- A restart is still required after changing runtime configuration.
+- If the engine restarts with a different embedding identity, chat queries and
+  new knowledge submissions are rejected until the index is rebuilt.
+- Document viewing, download, status inspection, and deletion remain available
+  so the index can be repaired.
+- After a real rebuild, the settings page can record the current index identity.
+  This requires typing `REBUILD`; it never clears, migrates, or rebuilds data by
+  itself.
+- The first guarded run creates the baseline from the then-active index. Changes
+  made before this protection existed cannot be detected retroactively.
+
 Do not commit:
 
 - `.env` files
@@ -308,6 +326,8 @@ security.
 - A knowledge-service outage currently prevents the combined document listing
   from returning a local-only result.
 - Advanced topic rename, archive, and hierarchy management are not implemented.
+- Index compatibility depends on a baseline recorded by the current working
+  directory; index changes made before that baseline cannot be reconstructed.
 
 See `docs/PROJECT_STATE.md` for the current implementation state and remaining
 release work.

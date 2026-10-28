@@ -39,6 +39,19 @@ class RevalidatingStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    try:
+        from app.adapters.lightrag.client import LightRagHttpClient
+        from app.features.knowledge import index_guard
+
+        health = LightRagHttpClient().health()
+        status = index_guard.status_from_service(
+            health.service,
+            create_baseline=health.engine_installed,
+        )
+        if status.get("blocking"):
+            LOGGER.warning("Index compatibility requires attention: %s", status.get("state"))
+    except Exception:
+        LOGGER.exception("Index compatibility baseline check failed (ignored)")
     memory_worker = None
     try:
         from app.features.memory import extract, worker

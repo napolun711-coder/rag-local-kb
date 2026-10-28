@@ -1,6 +1,6 @@
 # Project State
 
-Updated: 2026-10-27
+Updated: 2026-10-29
 
 ## Scope
 
@@ -100,10 +100,11 @@ Runtime service state and process logs are under `logs/runtime/`.
 - OCR, inbox polling, cloud TTS, Qdrant switching, and
   advanced topic management are not part of the current MVP.
 - Formal LightRAG indexing still requires the engine and shell to be healthy.
-- This directory is not yet a Git repository, so release history and rollback
-  currently depend on filesystem backups.
+- Git is initialized and provides reviewed release history and rollback.
 - The running services may use an older process image than the current source.
   Restart through the lifecycle after accepting all release changes.
+- Index compatibility is established on the first guarded run for each working
+  directory. Changes made before that baseline cannot be detected retroactively.
 
 ## MVP acceptance
 
@@ -119,10 +120,9 @@ application, memory, upload, and LightRAG storage.
 - `/web`, `/files`, `/memory`, and `/settings` returned HTTP 200.
 - The formal three-service lifecycle was restarted successfully afterward.
 
-The MVP feature scope is complete. Remaining release actions are operational:
-
-1. Initialize Git and create a reviewed baseline commit.
-2. Exclude or relocate runtime credential backups before packaging.
+The MVP feature scope is complete. Git baseline history is initialized. Remaining
+release actions are operational: exclude or relocate runtime credential backups
+before packaging and run the final release checks.
 
 No new large feature should be added during release preparation.
 
@@ -360,3 +360,28 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - No ingestion, save, delete, purge, stop, or full regression was run during
   this acceptance check.
 - The isolated service group remains running after acceptance.
+
+## Index compatibility protection (2026-10-29)
+
+- Added an app-side index identity manifest under the configured application
+  data directory. It records a hash of the engine working directory plus the
+  embedding binding, model, dimension, endpoint, vector storage type, and
+  timestamps. Absolute working-directory paths are not exposed in the manifest.
+- The LightRAG shell health response now exposes this non-secret runtime identity
+  so the guard compares the active engine configuration rather than unloaded
+  saved settings.
+- A baseline is recorded on the first guarded run for each working directory.
+  Existing manifests are never overwritten automatically.
+- When the identity changes, chat queries and new knowledge submissions are
+  rejected with `index_rebuild_required`. Read-only inspection, download,
+  document status, and deletion remain available for recovery.
+- The settings readiness card shows the compatibility state. After a real index
+  rebuild, a local-only action with the exact confirmation `REBUILD` records the
+  new identity. It never clears, rebuilds, or migrates index data.
+- Added `tests/test_index_compatibility.py` covering baseline creation, mismatch
+  blocking, confirmation, corrupt-manifest behavior, and secret exclusion.
+- Python compilation, `settings.js` syntax checks, and all 4 focused tests passed.
+- After an isolated service-group restart, the compatibility endpoint returned
+  HTTP 200 with `state=compatible` for the existing isolated index.
+- No chat, ingestion, deletion, configuration save, or full regression was run
+  during this validation.

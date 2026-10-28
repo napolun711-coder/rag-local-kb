@@ -331,6 +331,7 @@ async function load(keepStatus) {
         renderEffective(data);
         renderRuntime(data);
         renderDeploymentReadiness();
+        refreshIndexCompatibility();
         renderSummaries(data);
         renderIngestHint(data);
         renderInboxHint(data);
@@ -922,6 +923,63 @@ function setReadinessState(key, state) {
     return kind;
 }
 
+function renderIndexCompatibility() {
+    const data = LAST_INDEX_COMPATIBILITY;
+    const button = document.getElementById("indexAcceptButton");
+    if (!data) {
+        if (button) { button.hidden = true; }
+        return setReadinessState("index", {
+            kind: "info",
+            label: "待检查",
+            detail: "正在核对嵌入模型、维度和索引工作目录。"
+        });
+    }
+    const state = String(data.state || "");
+    const current = data.current || {};
+    const recorded = data.recorded || {};
+    const currentText = [current.embedding_model, current.embedding_dim ? current.embedding_dim + " 维" : ""]
+        .filter(function (item) { return !!item; }).join(" · ");
+    const recordedText = [recorded.embedding_model, recorded.embedding_dim ? recorded.embedding_dim + " 维" : ""]
+        .filter(function (item) { return !!item; }).join(" · ");
+    if (button) {
+        button.hidden = ["mismatch", "unrecorded", "unreadable"].indexOf(state) < 0;
+    }
+    if (state === "compatible") {
+        return setReadinessState("index", {
+            kind: "ready",
+            label: "兼容",
+            detail: "当前索引身份与记录一致" + (currentText ? "：" + currentText : "") + "。"
+        });
+    }
+    if (state === "mismatch") {
+        return setReadinessState("index", {
+            kind: "blocked",
+            label: "需重建",
+            detail: "索引记录为 " + (recordedText || "未知") + "，当前为 "
+                + (currentText || "未知") + "。重建完成前会阻止问答和新增入库。"
+        });
+    }
+    if (state === "unrecorded") {
+        return setReadinessState("index", {
+            kind: "blocked",
+            label: "未记录",
+            detail: "当前工作目录没有索引身份基线。确认索引为空或已完成重建后，再记录当前身份。"
+        });
+    }
+    if (state === "unreadable") {
+        return setReadinessState("index", {
+            kind: "blocked",
+            label: "记录异常",
+            detail: "索引身份记录无法读取。完成索引核验后，可重新记录当前身份。"
+        });
+    }
+    return setReadinessState("index", {
+        kind: "pending",
+        label: "不可核对",
+        detail: "知识服务或嵌入身份暂不可用，暂时无法核对索引兼容性。"
+    });
+}
+
 function renderServiceTestStatus(key) {
     const node = document.getElementById("serviceTest-" + key);
     if (!node) { return; }
@@ -1048,7 +1106,8 @@ function renderDeploymentReadiness() {
             + " · 朗读：未接入"
     });
 
-    const optionalKinds = [appKind, llmKind, embeddingKind, vectorKind];
+    const indexKind = renderIndexCompatibility();
+    const optionalKinds = [appKind, llmKind, embeddingKind, indexKind, vectorKind];
     const overall = document.getElementById("readinessOverall");
     if (overall) {
         let kind = "pending";
@@ -1057,6 +1116,7 @@ function renderDeploymentReadiness() {
             kind = "blocked";
             label = "需处理";
         } else if (appKind === "ready" && llmKind === "ready" && embeddingKind === "ready"
+            && indexKind === "ready"
             && (vectorKind === "ready" || vectorKind === "info")) {
             kind = "ready";
             label = "已就绪";
@@ -1489,6 +1549,67 @@ var TTS_OPT = null;
 // 注意是整份响应（含 *_effective 各段），不是 data.settings —— 见 refreshTtsOptions() 里的说明。
 var LAST_SETTINGS = null;
 var LAST_TEST_CHECKS = [];
+var LAST_INDEX_COMPATIBILITY = null;
+
+async function refreshIndexCompatibility() {
+    try {
+        const response = await fetch("/api/knowledge/index-compatibility", { cache: "no-store" });
+        const data = await response.json().catch(function () { return null; });
+        if (!response.ok) {
+            LAST_INDEX_COMPATIBILITY = {
+                state: "unavailable",
+                message: describeError(data)
+            };
+        } else {
+            LAST_INDEX_COMPATIBILITY = data || { state: "unavailable" };
+        }
+    } catch (err) {
+        LAST_INDEX_COMPATIBILITY = {
+            state: "unavailable",
+            message: String(err)
+        };
+    }
+    renderDeploymentReadiness();
+}
+
+async function acceptIndexCompatibility() {
+    const options = {
+        title: "确认索引已经重建",
+        body: "此操作只记录当前嵌入模型、维度和向量存储身份，不会清理或重建任何索引。"
+            + "只有在你已经完成索引重建，或确认这是全新的空索引时才继续。",
+        detail: "错误确认会让后续检索继续使用不匹配的旧向量。",
+        inputLabel: "输入 REBUILD 确认",
+        requiredValue: "REBUILD",
+        placeholder: "REBUILD",
+        confirmText: "记录当前索引身份",
+        cancelText: "取消",
+        danger: true
+    };
+    let confirmation = null;
+    if (window.RAGKB && typeof window.RAGKB.confirmText === "function") {
+        confirmation = await window.RAGKB.confirmText(options);
+    } else {
+        confirmation = window.prompt(options.body + "\n\n" + options.detail + "\n\n输入 REBUILD 确认：");
+    }
+    if (String(confirmation || "").trim() !== "REBUILD") { return; }
+    try {
+        const response = await fetch("/api/knowledge/index-compatibility/accept", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirmation: "REBUILD" })
+        });
+        const data = await response.json().catch(function () { return null; });
+        if (!response.ok) {
+            notify("记录失败：" + describeError(data), "bad");
+            return;
+        }
+        LAST_INDEX_COMPATIBILITY = data;
+        renderDeploymentReadiness();
+        notify("已记录当前索引身份", "ok");
+    } catch (err) {
+        notify("记录失败：" + err, "bad");
+    }
+}
 
 function refreshTtsOptions() {
     if (typeof window.fetch !== "function") { return; }
