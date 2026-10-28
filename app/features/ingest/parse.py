@@ -127,13 +127,25 @@ def parse_file(path: Path, filename: str | None = None) -> ParseResult:
     route = detect_route(name)
 
     if route == "image":
+        try:
+            data = path.read_bytes()
+        except OSError as exc:
+            return ParseResult(
+                ok=False,
+                route=route,
+                pages=1,
+                images=1,
+                parser="image",
+                detail=f"图片读取失败（{type(exc).__name__}）",
+            )
         return ParseResult(
             ok=True,
             route=route,
             pages=1,
             images=1,
-            parser="none",
-            detail="图片文件：本地无法提取文字，需要 OCR 识别",
+            parser="image",
+            detail="图片文件：需要 OCR 识别",
+            assets=[_build_asset(path.name, "原图", data, 0)],
         )
 
     if route == "unsupported":

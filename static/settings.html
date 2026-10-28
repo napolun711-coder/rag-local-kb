@@ -391,26 +391,28 @@
         <span class="chev">▾</span>
     </div>
     <p class="hint">
-        用于扫描件、图片，以及 Word / PPT / PDF 里的内嵌图片。默认 <b>OCR_MODE=off</b>：程序不向任何外部服务发送文件，需要识别的文件只会被拦下并提示。<br>
-        <b>云端 PaddleOCR-VL（paddle）</b>会把文件发送到外部服务；<b>本机 PaddleOCR（local）</b>在本机识别、不出网（需自行安装）。
-        内嵌图片默认会先把文档停在「需要识别」状态，只有你点「识别图片」才真正外发。
+        用于扫描件、图片，以及 Word / PPT / PDF 里的内嵌图片。默认 <b>OCR_MODE=off</b>。<br>
+        <b>本机 Windows OCR</b> 使用系统自带语言包在本机识别，不外发文件、不需要 API Key；
+        未安装对应语言包时会明确显示不可用。
     </p>
-    <p class="hint">当前服务端未提供 OCR 独立连接测试；OCR 未接入时请保持关闭。</p>
-    <p class="note-line warn local-only-note" data-local-only-note hidden>全本地提示：当前设置页把 OCR 标为未接入或只读；本机 PaddleOCR 需要安装并接入后端后才算可用的本地能力。</p>
+    <p class="hint">manual 模式会停在「需要 OCR」并等待手动操作；auto 模式会在本机自动识别，耗时取决于图片数量和 CPU。</p>
+    <p class="note-line warn">云端 OCR 字段只读保留；当前版本只开放本机 Windows OCR，不发送文件。</p>
     <p id="ocrState" class="note-line"></p>
+    <div class="readiness-actions">
+        <button type="button" class="btn-clear service-test-button" id="testOcrBtn" onclick="testOcrLocal()">测试本机 OCR</button>
+        <span class="service-test-status" id="ocrTestStatus">尚未测试</span>
+    </div>
     <div class="row"><label>OCR 模式</label>
         <select id="ocr_mode">
             <option value="">（跟随 .env，默认 off）</option>
             <option value="off">off：完全不启用（不外发）</option>
             <option value="manual">manual：网页上点按钮才识别（推荐）</option>
-            <option value="auto">auto：检测到需要即自动识别（会消耗配额）</option>
+            <option value="auto">auto：检测到需要即在本机自动识别</option>
         </select></div>
     <div class="row"><label>OCR 提供方</label>
         <select id="ocr_provider">
-            <option value="">（跟随 .env，默认 paddle）</option>
-            <option value="paddle">云端 PaddleOCR-VL（会外发文件）</option>
-            <option value="local">本机 PaddleOCR（不外发，需安装 paddleocr）</option>
-            <option value="stub">离线替身（仅测试，不识别真实内容）</option>
+            <option value="">（跟随 .env，默认 local）</option>
+            <option value="local">Windows 本机 OCR（不外发）</option>
             <option value="none">禁用（即使填了 Token 也不外发）</option>
         </select></div>
     <div class="row"><label>内嵌图片纳入 OCR</label>
@@ -419,18 +421,19 @@
             <option value="true">是：Word/PPT/PDF 里的图片要先识别才放行</option>
             <option value="false">否：忽略图片，只入库正文</option>
         </select></div>
-    <div class="row"><label>识别语言</label><input type="text" id="ocr_lang" placeholder="默认 ch（中文）；英文可填 en"></div>
+    <div class="row"><label>识别语言</label><input type="text" id="ocr_lang" placeholder="默认 zh-Hans-CN；英文可填 en-US"></div>
     <div class="row"><label>本机识别设备</label>
-        <select id="ocr_device">
+        <select id="ocr_device" disabled>
             <option value="">（跟随 .env，默认 cpu）</option>
             <option value="cpu">cpu</option>
             <option value="gpu">gpu</option>
         </select></div>
-    <div class="row"><label>云端作业地址</label><input type="text" id="ocr_base_url" placeholder="默认官方 PaddleOCR-VL 作业地址；可换成自建服务"></div>
-    <div class="row"><label>云端模型名</label><input type="text" id="ocr_model" placeholder="默认 PaddleOCR-VL-1.6"></div>
-    <div class="row"><label>OCR Token</label><input type="password" id="ocr_token" placeholder="留空表示保持现有值不变（只写在这里，不会出现在代码里）"><button type="button" class="btn-clear" data-clear-secret="ocr_token" hidden>清除</button></div>
+    <div class="row"><label>云端作业地址</label><input type="text" id="ocr_base_url" placeholder="当前版本不启用" disabled></div>
+    <div class="row"><label>云端模型名</label><input type="text" id="ocr_model" placeholder="当前版本不启用" disabled></div>
+    <div class="row"><label>OCR Token</label><input type="password" id="ocr_token" placeholder="当前版本不启用" disabled><button type="button" class="btn-clear" data-clear-secret="ocr_token" hidden disabled>清除</button></div>
     <div class="row"><label>OCR 单文件上限</label><input type="number" id="ocr_max_file_mb" min="1" step="1" placeholder="单位 MB，默认 50"></div>
-    <div class="row"><label>本机模型目录</label><input type="text" id="ocr_local_model_dir" placeholder="留空=用 PaddleOCR 默认缓存目录"></div>
+    <div class="row"><label>单张识别超时（秒）</label><input type="number" id="ocr_timeout_seconds" min="5" max="300" step="1" placeholder="默认 30（5~300）"></div>
+    <div class="row"><label>本机模型目录</label><input type="text" id="ocr_local_model_dir" placeholder="Windows 内置 OCR 不使用此字段" disabled></div>
 </section>
 
 <div class="group-heading" id="group-app">

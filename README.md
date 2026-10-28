@@ -162,8 +162,9 @@ Operational cautions:
   them requires backend support plus a migration or rebuild plan.
 - Local reranking is not currently available in this build. Keep rerank off in
   the local view unless a supported provider is added.
-- OCR and TTS remain unavailable or read-only in this build. Their form fields do
-  not by themselves mean the capability is active.
+- TTS remains unavailable or read-only in this build. OCR is available only
+  through the local Windows OCR engine and requires a matching installed language
+  pack.
 - Service-level tests use the existing settings test endpoint. Capabilities
   without an independent check are reported as having no independent test.
 
@@ -247,6 +248,29 @@ Use “立即扫描收件箱” on the document page for a local manual scan. Th
 local-only and also requires the per-process control token. The “打开收件箱文件夹”
 action uses a separate local-only endpoint with the same token and always opens
 the configured inbox directory; it never accepts a client-supplied path.
+
+## Local OCR
+
+OCR uses the Windows built-in `Windows.Media.Ocr` engine through
+`scripts/windows_ocr.ps1`. It runs locally and never sends image content to a
+cloud service.
+
+- OCR is disabled by default. Set `RAGKB_OCR_MODE=manual` or `auto`, keep
+  `RAGKB_OCR_PROVIDER=local`, and restart the application.
+- `manual` leaves image-based documents in `needs_ocr` until the user triggers
+  “识别图片”; `auto` runs local OCR during local parsing.
+- Embedded images in PDF, Word, Excel, and PowerPoint are processed only when
+  `RAGKB_OCR_IMAGE_OCR=true`. Standalone image uploads always require OCR.
+- The requested `RAGKB_OCR_LANG` must have a matching Windows OCR language pack.
+  The settings page reports available languages and provides a local test.
+- Per-image size and timeout limits are enforced. Missing OCR components,
+  unsupported formats, timeouts, and empty recognition results produce explicit
+  failures rather than empty successful text.
+- OCR results are merged into the local parsed content, then pass through the
+  existing quality gate and review queue. They are not automatically submitted
+  to the knowledge service.
+- Current scope uses images already extractable by the existing parsers; the
+  application does not bundle a PDF page renderer.
 
 ## Document management
 
@@ -353,11 +377,13 @@ security.
 
 ## Current limitations
 
-- OCR, cloud TTS, and Qdrant switching are not part of the current MVP.
+- Cloud TTS and Qdrant switching are not part of the current MVP.
 - History search is lexical, not semantic.
 - Advanced topic rename, archive, and hierarchy management are not implemented.
 - Index compatibility depends on a baseline recorded by the current working
   directory; index changes made before that baseline cannot be reconstructed.
+- OCR is Windows-only and processes only image files or images extractable from
+  supported Office/PDF files; it does not render arbitrary PDF pages.
 
 See `docs/PROJECT_STATE.md` for the current implementation state and remaining
 release work.

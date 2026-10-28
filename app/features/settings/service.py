@@ -17,6 +17,8 @@ from app.features.inbox.config import get_inbox_settings
 from app.features.ingest.config import get_ingest_settings
 from app.features.knowledge.service import get_knowledge_gateway
 from app.features.memory.config import get_memory_settings
+from app.features.ocr.config import get_ocr_settings
+from app.features.ocr import service as ocr_service
 from app.features.settings.envfile import EnvFileError, read_env_file, update_env_file
 from app.features.settings.schema import (
     FIELD_BY_PAIR,
@@ -341,6 +343,8 @@ def settings_payload() -> Dict[str, Any]:
     app = get_settings()
     ingest = get_ingest_settings()
     inbox = get_inbox_settings()
+    ocr = get_ocr_settings()
+    ocr_runtime = ocr_service.status(ocr)
     runtime_rows = _runtime_state()
     unsupported_values = dict(UNSUPPORTED)
     app_env = app_env_path()
@@ -385,26 +389,23 @@ def settings_payload() -> Dict[str, Any]:
                 "state": str(inbox.state_path),
             },
         },
-        "ocr_effective": {
-            "enabled": False,
-            "mode": "off",
-            "provider": "none",
-            "external": False,
-            "image_ocr": False,
-            "lang": "ch",
-            "device": "cpu",
-            "base_url": "",
-            "model": "",
-            "token_set": False,
-            "max_file_mb": 50,
-            "local_model_dir": "",
-        },
+        "ocr_effective": ocr_runtime,
         "ocr_preview": {
             "enabled_after_restart": False,
-            "reason": "OCR 尚未集成到当前版本",
+            "configured_mode": ocr.mode,
+            "configured_provider": ocr.provider,
+            "reason": ocr_runtime["reason"],
             "pending_env": [],
         },
-        "ocr_providers": [],
+        "ocr_providers": [
+            {
+                "id": "local",
+                "label": "Windows 本机 OCR",
+                "available": bool(ocr_runtime.get("engine_available")),
+                "selected": ocr.provider == "local",
+                "detail": ocr_runtime["reason"],
+            }
+        ],
         "runtime_effective": {"services": runtime_rows},
         "injected_env": {},
         "note": "配置已保存。运行中的服务需重启后使用新配置。",
@@ -669,6 +670,20 @@ def save_settings(payload: Mapping[str, Any], *, remote: bool = False) -> Dict[s
         if not (app_updates or engine_updates)
         else "配置已保存；重启服务后生效。"
     )
+    ocr_mode = _resolved_value(
+        FIELD_BY_PAIR[("ocr", "mode")],
+        app_values,
+        engine_values,
+        resolved_updates,
+    )
+    ocr_provider = _resolved_value(
+        FIELD_BY_PAIR[("ocr", "provider")],
+        app_values,
+        engine_values,
+        resolved_updates,
+    )
+    ocr_changed = any(key.startswith("RAGKB_OCR_") for key in resolved_updates)
+    ocr_desired = ocr_mode in {"manual", "auto"} and ocr_provider == "local"
     return {
         "ok": True,
         "note": " ".join([base_note, *warnings]),
@@ -685,7 +700,13 @@ def save_settings(payload: Mapping[str, Any], *, remote: bool = False) -> Dict[s
             read_env_file(app_env_path()),
             read_env_file(engine_env_path()),
         ),
-        "ocr_preview": {"reason": "OCR 尚未集成到当前版本"},
+        "ocr_preview": {
+            "enabled_after_restart": bool(ocr_changed and ocr_desired),
+            "configured_mode": ocr_mode,
+            "configured_provider": ocr_provider,
+            "reason": "" if ocr_desired else "OCR 当前关闭或提供方不是 local",
+            "pending_env": ["OCR"] if ocr_changed else [],
+        },
         "ingest_confirm_effective": {"mode": "always", "pending_review_ttl_hours": 24},
     }
 

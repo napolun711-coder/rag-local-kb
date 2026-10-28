@@ -19,6 +19,7 @@ from app.features.ingest import api as ingest_api
 from app.features.inbox import api as inbox_api
 from app.features.knowledge import api as knowledge_api
 from app.features.memory import api as memory_api
+from app.features.ocr import api as ocr_api
 from app.features.session import api as session_api
 from app.features.settings import api as settings_api
 from app.platform.config import get_settings
@@ -152,6 +153,7 @@ def create_app() -> FastAPI:
     application.include_router(memory_api.router)
     application.include_router(memory_api.status_router)
     application.include_router(memory_api.frontend_router)
+    application.include_router(ocr_api.router)
     application.include_router(knowledge_api.router)
     application.include_router(settings_api.router)
     register_exception_handlers(application)

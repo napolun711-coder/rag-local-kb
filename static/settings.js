@@ -29,7 +29,8 @@ const FIELDS = [
     ["inbox", "dir"], ["inbox", "confirm"],
     // OCR 文字识别
     ["ocr", "mode"], ["ocr", "provider"], ["ocr", "image_ocr"], ["ocr", "lang"], ["ocr", "device"],
-    ["ocr", "base_url"], ["ocr", "model"], ["ocr", "token"], ["ocr", "max_file_mb"], ["ocr", "local_model_dir"],
+    ["ocr", "base_url"], ["ocr", "model"], ["ocr", "token"], ["ocr", "max_file_mb"],
+    ["ocr", "timeout_seconds"], ["ocr", "local_model_dir"],
     // 朗读 / 语音（TTS）： 的云端 TTS + 链路顺序（保存后立即生效，优先于 .env）
     ["tts", "tts_cloud_host"], ["tts", "tts_cloud_api_key"], ["tts", "tts_cloud_model"],
     ["tts", "tts_cloud_voice"], ["tts", "tts_cloud_timeout"], ["tts", "tts_provider_chain"]
@@ -528,6 +529,46 @@ async function testService(key, btn) {
     }
 }
 
+async function testOcrLocal() {
+    const button = document.getElementById("testOcrBtn");
+    const status = document.getElementById("ocrTestStatus");
+    if (button && button.disabled) { return; }
+    if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+    }
+    if (status) {
+        status.textContent = "正在检查 Windows 本机 OCR...";
+        status.className = "service-test-status is-pending";
+    }
+    try {
+        const response = await fetch("/api/ocr/test", { method: "POST" });
+        const data = await response.json().catch(function () { return null; });
+        const result = (data && data.status) || {};
+        const ok = !!(response.ok && data && data.ok);
+        const language = result.language_tag || result.lang || "";
+        const detail = ok
+            ? ("可用 · 语言 " + language)
+            : ((data && data.message) || result.reason || "不可用");
+        if (status) {
+            status.textContent = detail;
+            status.className = "service-test-status " + (ok ? "is-ok" : "is-bad");
+        }
+        notify("本机 OCR：" + detail, ok ? "ok" : "bad");
+    } catch (err) {
+        if (status) {
+            status.textContent = "检查失败：" + err;
+            status.className = "service-test-status is-bad";
+        }
+        notify("本机 OCR 检查失败：" + err, "bad");
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
+        }
+    }
+}
+
 // 刻意走 saveCollapsed()：折叠状态存在 localStorage 里，
 // 只摘 class 的话下次刷新会被存下来的"收起"覆盖回去，用户以为没生效。
 function revealTestResult() {
@@ -677,11 +718,12 @@ function renderEffective(data) {
                 : (preview.reason ? ("未启用：" + preview.reason) : "未启用（不会外发任何文件）"))],
         ["OCR 是否外发", ocr.external ? "会把文件发送到外部服务" : "不外发（本机或未启用）"],
         ["内嵌图片纳入 OCR", ocr.image_ocr ? "是（未识别图片会停下等确认）" : "否（忽略图片，只入库正文）"],
-        ["OCR 语言 / 设备", (ocr.lang || "—") + " / " + (ocr.device || "—")],
-        ["OCR 模型 / 地址", (ocr.model || "—") + " / " + (ocr.base_url || "—")],
-        ["OCR Token", ocr.token_set ? "已配置" : "未配置"],
+        ["OCR 引擎", ocr.engine || "—"],
+        ["OCR 语言", ocr.language_tag || ocr.lang || "—"],
+        ["可用 OCR 语言包", (ocr.available_languages && ocr.available_languages.length)
+            ? ocr.available_languages.join(" / ") : "—"],
         ["OCR 单文件上限", ocr.max_file_mb ? (ocr.max_file_mb + " MB") : "—"],
-        ["本机模型目录", ocr.local_model_dir || "（默认缓存目录）"]
+        ["单张识别超时", ocr.timeout_seconds ? (ocr.timeout_seconds + " 秒") : "—"]
     ];
     const qualityBody = document.querySelector("#qualityTable tbody");
     qualityBody.innerHTML = "";
@@ -849,12 +891,8 @@ function renderRouteOverview() {
         mark("ocr", { kind: "unsupported", label: "未接入", detail: "当前版本将 OCR 卡片标为只读。" });
     } else if (ocrMode === "off" || ocrProvider === "none") {
         mark("ocr", { kind: "off", label: "关闭", detail: "OCR 已关闭，不外发文件。" });
-    } else if (ocrProvider === "paddle") {
-        mark("ocr", { kind: "cloud", label: "云端", detail: "PaddleOCR-VL；识别时会发送文件。" });
     } else if (ocrProvider === "local") {
-        mark("ocr", { kind: "local", label: "本地", detail: "本机 PaddleOCR。" });
-    } else if (ocrProvider === "stub") {
-        mark("ocr", { kind: "unknown", label: "测试", detail: "离线替身，不识别真实内容。" });
+        mark("ocr", { kind: "local", label: "本地", detail: "Windows 内置 OCR，不外发文件。" });
     } else {
         mark("ocr", { kind: "unknown", label: "待确认", detail: "模式或提供方未选择；可能沿用现有配置。" });
     }
@@ -1516,8 +1554,8 @@ function renderOcrHint(data) {
     const ocr = (data && data.ocr_effective) || {};
     const preview = (data && data.ocr_preview) || {};
     const parts = [];
-    if (preview.reason) {
-        parts.push("重启后仍不会启用 OCR：" + preview.reason + "。");
+    if (ocr.configured && !ocr.enabled && preview.reason) {
+        parts.push("已配置但当前不可用：" + preview.reason + "。");
     } else if (preview.enabled_after_restart && !ocr.enabled) {
         parts.push("已保存：模式 " + (preview.configured_mode || "") + "、提供方 " + (preview.configured_provider || "")
             + "；重启服务后启用（当前生效值仍是 " + (ocr.mode || "off") + "）。");
@@ -1538,7 +1576,10 @@ function renderOcrHint(data) {
         parts.push("提供方就绪情况：" + (selected.label || selected.name) + " — " + (selected.available ? "可用" : (selected.detail || "不可用")));
     }
     box.textContent = parts.join(" ");
-    box.className = "note-line" + (preview.reason ? " warn" : ((ocr.enabled || preview.enabled_after_restart) ? " ok" : ""));
+    box.className = "note-line" + (
+        (ocr.configured && !ocr.enabled) || preview.enabled_after_restart ? " warn"
+            : (ocr.enabled ? " ok" : "")
+    );
 }
 
 // ---------- 朗读（TTS）：链路与云端诊断（数据来自 GET /api/tts/options）----------
@@ -1978,7 +2019,7 @@ function bindActivateKey(node) {
 }
 
 function markUnavailableSettings() {
-    const sections = ["sec-ingest", "sec-ocr", "sec-tts"];
+    const sections = ["sec-ingest", "sec-tts"];
     sections.forEach(function (id) {
         const card = document.getElementById(id);
         if (!card || card.getAttribute("data-unavailable") === "true") { return; }
@@ -1992,9 +2033,13 @@ function markUnavailableSettings() {
         note.textContent = "当前版本尚未接入此功能；以下字段只读保留，不会写入运行配置。";
         if (head && head.parentNode) { head.insertAdjacentElement("afterend", note); }
     });
-    ["paths_lightrag_home", "app_skill_routing", "vector_store_qdrant_url"].forEach(function (id) {
+    ["paths_lightrag_home", "app_skill_routing", "vector_store_qdrant_url",
+        "ocr_base_url", "ocr_model", "ocr_token", "ocr_device", "ocr_local_model_dir"].forEach(function (id) {
         const node = document.getElementById(id);
         if (node) { node.disabled = true; }
+    });
+    document.querySelectorAll('[data-clear-secret="ocr_token"]').forEach(function (node) {
+        node.disabled = true;
     });
 }
 

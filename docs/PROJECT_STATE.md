@@ -95,8 +95,8 @@ Runtime service state and process logs are under `logs/runtime/`.
 - Persisted history and history search require the memory-backed session store.
 - Document topic controls require the memory database.
 - Document search reads up to 20 remote pages when a filter is active.
-- OCR, cloud TTS, Qdrant switching, and advanced topic management are not part
-  of the current MVP.
+- Cloud TTS, Qdrant switching, and advanced topic management are not part of the
+  current MVP.
 - Formal LightRAG indexing still requires the engine and shell to be healthy.
 - Git is initialized and provides reviewed release history and rollback.
 - The running services may use an older process image than the current source.
@@ -454,3 +454,36 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - The test source and generated review job remain under `.integration-run` only.
 - No formal configuration, knowledge submission, source move, or source deletion
   was performed.
+
+## Local OCR integration (2026-10-29)
+
+- Added `app.features.ocr` and a Windows built-in OCR helper at
+  `scripts/windows_ocr.ps1`. Recognition runs locally through
+  `Windows.Media.Ocr`; no cloud OCR request or API key is used.
+- Supported settings are mode (`off`, `manual`, `auto`), local provider,
+  embedded-image inclusion, language tag, per-file size limit, and per-image
+  timeout. Cloud OCR fields remain visible but read-only.
+- The settings page reports the requested language, installed OCR language
+  packs, engine availability, and provides a local test action. It does not
+  claim OCR is enabled when the Windows OCR engine or language pack is missing.
+- The parser now retains original bytes for standalone images. Existing PDF,
+  Word, Excel, and PowerPoint image extraction feeds the same local OCR path.
+- Auto mode runs OCR during local parsing; manual mode uses the existing
+  “识别图片” action. OCR text is merged into the parsed content and then passes
+  through the unchanged quality gate and review queue.
+- OCR failures, unsupported images, timeouts, size violations, and empty output
+  are recorded explicitly and do not become successful empty content.
+- Added `tests/test_ocr.py` covering language selection, image-byte retention,
+  text merging, disabled behavior, and truthful unavailable state. All 6 OCR
+  tests passed; the combined focused suite passed 21/21.
+- Real Windows OCR detected `zh-Hans-CN`. A generated isolated image was
+  uploaded with temporary OCR environment overrides, recognized as 111 valid
+  characters, entered `review`, preserved marker `OCR-LOCAL-7419`, and remained
+  `knowledge.state=not_submitted`.
+- The isolated service group was restarted afterward without overrides;
+  `/api/ocr/status` reported `enabled=false`, `mode=off`, and the settings API
+  returned the expected OCR fields. No formal configuration or knowledge
+  submission was performed.
+- Current limitation: arbitrary scanned PDF pages are supported only when the
+  existing parser can extract their embedded images; no separate PDF renderer is
+  bundled.

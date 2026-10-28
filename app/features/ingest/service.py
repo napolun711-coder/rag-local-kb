@@ -12,6 +12,8 @@ from app.features.ingest import parse as parse_service
 from app.features.ingest import quality as quality_service
 from app.features.ingest.config import IngestSettings, get_ingest_settings
 from app.features.ingest import storage
+from app.features.ocr.config import get_ocr_settings
+from app.features.ocr import service as ocr_service
 from app.adapters.lightrag.errors import (
     KnowledgeEngineNotInstalled,
     KnowledgeHTTPError,
@@ -71,11 +73,14 @@ def _advice_for(
     parsed: parse_service.ParseResult,
     quality: quality_service.QualityReport,
     settings: IngestSettings,
+    *,
+    ocr_used: bool = False,
+    images_pending: Optional[int] = None,
 ) -> Dict[str, Any]:
     if quality.level != quality_service.LEVEL_PASS:
         return {}
-    pending = len(parsed.assets)
-    if parsed.route == "image" and pending == 0:
+    pending = len(parsed.assets) if images_pending is None else max(0, int(images_pending))
+    if parsed.route == "image" and pending == 0 and images_pending is None:
         pending = 1 if parsed.images else 0
     result = advice_service.advise(
         text,
@@ -86,22 +91,63 @@ def _advice_for(
         file_name=parsed.parser,
         images_total=int(parsed.images or 0),
         images_pending=pending,
-        ocr_used=False,
+        ocr_used=ocr_used,
         min_chars=settings.quality_min_chars,
         max_unocr_images=settings.quality_max_unocr_images,
     )
     return result.to_dict()
 
 
-def _run_pipeline(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, Any]:
+def _ocr_candidate(parsed: parse_service.ParseResult, settings: IngestSettings) -> bool:
+    cfg = get_ocr_settings()
+    if not cfg.enabled or not parsed.assets:
+        return False
+    if parsed.route == "image":
+        return True
+    return bool(cfg.image_ocr)
+
+
+def _apply_ocr(
+    parsed: parse_service.ParseResult,
+    settings: IngestSettings,
+) -> Dict[str, Any]:
+    cfg = get_ocr_settings()
+    if not cfg.enabled:
+        return {"used": False, "attempted": False, "reason": "OCR 当前关闭"}
+    if not _ocr_candidate(parsed, settings):
+        reason = "文档没有可识别图片" if not parsed.assets else "内嵌图片 OCR 已关闭"
+        return {"used": False, "attempted": False, "reason": reason}
+    ocr = ocr_service.recognize_assets(parsed.assets, settings=cfg)
+    text = str(ocr.pop("text", "") or "").strip()
+    if text:
+        combined = (parsed.text.rstrip() + "\n\n" + text).strip()
+        limit = settings.parse_max_chars
+        if limit > 0 and len(combined) > limit:
+            combined = combined[:limit]
+            parsed.truncated = True
+        parsed.text = combined
+    return {
+        **ocr,
+        "attempted": True,
+        "mode": cfg.mode,
+        "reason": "" if ocr.get("used") else "本机 OCR 未识别出文字",
+    }
+
+
+def _run_pipeline(
+    settings: IngestSettings,
+    result: Dict[str, Any],
+    *,
+    force_ocr: bool = False,
+) -> Dict[str, Any]:
     source = storage.resolve_display_path(str(result.get("source_path") or ""))
     timeline = list(result.get("timeline") or [])
     timeline.append({"step": "parse", "state": "checking", "at": storage.utc_now(), "detail": ""})
     result["timeline"] = timeline
 
     parsed = parse_service.parse_file(source, str(result.get("filename") or source.name))
-    result["parse"] = _parse_summary(parsed)
     if not parsed.ok:
+        result["parse"] = _parse_summary(parsed)
         result["state"] = "failed"
         result["detail"] = parsed.detail or "Local parsing failed"
         result["quality"] = {}
@@ -111,6 +157,31 @@ def _run_pipeline(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str,
         storage.write_result(settings, result["file_id"], result)
         return result
 
+    ocr_cfg = get_ocr_settings()
+    ocr_runtime = ocr_service.status(ocr_cfg)
+    ocr_available = bool(ocr_runtime.get("enabled"))
+    ocr_meta: Dict[str, Any] = {
+        "used": False,
+        "attempted": False,
+        "enabled": ocr_available,
+        "provider": "local",
+        "external": False,
+    }
+    if force_ocr or (ocr_available and ocr_cfg.mode == "auto"):
+        ocr_meta.update(_apply_ocr(parsed, settings))
+        if ocr_meta.get("attempted"):
+            timeline.append(
+                {
+                    "step": "ocr",
+                    "state": "done" if ocr_meta.get("used") else "failed",
+                    "at": storage.utc_now(),
+                    "detail": str(ocr_meta.get("reason") or ""),
+                }
+            )
+    result["ocr"] = ocr_meta
+    result["ocr_enabled"] = ocr_available
+    result["ocr_external"] = False
+    result["parse"] = _parse_summary(parsed)
     storage.write_content(settings, result["file_id"], parsed.text)
     report = quality_service.evaluate(
         parsed.text,
@@ -121,13 +192,25 @@ def _run_pipeline(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str,
     )
     quality = report.to_dict()
     result["quality"] = quality
-    result["advice"] = _advice_for(parsed.text, parsed, report, settings)
+    embedded_pending = 0
+    if parsed.route == "image":
+        embedded_pending = int(parsed.images or 1) if parsed.assets else 0
+    elif ocr_cfg.image_ocr:
+        embedded_pending = len(parsed.assets)
+    if ocr_meta.get("attempted"):
+        embedded_pending = int(ocr_meta.get("failed") or 0)
+    result["advice"] = _advice_for(
+        parsed.text,
+        parsed,
+        report,
+        settings,
+        ocr_used=bool(ocr_meta.get("used")),
+        images_pending=embedded_pending,
+    )
     result["content_chars"] = int(parsed.char_total)
     result["image_total"] = int(parsed.images or 0)
-    result["unocr_images"] = len(parsed.assets) + (1 if parsed.route == "image" and not parsed.assets else 0)
+    result["unocr_images"] = embedded_pending
     result["is_image"] = parsed.route == "image"
-    result["ocr_enabled"] = False
-    result["ocr_external"] = False
 
     if report.level == quality_service.LEVEL_PASS:
         result["state"] = "review"
@@ -183,7 +266,11 @@ def _can(status: Dict[str, Any]) -> Dict[str, bool]:
     return {
         "ingest": state == "review" and knowledge_state not in ("submitted", "ingesting", "done"),
         "force": False,
-        "ocr": False,
+        "ocr": (
+            state in ("needs_ocr", "blocked")
+            and int(status.get("image_total") or 0) > 0
+            and bool(ocr_service.status(get_ocr_settings()).get("enabled"))
+        ),
         "retry": state in ("failed", "blocked", "needs_ocr"),
         "skip": state in REVIEW_STATES,
         "edit": editable,
@@ -193,10 +280,17 @@ def _can(status: Dict[str, Any]) -> Dict[str, bool]:
 
 def _public_status(result: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(result)
-    payload["can"] = _can(payload)
     knowledge = payload.get("knowledge") if isinstance(payload.get("knowledge"), dict) else {}
     payload["progress"] = dict(knowledge.get("progress") or {})
-    payload["ocr"] = {"used": False, "scope": "", "enabled": False}
+    ocr = payload.get("ocr") if isinstance(payload.get("ocr"), dict) else {}
+    payload["ocr"] = {
+        **ocr,
+        "used": bool(ocr.get("used")),
+        "scope": "local" if ocr.get("used") else "",
+        "enabled": bool(ocr_service.status(get_ocr_settings()).get("enabled")),
+        "external": False,
+    }
+    payload["can"] = _can(payload)
     payload["knowledge"] = dict(knowledge)
     payload["gateway_ready"] = str(knowledge.get("state") or "") in ("submitted", "ingesting", "done")
     return payload
@@ -341,7 +435,13 @@ def activate(file_id: str, action: str) -> Dict[str, Any]:
         elif action == "ingest":
             return _submit_to_knowledge(settings, result)
         elif action == "ocr":
-            return {"ok": False, "http_status": 409, "message": "OCR is not configured in this stage"}
+            if state not in ("needs_ocr", "blocked"):
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "This job does not need OCR",
+                }
+            return _ocr_result(settings, result)
         else:
             return {"ok": False, "http_status": 400, "message": "Unknown action"}
         result["updated_at"] = storage.utc_now()
@@ -499,6 +599,38 @@ def _retry_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str,
         "ok": True,
         "state": updated.get("state"),
         "message": updated.get("detail") or "Retry completed",
+        "duplicate_submit": False,
+    }
+
+
+def _ocr_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, Any]:
+    if not ocr_service.status(get_ocr_settings()).get("enabled"):
+        return {
+            "ok": False,
+            "http_status": 409,
+            "code": "ocr_unavailable",
+            "message": "本机 OCR 未启用或当前不可用",
+        }
+    result["state"] = "processing"
+    result["detail"] = "Running local OCR"
+    result["updated_at"] = storage.utc_now()
+    storage.write_result(settings, result["file_id"], result)
+    updated = _run_pipeline(settings, result, force_ocr=True)
+    ocr = updated.get("ocr") if isinstance(updated.get("ocr"), dict) else {}
+    if not ocr.get("used"):
+        return {
+            "ok": False,
+            "http_status": 409,
+            "code": "ocr_no_text",
+            "message": ocr.get("reason") or "本机 OCR 未识别出文字",
+            "status": _public_status(updated),
+        }
+    return {
+        "ok": True,
+        "state": updated.get("state"),
+        "message": updated.get("detail") or "Local OCR completed",
+        "ocr": ocr,
+        "status": _public_status(updated),
         "duplicate_submit": False,
     }
 
