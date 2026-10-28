@@ -265,8 +265,8 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   mode is reported as local or LAN correctly.
 - No process stop, leave, clear, purge, delete, or formal configuration write was
   executed during verification.
-- A real LAN device browser test completed; the lifecycle stop test remains to
-  be run.
+- A real LAN device browser test and the isolated lifecycle stop test
+  completed.
 
 ## Isolated full-service lifecycle (2026-10-28)
 
@@ -287,7 +287,7 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Settings source resolved to the isolated app.env; runtime services reported
   engine/shell/app healthy, and local session mode reported stop capability.
 - No save, delete, clear, purge, leave, stop, or formal data operation was run.
-- A real LAN device test completed; the lifecycle stop test remains pending.
+- A real LAN device test and the isolated lifecycle stop test completed.
 
 ## Isolated full-service ingestion smoke (2026-10-28)
 
@@ -335,4 +335,12 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   port and the primary private LAN address. The settings page does not depend
   on this compatibility endpoint; pairing, status, approval, claim,
   authorization, and revocation worked correctly.
-- A lifecycle stop test remains pending.
+- The lifecycle stop test stopped the active engine, shell, and app processes
+  and released all related listeners.
+- A prior sandboxed restart failed before it could replace the tracked service
+  state and left three verified repository processes untracked. They were
+  identified by PID, command line, and isolated data path, then stopped during
+  the lifecycle acceptance cleanup.
+- Remaining risk: after any failed start or restart, verify listener ownership
+  before retrying so untracked service processes are not mistaken for stopped
+  services.
