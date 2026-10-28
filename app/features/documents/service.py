@@ -7,6 +7,11 @@ from math import ceil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from app.adapters.lightrag.errors import (
+    KnowledgeEngineNotInstalled,
+    KnowledgeHTTPError,
+    KnowledgeUnavailable,
+)
 from app.features.documents.catalog import build_local_index, merge_documents
 from app.features.documents.contracts import DocumentListResult, DocumentOverview, DocumentView, LocalJobSummary
 from app.features.documents import topics
@@ -32,6 +37,57 @@ class DocumentCatalogService:
     def _local_results(self) -> List[Dict[str, Any]]:
         return storage.list_results(self.settings)
 
+    @staticmethod
+    def _upstream_message(exc: Exception) -> str:
+        if isinstance(exc, KnowledgeEngineNotInstalled):
+            return "知识引擎未安装或未启用"
+        if isinstance(exc, KnowledgeUnavailable):
+            return "知识服务不可达"
+        if isinstance(exc, KnowledgeHTTPError):
+            return f"知识服务返回 HTTP {exc.status_code}"
+        return "知识服务暂时不可用"
+
+    @staticmethod
+    def _can_degrade(exc: Exception) -> bool:
+        if isinstance(exc, (KnowledgeEngineNotInstalled, KnowledgeUnavailable)):
+            return True
+        return isinstance(exc, KnowledgeHTTPError) and exc.status_code >= 500
+
+    def _degraded_list(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        query: str,
+        wanted_topic: str,
+        message: str,
+    ) -> DocumentListResult:
+        local_results = self._local_results()
+        index = build_local_index(local_results)
+        topic_map, topic_names = topics.topic_maps()
+        jobs = [
+            self._with_job_topic(item, topic_map, topic_names)
+            for item in index.local_only()
+        ]
+        jobs = [
+            item for item in jobs
+            if self._job_matches(item, query, wanted_topic)
+        ]
+        return DocumentListResult(
+            items=(),
+            page=page,
+            page_size=page_size,
+            total_count=0,
+            total_pages=1,
+            has_next=False,
+            has_prev=False,
+            status_counts={},
+            local_only=tuple(jobs),
+            local_only_total=len(jobs),
+            upstream_ok=False,
+            upstream_message=message,
+        )
+
     def list_documents(
         self,
         *,
@@ -48,14 +104,25 @@ class DocumentCatalogService:
         safe_size = max(10, min(200, int(page_size or 50)))
         query = str(q or "").strip().casefold()
         wanted_topic = str(topic_id or "").strip()
-        response = self.gateway.list_documents_paginated(
-            page=safe_page,
-            page_size=safe_size,
-            status_filter=status_filter,
-            status_filters=list(status_filters or []),
-            sort_field=sort_field,
-            sort_direction=sort_direction,
-        )
+        try:
+            response = self.gateway.list_documents_paginated(
+                page=safe_page,
+                page_size=safe_size,
+                status_filter=status_filter,
+                status_filters=list(status_filters or []),
+                sort_field=sort_field,
+                sort_direction=sort_direction,
+            )
+        except Exception as exc:
+            if not self._can_degrade(exc):
+                raise
+            return self._degraded_list(
+                page=safe_page,
+                page_size=safe_size,
+                query=query,
+                wanted_topic=wanted_topic,
+                message=self._upstream_message(exc),
+            )
         documents = response.get("documents") if isinstance(response.get("documents"), list) else []
         pagination = response.get("pagination") if isinstance(response.get("pagination"), dict) else {}
         status_counts = response.get("status_counts") if isinstance(response.get("status_counts"), dict) else {}
@@ -72,32 +139,47 @@ class DocumentCatalogService:
             all_index = build_local_index(local_results)
             current_page = 1
             first_page = True
-            while current_page <= MAX_DETAIL_PAGES:
-                remote = self.gateway.list_documents_paginated(
-                    page=current_page,
-                    page_size=200,
-                    status_filter=status_filter,
-                    status_filters=list(status_filters or []),
-                    sort_field=sort_field,
-                    sort_direction=sort_direction,
-                )
-                remote_docs = remote.get("documents") if isinstance(remote.get("documents"), list) else []
-                all_documents.extend(merge_documents(remote_docs, all_index))
-                remote_pagination = (
-                    remote.get("pagination")
-                    if isinstance(remote.get("pagination"), dict)
-                    else {}
-                )
-                if first_page:
-                    status_counts = (
-                        remote.get("status_counts")
-                        if isinstance(remote.get("status_counts"), dict)
-                        else status_counts
+            try:
+                while current_page <= MAX_DETAIL_PAGES:
+                    remote = self.gateway.list_documents_paginated(
+                        page=current_page,
+                        page_size=200,
+                        status_filter=status_filter,
+                        status_filters=list(status_filters or []),
+                        sort_field=sort_field,
+                        sort_direction=sort_direction,
                     )
-                    first_page = False
-                if not bool(remote_pagination.get("has_next")):
-                    break
-                current_page += 1
+                    remote_docs = (
+                        remote.get("documents")
+                        if isinstance(remote.get("documents"), list)
+                        else []
+                    )
+                    all_documents.extend(merge_documents(remote_docs, all_index))
+                    remote_pagination = (
+                        remote.get("pagination")
+                        if isinstance(remote.get("pagination"), dict)
+                        else {}
+                    )
+                    if first_page:
+                        status_counts = (
+                            remote.get("status_counts")
+                            if isinstance(remote.get("status_counts"), dict)
+                            else status_counts
+                        )
+                        first_page = False
+                    if not bool(remote_pagination.get("has_next")):
+                        break
+                    current_page += 1
+            except Exception as exc:
+                if not self._can_degrade(exc):
+                    raise
+                return self._degraded_list(
+                    page=safe_page,
+                    page_size=safe_size,
+                    query=query,
+                    wanted_topic=wanted_topic,
+                    message=self._upstream_message(exc),
+                )
             all_documents = [
                 self._with_document_topic(item, topic_map, topic_names)
                 for item in all_documents
@@ -244,6 +326,8 @@ class DocumentCatalogService:
             local_failed=local_failed,
             local_done=local_done,
             local_only_total=first_page.local_only_total,
+            upstream_ok=first_page.upstream_ok,
+            upstream_message=first_page.upstream_message,
         )
 
     def _allowed_roots(self) -> Tuple[Path, ...]:

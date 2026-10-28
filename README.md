@@ -244,6 +244,14 @@ under the application origin; they are forced to download. Inline responses set
 Topic tags are stored in the memory database. If memory is disabled, document
 browsing and local originals still work, but topic controls remain hidden.
 
+When the knowledge service is unavailable, `/api/files/list` and
+`/api/files/overview` still return HTTP 200 with the application-owned local
+records and `upstream.ok=false`. The page marks knowledge counts as unknown,
+labels the local table as unverified against the knowledge base, and pauses
+deletion. Viewing, filtering, details, and downloads remain available. The
+application never presents the degraded local records as a complete knowledge
+listing.
+
 ## Knowledge service
 
 The application talks to a stable knowledge-gateway contract. The LightRAG HTTP
@@ -323,8 +331,6 @@ security.
 - OCR, inbox polling, cloud TTS, and Qdrant switching are not
   part of the current MVP.
 - History search is lexical, not semantic.
-- A knowledge-service outage currently prevents the combined document listing
-  from returning a local-only result.
 - Advanced topic rename, archive, and hierarchy management are not implemented.
 - Index compatibility depends on a baseline recorded by the current working
   directory; index changes made before that baseline cannot be reconstructed.

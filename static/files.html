@@ -87,7 +87,8 @@
 
   <!-- 文档列表 -->
   <section class="card">
-    <h2>知识库文档</h2>
+    <h2 id="knowledgeTitle">知识库文档</h2>
+    <div class="hint" id="knowledgeTableHint" hidden></div>
     <div class="toolbar">
       <select id="statusFilter" aria-label="按状态筛选文档">
         <option value="">全部状态</option>
@@ -140,8 +141,8 @@
 
   <!-- 本机有记录、知识库里没有（等确认 / 已跳过 / 质检没过 / 已删除） -->
   <section class="card" id="localCard">
-    <h2>本机有记录、知识库中没有</h2>
-    <div class="hint">这些文件在本机留下了档案，但不在知识库里（等你确认 / 已跳过 / 未过质检 / 已删除）。</div>
+    <h2 id="localTitle">本机有记录、知识库中没有</h2>
+    <div class="hint" id="localHint">这些文件在本机留下了档案，但不在知识库里（等你确认 / 已跳过 / 未过质检 / 已删除）。</div>
     <div class="tw">
     <table id="localTable" class="table-spaced">
       <thead>

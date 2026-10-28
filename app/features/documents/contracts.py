@@ -94,6 +94,8 @@ class DocumentListResult:
     status_counts: Dict[str, int] = field(default_factory=dict)
     local_only: Tuple[LocalJobSummary, ...] = ()
     local_only_total: int = 0
+    upstream_ok: bool = True
+    upstream_message: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -109,6 +111,8 @@ class DocumentListResult:
             "status_counts": dict(self.status_counts),
             "local_only": [item.to_dict() for item in self.local_only],
             "local_only_total": self.local_only_total,
+            "upstream_ok": self.upstream_ok,
+            "upstream_message": self.upstream_message,
         }
 
 
@@ -121,6 +125,8 @@ class DocumentOverview:
     local_failed: int
     local_done: int
     local_only_total: int
+    upstream_ok: bool = True
+    upstream_message: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -131,6 +137,8 @@ class DocumentOverview:
             "local_failed": self.local_failed,
             "local_done": self.local_done,
             "local_only_total": self.local_only_total,
+            "upstream_ok": self.upstream_ok,
+            "upstream_message": self.upstream_message,
         }
 
 

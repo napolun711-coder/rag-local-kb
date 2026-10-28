@@ -147,7 +147,11 @@ def _overview_payload(view: DocumentOverview) -> Dict[str, Any]:
             "in_knowledge_base": view.local_done,
             "knowledge_files": 0,
         },
-        "upstream": {"ok": True, "url": "", "message": ""},
+        "upstream": {
+            "ok": view.upstream_ok,
+            "url": "",
+            "message": view.upstream_message,
+        },
         "pipeline": {"busy": False, "recovery_required": False, "recovery_message": ""},
         "inbox": {"enabled": False, "waiting": 0, "settling": 0, "accepted": 0, "duplicate": 0, "failed": 0, "events": [], "dirs": {}, "hint": ""},
         "folders": [],
@@ -184,7 +188,15 @@ def files_list(
     payload = result.to_dict()
     payload["documents"] = [_document_payload(item) for item in result.items]
     payload["local_only"] = [_local_payload(job) for job in result.local_only]
-    payload["upstream"] = {"ok": True, "message": ""}
+    payload["upstream"] = {
+        "ok": result.upstream_ok,
+        "message": result.upstream_message,
+    }
+    if not result.upstream_ok:
+        payload["notice"] = (
+            f"{result.upstream_message}。当前仅显示本机已有记录，"
+            "未与知识库状态核对；服务恢复后请刷新。"
+        )
     return payload
 
 

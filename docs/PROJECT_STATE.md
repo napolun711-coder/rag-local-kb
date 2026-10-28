@@ -95,8 +95,6 @@ Runtime service state and process logs are under `logs/runtime/`.
 - Persisted history and history search require the memory-backed session store.
 - Document topic controls require the memory database.
 - Document search reads up to 20 remote pages when a filter is active.
-- Local document listing does not yet degrade to a fully local-only response when
-  the knowledge service is unavailable.
 - OCR, inbox polling, cloud TTS, Qdrant switching, and
   advanced topic management are not part of the current MVP.
 - Formal LightRAG indexing still requires the engine and shell to be healthy.
@@ -385,3 +383,30 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   HTTP 200 with `state=compatible` for the existing isolated index.
 - No chat, ingestion, deletion, configuration save, or full regression was run
   during this validation.
+
+## Document local degradation (2026-10-29)
+
+- `/api/files/list` and `/api/files/overview` now degrade to HTTP 200 with
+  application-owned local records when the knowledge engine is unavailable or
+  returns a 5xx response.
+- Degraded responses set `upstream.ok=false` and include a user-facing notice.
+  Remote document counts are not fabricated; the page displays them as unknown.
+- The local-record table changes to “本机记录（未与知识库核对）” while degraded,
+  because the application cannot determine which local jobs still exist in the
+  knowledge base.
+- Local search and topic filtering continue to work. Viewing, details, original
+  access, and downloads remain available; selection and deletion are paused
+  until knowledge state can be checked again.
+- Knowledge-service 4xx request errors are not treated as availability failures
+  and continue to surface as errors.
+- No automatic retry loop, data migration, deletion, or configuration write was
+  added.
+- Added `tests/test_documents_degraded.py` covering local-record fallback,
+  filtering, multi-page failure without partial remote data, overview state, 4xx
+  behavior, and the API payload contract. All 6 focused tests passed in the
+  project virtual environment.
+- An isolated service-group restart passed. The live list endpoint returned
+  HTTP 200 with `upstream=true`, 3 knowledge documents, and 1 local-only record;
+  the overview also returned `upstream=true`, 3 remote documents, and 4 local
+  jobs; `/files` returned HTTP 200.
+- No full regression was run.

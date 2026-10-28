@@ -41,6 +41,7 @@ const state = {
   topicsEnabled: false,
   rows: [],
   localRows: [],
+  upstreamOk: true,
   selected: {},          // key -> {doc_id, file_id, file_path, name}
   busy: false,
   pollTimer: null
@@ -337,6 +338,9 @@ async function loadList() {
     // 后端可能因上限少回了若干条（local_only_total > 实际返回）。缺省回落到
     // 实际条数，这样老版本后端 / 字段缺失时行为与改造前一致。
     state.localTotal = Number(data.local_only_total) || state.localRows.length;
+    state.upstreamOk = !(data.upstream && data.upstream.ok === false);
+    if (!state.upstreamOk) { state.selected = {}; }
+    applyUpstreamLabels();
     renderRows();
     renderLocalRows();
     renderPager(data.pagination || {});
@@ -349,6 +353,34 @@ async function loadList() {
 }
 
 // ---------- 渲染 ----------
+function applyUpstreamLabels() {
+  const ok = state.upstreamOk;
+  const knowledgeTitle = $("knowledgeTitle");
+  const knowledgeHint = $("knowledgeTableHint");
+  const localTitle = $("localTitle");
+  const localHint = $("localHint");
+  if (knowledgeTitle) {
+    knowledgeTitle.textContent = ok ? "知识库文档" : "知识库文档（暂不可用）";
+  }
+  if (knowledgeHint) {
+    knowledgeHint.hidden = ok;
+    knowledgeHint.textContent = ok ? "" : "知识服务不可用，当前无法显示知识库文档；下方仅列本机已有记录。";
+  }
+  if (localTitle) {
+    localTitle.textContent = ok ? "本机有记录、知识库中没有" : "本机记录（未与知识库核对）";
+  }
+  if (localHint) {
+    localHint.textContent = ok
+      ? "这些文件在本机留下了档案，但不在知识库里（等你确认 / 已跳过 / 未过质检 / 已删除）。"
+      : "知识服务不可用，以下为本机已有档案；目前无法判断哪些仍存在于知识库中。";
+  }
+  const checkAll = $("checkAll");
+  const checkAllLocal = $("checkAllLocal");
+  if (checkAll) { checkAll.disabled = !ok; }
+  if (checkAllLocal) { checkAllLocal.disabled = !ok; }
+  if (!ok) { $("delBar").hidden = true; }
+}
+
 function statCell(key, value, extra) {
   return '<div class="stat"><div class="k">' + escapeHtml(key) + '</div><div class="v">' +
     escapeHtml(value) + '</div>' + (extra ? '<div class="k">' + escapeHtml(extra) + '</div>' : '') + '</div>';
@@ -359,19 +391,24 @@ function renderOverview(data) {
   const local = data.local || {};
   const pipeline = data.pipeline || {};
   const inbox = data.inbox || {};
+  const upstreamOk = !(data.upstream && data.upstream.ok === false);
+  state.upstreamOk = upstreamOk;
+  applyUpstreamLabels();
+  const unknown = "—";
   $("stats").innerHTML =
-    statCell("知识库文档", counts.all || 0) +
-    statCell("已完成", counts.processed || 0) +
-    statCell("处理中 / 排队", (counts.processing || 0) + (counts.parsing || 0) +
-      (counts.analyzing || 0) + (counts.pending || 0)) +
-    statCell("失败", counts.failed || 0) +
+    statCell("知识库文档", upstreamOk ? (counts.all || 0) : unknown) +
+    statCell("已完成", upstreamOk ? (counts.processed || 0) : unknown) +
+    statCell("处理中 / 排队", upstreamOk ? ((counts.processing || 0) + (counts.parsing || 0) +
+      (counts.analyzing || 0) + (counts.pending || 0)) : unknown) +
+    statCell("失败", upstreamOk ? (counts.failed || 0) : unknown) +
     statCell("本机作业", local.jobs || 0, "已入库 " + (local.in_knowledge_base || 0)) +
     statCell("等你确认", local.waiting_review || 0) +
     statCell("收件箱等待", inbox.waiting || 0);
 
   const chips = [];
-  chips.push('<span class="chip ' + (pipeline.busy ? "warn" : "ok") + '">知识库管线：' +
-    (pipeline.busy ? "忙碌（正在建索引，删除会被拒绝）" : "空闲") + '</span>');
+  chips.push('<span class="chip ' + (!upstreamOk || pipeline.busy ? "warn" : "ok") + '">知识库管线：' +
+    (!upstreamOk ? "未知（知识服务不可用）"
+      : (pipeline.busy ? "忙碌（正在建索引，删除会被拒绝）" : "空闲")) + '</span>');
   if (pipeline.recovery_required) {
     chips.push('<span class="chip bad">需要恢复：' +
       escapeHtml(pipeline.recovery_message || "请到 LightRAG 侧处理") + '</span>');
@@ -540,9 +577,11 @@ function renderRows() {
   if (!rows.length) {
     // 筛空了必须给出路：只写「没有符合条件的文档」，用户不知道是搜错了还是库空了
     const filtered = !!(state.status || state.q || state.topicId);
-    $("rows").innerHTML = '<tr><td colspan="9" class="muted">' + (filtered
+    $("rows").innerHTML = '<tr><td colspan="9" class="muted">' + (!state.upstreamOk
+      ? '知识服务暂不可用，当前不显示知识库文档；本机记录见下方'
+      : (filtered
       ? '没有符合条件的文档 <button type="button" class="open" data-clear-filters>清空筛选</button>'
-      : '知识库中还没有文档，可在对话页上传资料') + '</td></tr>';
+      : '知识库中还没有文档，可在对话页上传资料')) + '</td></tr>';
     wireEmptyCta($("rows"));
     updateDelBar();
     return;
@@ -581,6 +620,7 @@ function renderLocalRows() {
   const slice = localPageSlice();
   const rows = slice.rows;
   $("checkAllLocal").checked = false;   // 同 renderRows：换了一页，旧的「全选」状态不再成立
+  $("checkAllLocal").disabled = !state.upstreamOk;
   if (!rows.length) {
     // 本机表只受搜索词影响（状态筛选不作用于它），所以只有 q 非空时才给「清空搜索」
     $("localRows").innerHTML = '<tr><td colspan="7" class="muted">' + (state.q || state.topicId
@@ -602,7 +642,8 @@ function renderLocalRows() {
     return '<tr>' +
       // data-local 必须是**在 state.localRows 里的绝对下标**：切过页之后
       // 表内下标不再等于数组下标，直接用 index 会勾错行
-      '<td><input type="checkbox" data-local="' + (slice.start + index) + '"' + checked + ' aria-label="选择"></td>' +
+      '<td><input type="checkbox" data-local="' + (slice.start + index) + '"' + checked
+        + (state.upstreamOk ? '' : ' disabled') + ' aria-label="选择"></td>' +
       '<td class="name" title="' + escapeHtml(row.name + (detail ? " — " + detail : "")) + '">' +
       escapeHtml(row.name) +
       (detail ? '<span class="path">' + escapeHtml(detail) + '</span>' : "") + '</td>' +
@@ -727,6 +768,7 @@ function toggleRow(row, checked) {
 // 而现在表头勾选还可能是被翻页重置过的，两边更容易对不上。
 // 这里刻意**不**整表重渲染：重渲染会立刻把用户刚点上的表头「全选」打回未勾选。
 function toggleAll(checked, rows, container) {
+  if (!state.upstreamOk) { return; }
   rows.forEach(function (row) { toggleRow(row, checked); });
   if (!container) { return; }
   Array.prototype.slice.call(container.querySelectorAll('input[type="checkbox"]'))
@@ -749,7 +791,7 @@ function selectedItems() {
 function updateDelBar() {
   const count = Object.keys(state.selected).length;
   // 手机 / 局域网页面（拿不到令牌）永远不显示删除区
-  $("delBar").hidden = !(state.local && state.token) || count === 0;
+  $("delBar").hidden = !(state.local && state.token) || !state.upstreamOk || count === 0;
   $("delCount").textContent = "已选 " + count + " 项";
   if (!count) { showConfirm(false); }
 }
