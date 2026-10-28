@@ -509,6 +509,52 @@ FIELDS: Tuple[FieldSpec, ...] = (
         secret=True,
     ),
     FieldSpec(
+        "tts",
+        "tts_provider_chain",
+        "app",
+        "RAGKB_TTS_PROVIDER_CHAIN",
+        "choice",
+        "cloud",
+        ("browser", "cloud", "cloud,browser"),
+    ),
+    FieldSpec(
+        "tts",
+        "tts_cloud_host",
+        "app",
+        "RAGKB_TTS_CLOUD_HOST",
+        "url",
+    ),
+    FieldSpec(
+        "tts",
+        "tts_cloud_api_key",
+        "app",
+        "RAGKB_TTS_CLOUD_API_KEY",
+        "secret",
+        secret=True,
+    ),
+    FieldSpec(
+        "tts",
+        "tts_cloud_model",
+        "app",
+        "RAGKB_TTS_CLOUD_MODEL",
+    ),
+    FieldSpec(
+        "tts",
+        "tts_cloud_voice",
+        "app",
+        "RAGKB_TTS_CLOUD_VOICE",
+    ),
+    FieldSpec(
+        "tts",
+        "tts_cloud_timeout",
+        "app",
+        "RAGKB_TTS_CLOUD_TIMEOUT",
+        "integer",
+        "60",
+        minimum=3,
+        maximum=600,
+    ),
+    FieldSpec(
         "runtime",
         "app_port",
         "app",
@@ -562,16 +608,9 @@ UNSUPPORTED: Dict[Tuple[str, str], str] = {
     ("ingest", "ttl_hours"): "24",
     ("ocr", "device"): "cpu",
     ("ocr", "local_model_dir"): "",
-    ("tts", "tts_cloud_host"): "",
-    ("tts", "tts_cloud_api_key"): "",
-    ("tts", "tts_cloud_model"): "",
-    ("tts", "tts_cloud_voice"): "",
-    ("tts", "tts_cloud_timeout"): "60",
-    ("tts", "tts_provider_chain"): "",
 }
 
 UNSUPPORTED_SECRETS = {
-    ("tts", "tts_cloud_api_key"),
 }
 
 

@@ -125,8 +125,8 @@ These are suggested follow-ups for future agents, not mandatory requirements:
 - Keep capabilities without a working integration read-only or marked as
   unavailable. Avoid exposing selectable cloud or local providers before their
   endpoints, validation, and connection tests are implemented.
-- If cloud embedding, remote vector storage, local reranking, or TTS is added,
-  document the data boundary and add per-service connection diagnostics.
+- For any additional cloud capability or remote vector storage, document the data
+  boundary and add per-service connection diagnostics.
 - Consider making a local-only profile a hard privacy boundary when that
   behavior is implemented; local failures should not silently fall back to a
   cloud service.
@@ -163,8 +163,9 @@ Operational cautions:
 - Reranking can be disabled, run against a local Cohere-compatible `/rerank`
   service, or use Cohere, Jina, or Aliyun DashScope in cloud mode. Local mode
   requires a loopback or private-network endpoint.
-- TTS remains unavailable or read-only in this build. OCR supports Windows,
-  private local model endpoints, and explicitly configured cloud endpoints.
+- OCR supports Windows, private local model endpoints, and explicitly configured
+  cloud endpoints. TTS uses device/browser speech by default and optional
+  OpenAI-compatible cloud audio.
 - Service-level tests use the existing settings test endpoint. Capabilities
   without an independent check are reported as having no independent test.
 
@@ -283,6 +284,25 @@ cloud-compatible endpoint.
   to the knowledge service.
 - Current scope uses images already extractable by the existing parsers; the
   application does not bundle a PDF page renderer.
+
+## Text-to-speech
+
+Device/browser speech is the default and requires no server configuration. On
+Edge or another Chromium browser it uses the installed system/browser voices.
+
+When `RAGKB_TTS_CLOUD_HOST`, `RAGKB_TTS_CLOUD_MODEL`, and
+`RAGKB_TTS_CLOUD_API_KEY` are complete and the provider chain includes cloud,
+the existing chat player uses cloud TTS first and can fall back to device speech
+if playback fails.
+
+- `/api/tts/status` reports whether cloud TTS is ready and the current
+  `cloud → device` or `device` chain.
+- `/api/tts` proxies OpenAI-compatible `/audio/speech` and streams the returned
+  audio without exposing the API key to the browser.
+- `仅设备/浏览器语音` disables cloud even when credentials exist.
+- Missing cloud credentials never produce an upstream request; the browser stays
+  on device speech.
+- Cloud audio is capped at 20 MB and 1000 input characters per request.
 
 ## Document management
 
@@ -410,7 +430,7 @@ security.
 
 ## Current limitations
 
-- Cloud TTS and Qdrant switching are not part of the current MVP.
+- Qdrant switching is not part of the current MVP.
 - History search is lexical, not semantic.
 - Advanced topic rename, archive, and hierarchy management are not implemented.
 - Index compatibility depends on a baseline recorded by the current working

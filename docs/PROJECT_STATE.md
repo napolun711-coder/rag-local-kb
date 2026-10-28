@@ -95,8 +95,7 @@ Runtime service state and process logs are under `logs/runtime/`.
 - Persisted history and history search require the memory-backed session store.
 - Document topic controls require the memory database.
 - Document search reads up to 20 remote pages when a filter is active.
-- Cloud TTS, Qdrant switching, and advanced topic management are not part of the
-  current MVP.
+- Qdrant switching and advanced topic management are not part of the current MVP.
 - Formal LightRAG indexing still requires the engine and shell to be healthy.
 - Git is initialized and provides reviewed release history and rollback.
 - The running services may use an older process image than the current source.
@@ -515,6 +514,35 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   to auto.
 - Current limitation: cloud OCR was contract-tested only, not against a real
   external OCR provider in this checkout.
+
+## TTS integration (2026-10-29)
+
+- Added `app.features.tts` with `/api/tts/status`, `/api/tts/test`, and
+  `/api/tts`. Cloud synthesis proxies an OpenAI-compatible `/audio/speech`
+  endpoint and keeps the API key server-side.
+- Device/browser speech remains the default when cloud credentials are absent.
+  A complete cloud host/model/API key with a cloud-enabled provider chain makes
+  cloud TTS first while retaining device fallback in the existing player.
+- Selecting `仅设备/浏览器语音` disables cloud even when credentials exist.
+- Missing credentials return device-only status and do not make an upstream
+  request.
+- Cloud requests are limited to 1000 input characters and 20 MB of audio.
+- The settings page now exposes the existing TTS fields, supports an explicit
+  cloud connection test, and no longer treats localhost cloud endpoints as a
+  disabled local speech pack.
+- Added `tests/test_tts.py` covering device defaults, cloud-first selection,
+  browser-only mode, URL normalization, request construction, and missing-cloud
+  errors. All 6 TTS tests passed; the combined focused suite passed 34/34.
+- Isolated end-to-end acceptance used an OpenAI-compatible local mock on
+  `127.0.0.1:19320`. Status returned `ready=true`, active provider `cloud`, and
+  chain `cloud,device`; the test and synthesis calls succeeded, requests included
+  Bearer authentication, and `/api/tts` returned HTTP 200 `audio/mpeg` with 515
+  bytes.
+- The isolated service group was restarted without overrides and the mock was
+  stopped. Default status is now `ready=false`, active provider `device`, chain
+  `device`; port `19320` is no longer listening.
+- Current limitation: cloud TTS was validated against the compatible contract,
+  not a real external provider with production credentials.
 
 ## Rerank integration (2026-10-29)
 

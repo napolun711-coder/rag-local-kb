@@ -93,16 +93,13 @@ function renderTtsSummaryFromFields() {
     const host = (el("tts", "tts_cloud_host") || {}).value || "";
     const summary = document.getElementById("sum-tts");
     if (summary) {
-        const localPaused = key === "auto" && isLocalTtsHost(host);
-        summary.textContent = (localPaused ? "自动：本机语音包暂存 → 设备语音" : label)
-            + (key !== "device" && host ? (" · " + (localPaused ? "本机 " : "云端 ") + host) : "");
+        summary.textContent = label + (key !== "device" && host ? (" · " + host) : "");
     }
     const nav = document.getElementById("nav-tts");
     if (nav) {
-        const localPaused = key === "auto" && isLocalTtsHost(host);
-        nav.textContent = (key === "device" || localPaused) ? "设备"
-            : (key === "auto" ? "云端→设备" : "自定义");
-        nav.className = "state" + ((key === "device" || localPaused) ? " on" : " warn");
+        nav.textContent = key === "device" ? "设备"
+            : (key === "auto" ? (host ? "云端→设备" : "设备") : "自定义");
+        nav.className = "state" + ((key === "device" || !host) ? " on" : " warn");
     }
 }
 
@@ -603,6 +600,44 @@ async function testOcrLocal() {
     }
 }
 
+async function testTtsCloud() {
+    const button = document.getElementById("testTtsBtn");
+    const status = document.getElementById("ttsTestStatus");
+    if (button && button.disabled) { return; }
+    if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+    }
+    if (status) {
+        status.textContent = "正在测试云端 TTS...";
+        status.className = "service-test-status is-pending";
+    }
+    try {
+        const response = await fetch("/api/tts/test", { method: "POST" });
+        const data = await response.json().catch(function () { return null; });
+        const ok = !!(response.ok && data && data.ok);
+        const detail = ok
+            ? ((data && data.message) || "云端 TTS 可用")
+            : ((data && data.message) || "云端 TTS 不可用");
+        if (status) {
+            status.textContent = detail;
+            status.className = "service-test-status " + (ok ? "is-ok" : "is-bad");
+        }
+        notify(detail, ok ? "ok" : "bad");
+    } catch (err) {
+        if (status) {
+            status.textContent = "测试失败：" + err;
+            status.className = "service-test-status is-bad";
+        }
+        notify("云端 TTS 测试失败：" + err, "bad");
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
+        }
+    }
+}
+
 // 刻意走 saveCollapsed()：折叠状态存在 localStorage 里，
 // 只摘 class 的话下次刷新会被存下来的"收起"覆盖回去，用户以为没生效。
 function revealTestResult() {
@@ -946,7 +981,19 @@ function renderRouteOverview() {
         mark("ocr", { kind: "unknown", label: "待确认", detail: "模式或提供方未选择；可能沿用现有配置。" });
     }
 
-    mark("tts", { kind: "unsupported", label: "未接入", detail: "当前版本尚未接入朗读后端，不推断云端状态。" });
+    const ttsChain = String(controlValue("tts_tts_provider_chain") || "cloud").toLowerCase();
+    const ttsHost = controlValue("tts_tts_cloud_host");
+    const ttsModel = controlValue("tts_tts_cloud_model");
+    const ttsEffective = (LAST_SETTINGS && LAST_SETTINGS.tts_effective) || {};
+    if (ttsEffective.ready) {
+        mark("tts", { kind: "cloud", label: "云端优先", detail: "云端 TTS 已配置。" });
+    } else if (ttsChain === "browser") {
+        mark("tts", { kind: "local", label: "设备语音", detail: "使用 Edge/Chromium 设备音色。" });
+    } else if (ttsHost && ttsModel) {
+        mark("tts", { kind: "cloud", label: "云端优先", detail: "云端配置完成后优先使用云端，失败时设备语音兜底。" });
+    } else {
+        mark("tts", { kind: "local", label: "设备语音", detail: "云端配置不完整，使用设备语音。" });
+    }
 
     const counts = { local: 0, cloud: 0, off: 0, unknown: 0, unsupported: 0 };
     kinds.forEach(function (kind) {
@@ -1186,6 +1233,7 @@ function renderDeploymentReadiness() {
 
     const rerank = effectiveLightragValue("RERANK_BINDING");
     const rerankCheck = serviceCheckResult("rerank");
+    const ttsEffective = (LAST_SETTINGS && LAST_SETTINGS.tts_effective) || {};
     const ocrUnavailable = !!(document.getElementById("sec-ocr")
         && document.getElementById("sec-ocr").getAttribute("data-unavailable") === "true");
     setReadinessState("optional", {
@@ -1195,7 +1243,7 @@ function renderDeploymentReadiness() {
             ? "关闭"
             : (rerankCheck ? rerankCheck.detail : "已配置，待测试"))
             + " · OCR：" + (ocrUnavailable ? "未接入" : "请查看 OCR 卡片")
-            + " · 朗读：未接入"
+            + " · 朗读：" + (ttsEffective.ready ? "云端已配置" : "设备语音")
     });
 
     const indexKind = renderIndexCompatibility();
@@ -1452,13 +1500,13 @@ function renderSummaries(data) {
     // 朗读（TTS）：摘要里说清「云端配了没」，不用展开也看得见
     var cloudPick = pick("tts", "tts_cloud_host");
     var chainPick = String(pick("tts", "tts_provider_chain") || "").toLowerCase();
-    var ttsModePick = (!chainPick || chainPick === "cloud" || chainPick === "cloud,browser")
-        ? (isLocalTtsHost(cloudPick) ? "自动：本机语音包暂存 → 设备浏览器语音"
-            : (cloudPick ? "自动：云端优先，设备语音兜底" : "自动：设备浏览器语音（云端未配置）"))
-        : (chainPick === "browser" ? "仅设备浏览器语音" : "自定义链路");
+    const ttsEffective = (data && data.tts_effective) || {};
+    var ttsModePick = ttsEffective.ready
+        ? "云端优先"
+        : (chainPick === "browser" ? "仅设备浏览器语音" : "设备浏览器语音");
     setSummary("sum-tts", [
         ttsModePick,
-        cloudPick ? ((isLocalTtsHost(cloudPick) ? "本机暂存 " : "云端 ") + cloudPick) : "云端未填"]
+        cloudPick ? ("云端 " + cloudPick) : ""]
         , "—");
     // 质检恒定开启 —— 摘要里说清"关不掉"，用户如果改过 .env 就点明"已被忽略"
     setSummary("sum-quality", ["恒定开启 · " + (quality.profile || "standard")
@@ -1520,10 +1568,9 @@ function renderSummaries(data) {
     if (navTts) {
         const chainPick = String(pick("tts", "tts_provider_chain") || "").toLowerCase();
         const cloudPick = pick("tts", "tts_cloud_host");
-        navTts.textContent = (!chainPick || chainPick === "cloud" || chainPick === "cloud,browser")
-            ? (cloudPick && !isLocalTtsHost(cloudPick) ? "云端→设备" : "设备")
-            : (chainPick === "browser" ? "设备" : "自定义");
-        navTts.className = "state" + (chainPick === "browser" || !cloudPick || isLocalTtsHost(cloudPick) ? " on" : " warn");
+        const ttsReady = Boolean(((data && data.tts_effective) || {}).ready);
+        navTts.textContent = ttsReady ? "云端→设备" : "设备";
+        navTts.className = "state" + (ttsReady ? " warn" : " on");
     }
 }
 
@@ -2043,24 +2090,19 @@ function renderTtsSummary(data, options) {
     var active = runtime.active_provider || "";
 
     var parts = [];
-    var projectPaused = !!cloud.project_pack_paused
-        || (!!cloud.configured && isLocalTtsHost(cloud.host || cloud.endpoint));
-    if (projectPaused) {
-        parts.push("本机语音服务当前不参与朗读；直接使用设备或浏览器语音。");
-    } else if (cloud.configured) {
+    if (runtime.ready) {
         parts.push("云端 TTS 已配置：" + (cloud.host || cloud.endpoint || "")
-            + "（模型 " + (cloud.model || "未填") + "，超时 " + (cloud.timeout || 60) + " 秒），"
-            + "朗读时会优先用它；失败会自动改用本设备语音。");
+            + "（模型 " + (cloud.model || "未填") + "）。");
+    } else if (cloud.configured) {
+        parts.push("云端 TTS 已配置，当前朗读方式使用设备语音。");
     } else {
-        parts.push("云端 TTS 未配置完整：" + (cloud.reason || "缺服务地址 / API Key / 模型名")
-            + "。会跳过云端，直接使用本设备语音（设备没有可用音色时退到浏览器默认语音）。");
+        parts.push("使用设备语音。");
     }
     if (chain) { parts.push("链路：" + chain + (active ? "；当前生效：" + active : "") + "。"); }
     if (cloud.hint) { parts.push(cloud.hint); }
-    parts.push("这里保存的云端配置优先于 .env 的 TTS_CLOUD_*（留空才回退 .env）。");
     if (box) {
         box.textContent = parts.join(" ");
-        box.className = "note-line" + (cloud.configured && !projectPaused ? " ok" : "");
+        box.className = "note-line" + (runtime.ready ? " ok" : "");
     }
 }
 
@@ -2076,7 +2118,7 @@ function bindActivateKey(node) {
 }
 
 function markUnavailableSettings() {
-    const sections = ["sec-ingest", "sec-tts"];
+    const sections = ["sec-ingest"];
     sections.forEach(function (id) {
         const card = document.getElementById(id);
         if (!card || card.getAttribute("data-unavailable") === "true") { return; }

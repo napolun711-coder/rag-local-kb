@@ -649,24 +649,26 @@
         <span class="sum" id="sum-tts"></span>
         <span class="chev">▾</span>
     </div>
-    <p class="hint">当前版本尚未接入朗读后端。以下字段仅保留页面结构，不会保存或影响运行。</p>
-    <p class="note-line warn local-only-note" data-local-only-note hidden>全本地提示：朗读后端尚未接入；设备语音和云端 TTS 都只是状态占位，不代表当前版本可用。</p>
+    <p class="hint">设备语音无需配置。填写完整云端地址、模型和 API Key 后可启用 OpenAI 兼容的云端语音。</p>
     <p id="ttsState" class="note-line"></p>
+    <div class="readiness-actions">
+        <button type="button" class="btn-clear service-test-button" id="testTtsBtn" onclick="testTtsCloud()">测试云端 TTS</button>
+        <span class="service-test-status" id="ttsTestStatus">尚未测试</span>
+    </div>
     <div class="row">
         <label>朗读方式</label>
         <select id="tts_voice_preset" onchange="applyTtsVoicePreset(this.value)">
-            <option value="auto">自动（默认）：云端优先，设备语音兜底</option>
+            <option value="auto">自动（默认）</option>
             <option value="device">仅设备/浏览器语音</option>
             <option value="custom">自定义链路（高级）</option>
         </select>
-        <span class="sub">当前版本不保存朗读设置</span>
         <input type="hidden" id="tts_tts_provider_chain">
     </div>
-    <div class="row"><label>云端服务地址</label><input type="text" id="tts_tts_cloud_host" placeholder="例如 https://api.openai.com/v1（可带可不带末尾斜杠；已带 /audio/speech 也不会重复拼）"><span class="sub">留空 = 不用云端 TTS，直接用本设备语音</span></div>
-    <div class="row"><label>云端 API Key</label><input type="password" id="tts_tts_cloud_api_key" placeholder="留空表示保持现有值不变"><button type="button" class="btn-clear" data-clear-secret="tts_tts_cloud_api_key" hidden>清除</button><span class="sub">只存在本机的 config\user-settings.json 里，不会写进日志、也不会回显明文</span></div>
-    <div class="row"><label>云端模型名</label><input type="text" id="tts_tts_cloud_model" placeholder="例如 gpt-4o-mini-tts"><span class="sub">必填：缺它同样视为「未配置」，会跳过云端</span></div>
-    <div class="row"><label>云端音色</label><input type="text" id="tts_tts_cloud_voice" placeholder="例如 alloy；留空 = 请求体里不带 voice 字段"><span class="sub">由服务商决定可用取值</span></div>
-    <div class="row"><label>云端超时</label><input type="number" id="tts_tts_cloud_timeout" min="3" max="600" step="1" placeholder="默认 60（秒），允许 3 ~ 600"><span class="sub">太短会在大段文本上超时；超时后会自动改用本设备语音</span></div>
+    <div class="row"><label>云端服务地址</label><input type="text" id="tts_tts_cloud_host" placeholder="例如 https://api.openai.com/v1"></div>
+    <div class="row"><label>云端 API Key</label><input type="password" id="tts_tts_cloud_api_key" placeholder="留空表示保持现有值不变"><button type="button" class="btn-clear" data-clear-secret="tts_tts_cloud_api_key" hidden>清除</button></div>
+    <div class="row"><label>云端模型名</label><input type="text" id="tts_tts_cloud_model" placeholder="例如 gpt-4o-mini-tts"></div>
+    <div class="row"><label>云端音色</label><input type="text" id="tts_tts_cloud_voice" placeholder="例如 alloy"></div>
+    <div class="row"><label>云端超时</label><input type="number" id="tts_tts_cloud_timeout" min="3" max="600" step="1" placeholder="默认 60 秒"></div>
 </section>
 
 <div class="group-heading" id="group-diagnostics">

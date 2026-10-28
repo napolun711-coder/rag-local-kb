@@ -20,6 +20,8 @@ from app.features.knowledge.service import get_knowledge_gateway
 from app.features.memory.config import get_memory_settings
 from app.features.ocr.config import get_ocr_settings
 from app.features.ocr import service as ocr_service
+from app.features.tts.config import get_tts_settings
+from app.features.tts import service as tts_service
 from app.features.settings.envfile import EnvFileError, read_env_file, update_env_file
 from app.features.settings.schema import (
     FIELD_BY_PAIR,
@@ -459,6 +461,7 @@ def settings_payload() -> Dict[str, Any]:
                 "detail": "需要接口地址、模型名和 API Key；启用后会外发图片",
             },
         ],
+        "tts_effective": tts_service.status(),
         "runtime_effective": {"services": runtime_rows},
         "injected_env": {},
         "note": "配置已保存。运行中的服务需重启后使用新配置。",
@@ -1101,16 +1104,19 @@ def test_connections() -> Dict[str, Any]:
 
 
 def tts_options() -> Dict[str, Any]:
+    runtime = tts_service.status()
+    cfg = get_tts_settings()
     return {
-        "available": False,
+        "available": bool(runtime["ready"]),
         "cloud": {
-            "configured": False,
-            "reason": "当前版本尚未集成云端 TTS",
+            "configured": bool(runtime["configured"]),
+            "configured_ready": bool(runtime["ready"]),
+            "reason": runtime["reason"],
+            "host": cfg.cloud_host,
+            "model": runtime["model"],
+            "voice": runtime["voice"],
         },
-        "runtime": {
-            "chain_order": [],
-            "active_provider": "",
-        },
+        "runtime": runtime,
     }
 
 
