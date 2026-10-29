@@ -61,6 +61,15 @@ class FilesDeleteUiContractTests(unittest.TestCase):
 
     def test_original_file_boundary_remains_explicit(self) -> None:
         self.assertIn("原始文件及其所在文件夹不会被修改或删除", HTML)
+        self.assertIn('class="delete-note"', HTML)
+
+    def test_delete_bar_follows_selection_and_enter_submits(self) -> None:
+        self.assertIn("body.delete-mode .page-subbar", CSS)
+        self.assertIn("position:sticky", CSS)
+        self.assertIn('event.key === "Enter"', JS)
+        self.assertIn("!event.isComposing", JS)
+        self.assertIn("可跨页勾选", JS)
+        self.assertIn('$("cancelDeleteModeBtn").hidden = !state.deleteMode', JS)
 
     def test_knowledge_documents_are_visually_primary(self) -> None:
         self.assertIn('class="card overview-card"', HTML)

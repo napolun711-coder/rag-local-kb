@@ -853,8 +853,31 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - `auto` and `off` ingest confirmation modes remain unimplemented and are now
   marked as such in the settings UI.
 - Headless DOM rendering passed for the new card states, the files-page local
-  table, and the companion error detail. Interactive click-through (upload,
-  save-and-ingest, resume) and visual layout checks at desktop/mobile breakpoints
-  were not run in a real browser session.
-- The default lifecycle service group was not restarted for this wave; it must
-  be restarted before manual acceptance so the running app loads the new code.
+  table, and the companion error detail. Delete-mode interaction passed through
+  the Chrome DevTools Protocol. Click-through for upload, save-and-ingest, and
+  resume, plus visual layout checks at desktop/mobile breakpoints, were not run
+  in a real browser session.
+- The default lifecycle group was restarted with the committed source and
+  checked healthy. Any further source change still requires another restart
+  before manual acceptance.
+
+## Delete mode follow-up (2026-10-29)
+
+- In delete mode the page subbar now sticks below the 56px header. The
+  `删除所选（N）` and `取消删除` actions remain reachable while selecting rows
+  on lower pages; the selected count is kept across pagination because selection
+  is keyed by document/file id.
+- Delete mode replaces the subbar description with a short selection hint and
+  keeps the original-file boundary visible; mobile hides the longer description
+  to keep the sticky bar compact.
+- Pressing Enter in the `Yes` confirmation input now submits when the button is
+  enabled. IME composition is ignored, and Enter on other dialog controls keeps
+  its normal button behavior.
+- The delete dialog now repeats the boundary: only app records, parsed data, and
+  the optional knowledge upload copy are removed; the original file and its
+  folder are never touched.
+- Isolated browser interaction via Chrome DevTools Protocol: entered delete mode,
+  confirmed sticky positioning (`top: 56px` after scrolling 762px), selected a
+  local row, confirmed the button counted one selection, opened the dialog,
+  typed `yes`, and saw Enter invoke the delete handler exactly once through a
+  test stub. No real deletion or formal data write was performed.

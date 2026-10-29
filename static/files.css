@@ -70,7 +70,8 @@
     width:min(440px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);
     border-radius:14px;padding:20px;box-shadow:var(--shadow-modal)}
   .delete-dialog h2{font-size:16px;margin:0 0 8px;color:var(--text)}
-  .delete-selection-count{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .delete-selection-count{font-size:13px;color:var(--muted);margin-bottom:8px}
+  .delete-note{font-size:12px;line-height:1.55;color:var(--muted);margin:0 0 14px}
   .delete-option{display:flex;gap:8px;align-items:center;padding:10px 11px;margin-bottom:14px;
     border:1px solid var(--line);border-radius:9px;font-size:13px;color:var(--grey-text)}
   .delete-option input{accent-color:var(--brand)}
@@ -195,6 +196,13 @@ header.bar .grow{flex:0 1 8px;min-width:0}
 .page-subbar button{min-height:34px;padding:5px 10px}
 .page-subbar .compact-action{min-width:68px;padding:5px 10px;font-size:13px}
 
+/* 删除模式下操作条吸附在顶栏下方：勾选列表下方几页的文件时，
+   「删除所选 (N)」和「取消删除」始终可达，不用滚回页首。 */
+body.delete-mode .page-subbar{
+  position:sticky;top:56px;z-index:26;
+  box-shadow:0 8px 18px rgba(0,0,0,.10);
+}
+
 /* 知识库文档是主内容；概览和跳过区只做辅助信息。 */
 .overview-card{padding:10px 12px;margin-bottom:10px}
 .overview-card h2{font-size:13px;margin-bottom:6px}
@@ -221,4 +229,5 @@ header.bar .grow{flex:0 1 8px;min-width:0}
   .page-subbar .sub{flex:1 1 100%}
   .page-subbar .grow{display:none}
   .page-subbar button{flex:0 1 auto;min-height:38px}
+  body.delete-mode .page-subbar .sub{display:none}
 }

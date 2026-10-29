@@ -825,6 +825,11 @@ function toggleAll(checked, rows, container) {
 
 function updateSelectionUi() {
   const count = selectedItems().length;
+  $("subTitle").textContent = state.deleteMode
+    ? "勾选要删除的文件；可跨页勾选，删除按钮会固定在这里。原始文件及其所在文件夹不会被删除。"
+    : (state.local
+      ? "仅管理本应用中的留档、解析记录和知识库索引；原始文件及其所在文件夹不会被修改或删除"
+      : "只读 · 数据操作仅在电脑端可用");
   $("deleteModeBtn").hidden = !state.local;
   $("deleteModeBtn").disabled = state.busy || !state.upstreamOk ||
     (state.deleteMode && count === 0);
@@ -899,6 +904,13 @@ function handleDeleteDialogKeydown(event) {
     event.preventDefault();
     event.stopPropagation();
     closeDeleteDialog(true);
+    return;
+  }
+  // 输入 Yes 后直接回车提交；只在确认输入框里拦截，避免抢走按钮自己的回车行为。
+  if (event.key === "Enter" && !event.isComposing
+      && document.activeElement === $("deleteConfirmation")) {
+    event.preventDefault();
+    if (!$("confirmDelete").disabled) { doDelete(); }
     return;
   }
   if (event.key !== "Tab") { return; }

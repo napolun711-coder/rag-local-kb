@@ -14,6 +14,8 @@
   minutes return to review with an explicit `track_not_found` reason
 - files page: show state, failure reason, and recovery actions for all
   non-terminal local jobs, not only skipped files
+- files page: keep the delete action bar visible while selecting across pages,
+  submit with Enter after typing `Yes`, and repeat the original-file boundary
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 
