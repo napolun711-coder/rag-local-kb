@@ -65,6 +65,7 @@ $CodeEntries = @(
     'CHANGELOG.md',
     'CONTRIBUTING.md',
     'SECURITY.md',
+    'CODE_OF_CONDUCT.md',
     '部署阶段.md',
     'pyproject.toml',
     'uv.lock',

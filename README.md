@@ -273,8 +273,8 @@ The memory core is implemented as a feature module under `app/features/memory`.
 It includes SQLite migrations, conversation storage, long-term memory, retrieval,
 context assembly, background jobs, and deletion audit primitives.
 
-Memory is disabled by default. When enabled, chat sessions are persisted and the
-memory panel at `/memory` provides local-only management:
+Memory is enabled by default with Balanced Local Memory. Chat sessions are
+persisted and the memory panel at `/memory` provides local-only management:
 
 - filter, inspect, edit, confirm, reject, expire, restore, soft-delete, and
   permanently forget memories
@@ -282,18 +282,22 @@ memory panel at `/memory` provides local-only management:
 - export and idempotently import a complete memory archive
 - explicitly clear all memory data by typing `CLEAR ALL`
 
+Defaults are 12 recent messages / 2,000 tokens, 1,200 memory-context tokens, and
+600 recall tokens across up to 6 recalled items. The Balanced defaults can be
+changed or disabled from `/settings`.
+
 The browser contract lives under `/api/memory/*`. Administrative aliases remain
 under `/api/memory/admin/*`. All write operations are restricted to the local
 machine.
 
-The optional extraction worker uses the existing job queue. It starts only when
-memory, automatic extraction, and the worker switch are all enabled.
+The extraction worker uses the existing job queue and is enabled by default.
+It can be disabled from `/settings`. The current extractor uses local rules; it
+does not make an additional model call.
 
 Memory runtime parameters can be edited from `/settings`: persistence, context
 injection, Tier 1 fast memory, context budgets, recent-history limits, historical
 recall, automatic extraction thresholds, and worker switches. These values are
-written to the application `.env` and require a service restart. The current
-extractor uses local rules; it does not make an additional model call.
+written to the application `.env` and require a service restart.
 
 Automatic supervision remains advisory. The memory page displays suggested
 reviews for missing sources, expiry, sensitive content, low confidence,
@@ -302,9 +306,10 @@ a suggestion changes only that advisory finding; it never changes, expires, or
 deletes a memory. A user must perform the corresponding memory action explicitly.
 ## Memory supervision
 
-When memory is enabled, the optional supervisor scans active memories for missing
-sources, expired validity windows, sensitive content, low confidence, duplicate
-content, stale confirmations, and instruction-like prompt-injection text. It is
+When memory is enabled (the default), the optional supervisor scans active
+memories for missing sources, expired validity windows, sensitive content, low
+confidence, duplicate content, stale confirmations, and instruction-like
+prompt-injection text. It is
 advisory only: it records findings and suggested actions, but never changes a
 memory status, content, expiry, or deletion state. A user must perform any
 correction explicitly from the memory page.
@@ -521,10 +526,16 @@ database or uploaded documents.
 
 ## Local security model
 
-The application binds to `127.0.0.1` by default. Administrative and write APIs
-are local-only. Do not expose the service directly to an untrusted network
-without adding authentication, authorization, CSRF protection, and transport
-security.
+The application binds to `127.0.0.1` by default. Loopback requests have full
+local access; settings and administrative writes are host-only.
+
+An optional same-LAN pairing surface is available for trusted personal devices.
+Pairing is approved on the host computer and uses an HttpOnly device cookie.
+Mobile chat/upload support is a release target and is still being hardened;
+until that work is complete, treat LAN access as trusted-network-only and do not
+expose it to the public internet or an untrusted LAN. Settings and permission
+management remain host-only. See [SECURITY.md](SECURITY.md) for the current
+boundary.
 
 ## Current limitations
 
@@ -537,8 +548,15 @@ security.
   files; it does not render arbitrary PDF pages. Cloud OCR has not been tested
   against a real external provider in this checkout.
 
-See `docs/PROJECT_STATE.md` for the current implementation state and remaining
-release work.
+See `CHANGELOG.md` for user-facing changes. `docs/PROJECT_STATE.md` is the
+internal development and acceptance log; it is not required for normal use.
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and test requirements.
+Participation is covered by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Report
+vulnerabilities privately as described in [SECURITY.md](SECURITY.md); do not
+open a public issue with exploit details.
 
 ## License
 

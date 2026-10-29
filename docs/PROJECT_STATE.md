@@ -587,9 +587,8 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Added `scripts/install_desktop_shortcut.ps1`. It writes only
   `RAG 本地知识库启动.lnk` on the current user's desktop and does not create an
   automatic startup item.
-- The actual shortcut was written and verified at
-  `<user-profile>\Desktop\RAG 本地知识库启动.lnk`, targeting Windows
-  PowerShell with the project launcher and working directory.
+- The actual shortcut was written and verified on the current user's desktop,
+  targeting Windows PowerShell with the project launcher and working directory.
 - Launcher self-test passed dependency imports, lifecycle script discovery,
   setup script discovery, and lifecycle status invocation.
 - Real desktop-shortcut reuse, cold start, duplicate launch, and window-close
@@ -1183,8 +1182,8 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Memory count stays 0 until new conversations trigger extraction. A real
   three-turn pronoun test, cross-session recall test, and memory edit/delete
   test are still required before describing the system as web-grade.
-- `external-reference-app` remains read-only and was not used as a data/config source;
-  no private reference data was read.
+- The external reference application remains read-only and was not used as a
+  data/config source; no private reference data was read.
 
 ## M1 real memory acceptance (2026-10-29)
 
@@ -1405,3 +1404,64 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   must be added to that list in a release that is applied before the path is
   required; code added under existing entries (`app/`, `static/`, `scripts/`,
   etc.) is handled automatically.
+
+## Open-source release audit and Wave A (2026-10-30)
+
+Read-only audit findings that drove this wave:
+
+- The current tree and Git history contained no common API-key, token, GitHub
+  PAT, Slack-token, or private-key patterns. `.env`, databases, uploads, logs,
+  virtual environments, and settings backups are not tracked.
+- Local user paths and a reference-application name were present in the internal
+  development log and in history. The development log is also shipped inside the
+  release ZIP.
+- The README said memory was disabled by default, while the runtime, examples,
+  and tests enable Balanced Local Memory.
+- LAN pairing existed, but chat/document/memory/settings were loopback-only
+  while some ingest/TTS routes were reachable by paired devices. The middleware,
+  UI copy, and security policy did not describe the same boundary.
+- There was no push/PR CI workflow and no test gate before the tag release.
+- Project metadata lacked authors, a license file reference, and Windows/version
+  classifiers.
+
+Wave A changes:
+
+- Rewrote all 41 commits to remove local user paths, the reference-application
+  name, and the personal author email. Commit author and committer email are now
+  `scholar@users.noreply.github.com`. A full pre-rewrite bundle remains under
+  `.updates/` (ignored by Git); the old refs and reflog were removed.
+- Sanitized the current development log. It no longer contains local paths or
+  private reference names.
+- Corrected the README to describe Balanced Local Memory as enabled by default,
+  including budgets and the local-rule extractor.
+- Documented the current LAN boundary honestly and recorded the release-gate
+  gaps: consistent authorization, CSRF/origin checks, per-device upload limits,
+  and automated access-boundary tests. Mobile chat/upload remains a product
+  target; it is not canceled or claimed as complete.
+- Added project authors, license-file metadata, Beta status, and Windows/Python
+  classifiers to `pyproject.toml`.
+- Added `.gitattributes`, `.editorconfig`, `CODE_OF_CONDUCT.md`, issue templates,
+  and a pull-request template. Added the code of conduct to the updater and
+  release-package code-entry lists.
+
+Wave A verification:
+
+- Full suite: 115 tests passed.
+- All static JavaScript syntax checks passed.
+- All PowerShell scripts parsed; modified scripts retain their UTF-8 BOM.
+- TOML and GitHub issue/workflow YAML parsed successfully.
+- Release package built with 184 entries; it contains the code of conduct and
+  GitHub templates, and no `data/`, `.env`, or virtual environment.
+- Public-tree and package scans found no local user paths, reference-app name,
+  personal email, or placeholder path markers.
+
+Remaining risks / next wave:
+
+- LAN access still needs the Wave B authorization matrix, CSRF/origin
+  protection, per-device upload limits, and tests. Do not expose the current LAN
+  surface to an untrusted network.
+- CI and a tag-release test gate are not implemented yet.
+- No GitHub remote or repository URL is configured, so release-workflow and
+  GitHub metadata verification still require the actual repository.
+- The `pyproject.toml` wheel still packages only `app`; GitHub ZIP is the
+  supported distribution unless static assets are added to the wheel.

@@ -1,14 +1,17 @@
 # Contributing
 
-Thanks for improving Local RAG Knowledge Base.
+Thanks for improving Local RAG Knowledge Base. By participating, you agree to
+the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Before contributing
 
 - Do not commit API keys, `.env` files, databases, uploads, parsed documents,
   runtime logs, or files from `config/settings-backups/`.
 - Use only synthetic or temporary data for tests and examples.
-- Keep the application local-only unless a separately reviewed authentication
-  and authorization design is included.
+- Keep loopback-only behavior by default. Changes to the optional same-LAN
+  pairing surface must include authorization-boundary tests, CSRF/origin
+  protection, upload limits, and updated security documentation. Do not expose
+  the application to the public internet.
 - Preserve the modular-monolith structure and existing public API contracts.
 
 ## Development setup

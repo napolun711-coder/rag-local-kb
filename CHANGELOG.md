@@ -51,6 +51,11 @@
   during dependency sync
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
+- release hygiene: correct the documented memory defaults, document the current
+  LAN boundary and release-gate gaps, add project metadata, contributor
+  templates, `.gitattributes`, `.editorconfig`, and a code of conduct; remove
+  local paths, the reference-application name, and the personal author email from
+  Git history
 
 ## 0.1.0
 

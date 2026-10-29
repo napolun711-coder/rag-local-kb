@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a focused improvement to the local knowledge base.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior and its boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Data, security, and compatibility
+      description: Note any effects on local-only access, storage, migrations, or upgrades.
+    validations:
+      required: false
