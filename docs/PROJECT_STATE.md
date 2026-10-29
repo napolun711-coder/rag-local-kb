@@ -1609,9 +1609,19 @@ Remaining release work:
   asset source.
 - Validated the release ZIP tests under Python 3.12 in an isolated extraction:
   `uv sync --frozen --no-dev --python 3.12`, then 127/127 tests passed.
-- Release target created at `https://github.com/napolun711-coder/rag-local-kb`.
+- Release target: `https://github.com/napolun711-coder/rag-local-kb`.
   Real repository URLs were written to `pyproject.toml`, README, the issue
   security link, the updater example, and release documentation.
-- `origin` is configured and `main` has been pushed. The first GitHub CI run is
-  pending/tracked; the local `v0.1.0` tag has not been created yet.
-- Formal services were not restarted and remain healthy on 0.1.0.
+- `origin` is configured and `main` has been pushed. The first CI run exposed a
+  privacy-scan false positive from the repository owner prefix; the scan now
+  matches the full email. The fixed CI run passed.
+- Annotated `v0.1.0` tag created and pushed at `eff0e50`.
+- Release workflow completed successfully: test job built/validated the package
+  and uploaded the artifact; release job published:
+  `https://github.com/napolun711-coder/rag-local-kb/releases/tag/v0.1.0`
+- Published assets downloaded and verified:
+  - `local-rag-kb-0.1.0-win64.zip`
+  - `local-rag-kb-0.1.0-win64.zip.sha256`
+  - SHA256 `6a8fb7a40d3206684f3c86048d8d75d88e2a572751f1abada819400ecec68e2a`
+- Formal services were not restarted and remain healthy on 0.1.0. Clean test
+  services were stopped.
