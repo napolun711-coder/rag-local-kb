@@ -2,6 +2,47 @@
 
 A modular monolith for a self-hosted retrieval-augmented knowledge base.
 
+**Status:** 0.1.0 beta, Windows first, local-first. Phone access is optional and
+intended for a trusted private LAN.
+
+## Quick start (Windows)
+
+For normal use, download the latest **Release ZIP**, not the source archive:
+
+1. Install [Ollama](https://ollama.com/) and pull the local models:
+   ```powershell
+   ollama pull bge-m3
+   ollama pull qwen2.5:3b
+   ```
+2. Extract `local-rag-kb-<version>-win64.zip` to a normal folder.
+3. Double-click `deploy.cmd` once. It provisions project-local dependencies,
+   checks Ollama/models, and starts the services.
+4. Double-click `start.cmd` for daily use. The page normally opens at
+   <http://127.0.0.1:18080/web>.
+
+You do not need to install Python, Git, or uv first; `deploy.cmd` provisions
+what it needs inside the project folder. If Ollama or a model is missing, it
+stops with the exact `ollama pull` command instead of pretending setup succeeded.
+
+### First-run checklist
+
+- [ ] `deploy.cmd` finishes without a red failure
+- [ ] `start.cmd` opens the web page
+- [ ] Upload one small `.txt` or `.md` file
+- [ ] Wait for the review state, then confirm ingestion
+- [ ] Ask a question that should use that document
+- [ ] Restart with `start.cmd` and confirm the document/history is still there
+
+### Optional phone/LAN access
+
+Open **Settings → LAN device authorization** on the computer, pair the phone on
+the same trusted private LAN, then open the shown address. Settings are
+read-only on the phone. This uses plain HTTP and has no internet-grade
+authentication; do not expose it to the public internet or an untrusted network.
+
+If something does not work, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+Release/recovery procedures are in [docs/RELEASE.md](docs/RELEASE.md).
+
 ## MVP capabilities
 
 - FastAPI web application with chat, document, settings, and memory pages
@@ -25,6 +66,9 @@ A modular monolith for a self-hosted retrieval-augmented knowledge base.
 - Ollama with an embedding model such as `bge-m3:latest` when embeddings are used
 - An OpenAI-compatible chat-completions endpoint, or a local Ollama chat model
 - The isolated LightRAG engine environment under `services/lightrag_engine/`
+
+The supported distribution is the GitHub Release ZIP. The Python wheel contains
+the application package only and is not a standalone web-UI distribution.
 
 ## One-click deploy and start (Windows)
 

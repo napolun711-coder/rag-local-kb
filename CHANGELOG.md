@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-10-30
 
 - upload chain: `保存并入库` now submits, image caption/document naming works,
   and edits keep a previous-content backup
@@ -66,10 +66,10 @@
   three-dot menu, and give the knowledge graph canvas the full remaining height
 - release: add Windows CI and make tag releases depend on tests, JavaScript/
   PowerShell checks, checksum verification, and release-package content scans
+- docs: add a Windows quick start, first-run checklist, troubleshooting guide,
+  release checklist, and trusted-LAN guidance for new users
 
-## 0.1.0
-
-Initial local MVP:
+## 0.0.0 - Initial local MVP
 
 - local FastAPI application and static web UI
 - document upload, parsing, quality review, and manual knowledge submission

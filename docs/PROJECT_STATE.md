@@ -1564,3 +1564,38 @@ Remaining:
   them. This remains a B2 UX item, not a release-blocking auth change.
 - The isolated clean services were stopped after verification. Formal services
   remain on 0.1.0 until a deliberate restart.
+
+## Documentation and release preparation (2026-10-30)
+
+- Added a prominent Windows quick start for non-technical users: install Ollama,
+  pull `bge-m3` and `qwen2.5:3b`, extract the Release ZIP, run `deploy.cmd`,
+  then `start.cmd`.
+- Added a first-run checklist covering deploy, page open, upload, review,
+  ingestion, chat, and restart persistence.
+- Added `docs/TROUBLESHOOTING.md` for common model, dependency, port, knowledge
+  service, upload, settings, update, and phone/LAN problems.
+- Added `docs/RELEASE.md` with the release gate, clean-install check, tag/publish
+  flow, artifact verification, and rollback rules.
+- Documented that the GitHub Release ZIP is the supported distribution; the
+  Python wheel is not a standalone web-UI distribution.
+- Added a small trusted-LAN quick note for phone users; no new authentication or
+  performance work was added.
+- Finalized `CHANGELOG.md` under `0.1.0 - 2026-10-30`.
+
+Verification:
+
+- README links resolve to the new troubleshooting and release documents.
+- Both new documents are included in the `docs` package entry.
+- Test suite remains at 127 passing tests.
+- Final package scan remains clean for runtime data, secrets, local paths, and
+  placeholder path markers.
+- Formal services remain on 0.1.0 until a deliberate restart.
+
+Remaining release work:
+
+- Create the GitHub repository, set the real remote/URL, push `main`, and verify
+  the CI workflow on GitHub.
+- Tag `v0.1.0`, wait for the tested release artifact, download it again, and run
+  the README first-run checklist from that download.
+- No further feature, authentication, or performance work is planned for this
+  release.
