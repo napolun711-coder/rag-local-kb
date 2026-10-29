@@ -1216,3 +1216,44 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   memory-answer path for direct personal-fact questions.
 - Isolated services were stopped; formal memory status remains enabled with
   0 memories and 6 sessions / 25 messages; no formal test chat was written.
+
+## Direct personal-fact memory answers (2026-10-29)
+
+- Added a deterministic chat path for direct personal-fact questions. When a
+  question explicitly asks about the user's own remembered information and a
+  high-confidence (`>= 0.8`) active, normal-sensitivity memory is retrieved with
+  reason `relevant`, the answer is built directly from up to three memory
+  contents. The generation model is not called.
+- Knowledge-base/document lookups are excluded from this path, as are ordinary
+  questions and memories with lower confidence, non-active status, sensitive
+  classification, or no relevant match. Those continue through the normal model.
+- Non-stream `/chat` returns `memory_direct=true` and `memory_ids`; streamed
+  chat emits a `memory` event before the answer chunk. The frontend adds the
+  note “本轮回答直接来自本地长期记忆，未调用生成模型。”
+- This closes the observed cross-session failure where retrieval and context
+  injection were correct but `qwen2.5:3b` answered `SkyProject` instead of the
+  stored marker.
+
+### Verification
+
+- Unit tests: 5 memory tests passed, including direct-fact triggering and
+  knowledge-base lookup exclusion.
+- Isolated real-engine cross-session retest: the new-session question
+  “我的项目代号是什么？只回答代号。” returned
+  `我的项目代号是 ORBIT-LANTERN-7421` in 0.150 seconds with
+  `memory_direct=true` and memory id `mem_694f...`.
+- Browser test showed the answer plus
+  “本轮回答直接来自本地长期记忆，未调用生成模型。”
+- Isolated services and Chrome were stopped; formal data was not written.
+
+### Remaining risks
+
+- Direct answers require a clear personal-fact question pattern and a
+  high-confidence relevant memory. No/pending/conflicted memory still falls
+  back to the model and can hallucinate.
+- The path returns stored content rather than generating a polished sentence;
+  up to three memories are joined with separators.
+- The formal runtime has 0 long-term memories until new conversations trigger
+  extraction; existing 6 sessions / 25 messages were not backfilled.
+- Full web-grade memory still needs larger-model evaluation for non-direct
+  questions, plus memory conflict/decay and broader acceptance tests.

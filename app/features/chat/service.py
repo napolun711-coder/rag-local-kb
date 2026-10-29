@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple
 
@@ -61,6 +62,72 @@ def _query_error_event(exc: KnowledgeHTTPError) -> Dict[str, Any]:
     }
 
 
+_PERSONAL_FACT_RE = re.compile(
+    r"(我的|我叫|你还记得|记得我|我之前|我的项目|我的偏好|我的名字|我的代号|"
+    r"我的邮箱|我的电话|my\s+(?:project|preference|name|code|email|phone)|"
+    r"what\s+is\s+my|do\s+you\s+remember)",
+    re.I,
+)
+_DIRECT_QUESTION_RE = re.compile(
+    r"(是什么|叫什么|是多少|哪个|什么|吗|？|\?|what|which|who|remember)",
+    re.I,
+)
+_KB_LOOKUP_RE = re.compile(
+    r"(资料库|知识库|文档|文件|资料中|原文|上传|knowledge\s*base|document|file)",
+    re.I,
+)
+_DIRECT_MEMORY_MIN_CONFIDENCE = 0.8
+
+
+def _direct_memory_answer(context: Any, question: str) -> Optional[Tuple[str, List[str]]]:
+    """Answer a direct personal-fact question from high-confidence active memory.
+
+    Only runs when the question explicitly asks about the user's own stored
+    information. Knowledge-base lookups and ordinary questions keep the normal
+    model path. This keeps small models from inventing a project name when the
+    correct memory was already retrieved.
+    """
+    if context is None:
+        return None
+    text = str(question or "").strip()
+    if not text or _KB_LOOKUP_RE.search(text):
+        return None
+    if not (_PERSONAL_FACT_RE.search(text) and _DIRECT_QUESTION_RE.search(text)):
+        return None
+    lines: List[str] = []
+    ids: List[str] = []
+    for item in getattr(context, "memory_items", []) or []:
+        if str(item.get("reason") or "") != "relevant":
+            continue
+        memory = item.get("memory") if isinstance(item.get("memory"), dict) else {}
+        if str(memory.get("status") or "") != "active":
+            continue
+        if str(memory.get("sensitivity") or "normal") != "normal":
+            continue
+        try:
+            confidence = float(memory.get("confidence") or 0)
+        except (TypeError, ValueError):
+            confidence = 0
+        if confidence < _DIRECT_MEMORY_MIN_CONFIDENCE:
+            continue
+        content = str(memory.get("content") or "").strip()
+        if not content:
+            continue
+        subject = str(memory.get("subject") or "").strip()
+        line = content if (not subject or subject in content) else f"{subject}：{content}"
+        if line in lines:
+            continue
+        lines.append(line)
+        memory_id = str(memory.get("id") or "")
+        if memory_id:
+            ids.append(memory_id)
+        if len(lines) >= 3:
+            break
+    if not lines:
+        return None
+    return "；".join(lines), ids
+
+
 class ChatService:
     def __init__(self, gateway: Optional[KnowledgeGateway] = None) -> None:
         self.gateway = gateway or get_knowledge_gateway()
@@ -109,6 +176,25 @@ class ChatService:
         source = self._source(request)
         persistence = chat_bridge.begin_chat(request, source=source)
         context, context_status = chat_bridge.build_context(persistence, request.message)
+        direct = _direct_memory_answer(context, request.message)
+        if direct is not None:
+            answer, memory_ids = direct
+            payload = {
+                "response": answer,
+                "references": [],
+                "response_time": 0,
+                "memory_direct": True,
+                "memory_ids": memory_ids,
+            }
+            chat_bridge.finish_from_payload(
+                persistence,
+                payload,
+                source="memory",
+                trace=context.trace if context is not None else None,
+                context_status=context_status,
+                bypass=request.force_bypass,
+            )
+            return payload, persistence, context_status
         options = self._upstream_options(context)
         try:
             payload = self.gateway.query(
@@ -135,10 +221,20 @@ class ChatService:
         source = self._source(request)
         persistence = chat_bridge.begin_chat(request, source=source)
         context, context_status = chat_bridge.build_context(persistence, request.message)
+        direct = _direct_memory_answer(context, request.message)
+        if direct is not None:
+            source = "memory"
         options = self._upstream_options(context)
         started = time.perf_counter()
 
         def events() -> Iterator[Dict[str, Any]]:
+            if direct is not None:
+                answer, memory_ids = direct
+                yield {"type": "memory", "items": memory_ids}
+                yield {"type": "chunk", "text": answer}
+                yield {"type": "done", "response_time": 0, "memory_direct": True}
+                yield {"type": "end"}
+                return
             if context_status.get("status") == "failed":
                 yield {
                     "type": "context",

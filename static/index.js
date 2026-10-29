@@ -1686,6 +1686,16 @@ function appendBypassNote(view) {
   view.__bypassNote = note;
 }
 
+function appendMemoryNote(view) {
+  if (!view || !Array.isArray(view.__memoryDirect) || !view.__memoryDirect.length
+      || view.__memoryNote) { return; }
+  const note = document.createElement("div");
+  note.className = "answer-note info";
+  note.textContent = "本轮回答直接来自本地长期记忆，未调用生成模型。";
+  view.content.appendChild(note);
+  view.__memoryNote = note;
+}
+
 function finalizeAnswer(view, fullText, references, persist) {
   // 滴流收尾与异常 / 中断路径都可能触发定稿：只允许一次，否则参考资料与操作条会重复追加
   if (view.__finalized) { return; }
@@ -1794,6 +1804,7 @@ function finalizeAnswer(view, fullText, references, persist) {
   appendNoContextActions(view);
   appendErrorActions(view);
   appendBypassNote(view);
+  appendMemoryNote(view);
   appendContentNote(view, view.__genMeta || null);
   appendUpstreamRetryNote(view);
   appendAnswerActions(view, shown);
@@ -2214,6 +2225,10 @@ async function streamAnswer(question, options) {
             label: "暂未检索到相关资料",
             detail: "你仍然可以选择继续对话"
           });
+          continue;
+        }
+        if (event.type === "memory") {
+          view.__memoryDirect = Array.isArray(event.items) ? event.items : [];
           continue;
         }
         if (event.type === "references") {

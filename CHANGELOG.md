@@ -34,6 +34,9 @@
   fast memory, cross-session recall, and rule-based background extraction are on
   by default, with 12 recent messages / 2,000 tokens, 1,200 memory tokens, and
   600 recall tokens
+- memory: direct personal-fact questions are answered from high-confidence local
+  memories without calling the generation model, with a UI note and protection
+  against treating knowledge-base lookups as personal memory
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

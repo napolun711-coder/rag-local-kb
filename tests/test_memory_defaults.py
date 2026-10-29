@@ -94,6 +94,35 @@ class BalancedMemoryDefaultTests(unittest.TestCase):
         )
         self.assertIn("Atlas", " ".join(item["content"] for item in context.history) + context.memory_prompt)
 
+    def test_direct_memory_answer_handles_personal_facts_only(self) -> None:
+        from app.features.chat.service import _direct_memory_answer
+
+        session = self.store.create_session(title="Atlas")
+        memory = self.store.memories.create(
+            content="我的项目代号是 ORBIT-LANTERN-7421",
+            subject="项目代号",
+            kind="fact",
+            scope="global",
+            source_type="user_explicit",
+            confidence=1.0,
+            status="active",
+        )
+        context = build_chat_context(
+            self.store,
+            session["id"],
+            "我的项目代号是什么？",
+            settings=MemorySettings(),
+        )
+        self.assertIsNotNone(context)
+        result = _direct_memory_answer(context, "我的项目代号是什么？只回答代号。")
+        self.assertIsNotNone(result)
+        answer, ids = result
+        self.assertIn("ORBIT-LANTERN-7421", answer)
+        self.assertIn(memory["id"], ids)
+        self.assertIsNone(
+            _direct_memory_answer(context, "知识库里的项目代号是什么？")
+        )
+
     def test_upstream_options_send_history_and_memory(self) -> None:
         session = self.store.create_session(title="本地项目")
         user = self.store.add_user_message(session["id"], "记住我喜欢简洁回答。")
