@@ -605,6 +605,40 @@
     if (winner.category !== "upload") { return winner; }
     const uploads = activeUploads();
     if (uploads.length <= 1) { return winner; }
+    const batches = uploads.filter(function (task) { return task.batch; });
+    if (batches.length) {
+      const individual = uploads.filter(function (task) { return !task.batch; }).length;
+      const totalFiles = batches.reduce(function (sum, task) {
+        return sum + Number(task.fileCount || 0);
+      }, individual);
+      const waiting = batches.reduce(function (sum, task) {
+        return sum + Number(task.waitingCount || 0);
+      }, 0);
+      const activeCount = batches.reduce(function (sum, task) {
+        return sum + Number(task.activeCount || 0);
+      }, 0) + individual;
+      const done = batches.reduce(function (sum, task) {
+        return sum + Number(task.doneCount || 0);
+      }, 0);
+      const waitingTask = batches.filter(function (task) {
+        return task.motion === "waiting" || task.motion === "error";
+      })[0] || winner;
+      const parts = ["共 " + totalFiles + " 份"];
+      if (waiting) { parts.push("待处理 " + waiting); }
+      if (activeCount) { parts.push("处理中 " + activeCount); }
+      if (done) { parts.push("已完成 " + done); }
+      const motion = waiting
+        ? (batches.some(function (task) { return task.motion === "error"; }) ? "error" : "waiting")
+        : (activeCount ? "working" : "success");
+      return Object.assign({}, waitingTask, {
+        motion: motion,
+        label: waiting ? "资料队列需要处理"
+          : (activeCount ? "资料队列处理中" : "资料队列即将完成"),
+        detail: parts.join(" · "),
+        object: "",
+        detailAction: waitingTask.detailAction || null
+      });
+    }
     return Object.assign({}, winner, {
       label: "正在处理资料队列…",
       detail: "共 " + uploads.length + " 份资料在队列中",

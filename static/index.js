@@ -2333,7 +2333,7 @@ function updateUploadProgress(card, data) {
   }
 }
 
-function createUploadCard(fileName) {
+function createUploadCard(fileName, parent) {
   const card = document.createElement("div");
   card.className = "upload-card";
   card.__workId = newWorkId("upload");
@@ -2368,9 +2368,451 @@ function createUploadCard(fileName) {
   card.__fileId = "";
   card.__actions = actionsNode;
   card.__progress = progressNode;
-  messages.appendChild(card);
-  scrollBottom(true);          // 用户刚选了文件：无条件回到底部
+  (parent || messages).appendChild(card);
+  if (!parent) { scrollBottom(true); }   // 用户刚选了文件：无条件回到底部
   return card;
+}
+
+// ---------- 批量上传：一个批次卡 + 一个聚合轮询器 ----------
+// 大批量时不再为每个文件建一张长期轮询的卡片；批次卡只做汇总，明细按需展开，
+// 展开后仍复用单文件卡片（确认 / 编辑 / 跳过等动作不变）。
+const BATCH_THRESHOLD = 5;
+const BATCH_POLL_MS = 4000;
+const BATCH_MAX_POLLS = 450;
+const UPLOAD_BATCHES = [];
+const BATCH_ATTENTION = { review: 1, needs_ocr: 1, blocked: 1, failed: 1, skipped: 1 };
+const BATCH_TERMINAL = { done: 1, failed: 1, skipped: 1 };
+const BATCH_STATE_LABELS = {
+  uploading: "上传中",
+  processing: "解析中",
+  parsing: "解析中",
+  checking: "校验中",
+  ocr: "OCR 识别中",
+  review: "待确认入库",
+  needs_ocr: "需要 OCR",
+  blocked: "未通过校验",
+  failed: "处理失败",
+  skipped: "已跳过",
+  ingesting: "入库中",
+  done: "已入库",
+  error: "上传失败",
+  unknown: "已提交"
+};
+
+function newBatchId() {
+  const d = new Date();
+  const pad = function (value) { return String(value).padStart(2, "0"); };
+  const stamp = String(d.getFullYear()) + pad(d.getMonth() + 1) + pad(d.getDate())
+    + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+  let tail = "";
+  if (window.crypto && window.crypto.getRandomValues) {
+    const bytes = new Uint8Array(4);
+    window.crypto.getRandomValues(bytes);
+    tail = Array.prototype.map.call(bytes, function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  } else {
+    tail = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
+  }
+  return "batch_" + stamp + "_" + tail;
+}
+
+function batchBadgeClass(state) {
+  if (state === "review") { return "review"; }
+  if (state === "needs_ocr" || state === "uploading" || state === "processing"
+      || state === "parsing" || state === "checking" || state === "ocr"
+      || state === "ingesting") { return "processing"; }
+  if (state === "done") { return "done"; }
+  if (state === "skipped") { return "skipped"; }
+  if (state === "blocked") { return "blocked"; }
+  if (state === "failed" || state === "error") { return "failed"; }
+  return "";
+}
+
+function createUploadBatch(batchId, expectedTotal) {
+  const root = document.createElement("section");
+  root.className = "upload-batch";
+  root.dataset.batchId = batchId;
+  const head = document.createElement("div");
+  head.className = "upload-batch-head";
+  const title = document.createElement("div");
+  title.className = "upload-batch-title";
+  title.textContent = "资料批次 · " + Math.max(0, Number(expectedTotal) || 0) + " 份";
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "upload-batch-toggle";
+  toggle.textContent = "展开明细";
+  const link = document.createElement("a");
+  link.className = "upload-batch-link";
+  link.href = "/files?batch=" + encodeURIComponent(batchId);
+  link.textContent = "文件管理";
+  link.title = "在文件管理中按这个批次查看状态、失败原因并重试失败项";
+  const summary = document.createElement("div");
+  summary.className = "upload-batch-summary";
+  summary.textContent = "准备上传…";
+  const bar = document.createElement("div");
+  bar.className = "upload-batch-bar";
+  bar.innerHTML = "<i></i>";
+  head.appendChild(title);
+  head.appendChild(toggle);
+  head.appendChild(link);
+  head.appendChild(summary);
+  head.appendChild(bar);
+  const body = document.createElement("div");
+  body.className = "upload-batch-list";
+  body.hidden = true;
+  const detail = document.createElement("div");
+  detail.className = "upload-batch-detail";
+  detail.hidden = true;
+  root.appendChild(head);
+  root.appendChild(body);
+  root.appendChild(detail);
+  messages.appendChild(root);
+  scrollBottom(true);
+
+  const batch = {
+    id: batchId,
+    root: root,
+    body: body,
+    detail: detail,
+    title: title,
+    summary: summary,
+    toggle: toggle,
+    bar: bar,
+    workId: "batch-" + batchId,
+    expectedTotal: Math.max(0, Number(expectedTotal) || 0),
+    uploaded: 0,
+    attempted: 0,
+    localErrors: 0,
+    items: new Map(),
+    attempts: 0,
+    polling: false,
+    uploadDone: false,
+    autoOpened: false,
+    finished: false,
+    lastData: null
+  };
+  toggle.addEventListener("click", function () {
+    setBatchOpen(batch, batch.body.hidden);
+  });
+  UPLOAD_BATCHES.push(batch);
+  if (window.WorkCompanion) {
+    window.WorkCompanion.begin(batch.workId, {
+      category: "upload",
+      batch: true,
+      fileCount: batch.expectedTotal,
+      waitingCount: 0,
+      activeCount: 0,
+      doneCount: 0,
+      motion: "working",
+      label: "资料批次处理中",
+      detail: "已提交 0/" + batch.expectedTotal,
+      detailAction: function () { openUploadBatch(batch); }
+    });
+  }
+  updateBatchUi(batch, null);
+  return batch;
+}
+
+function setBatchOpen(batch, open) {
+  batch.body.hidden = !open;
+  if (!open) { batch.detail.hidden = true; }
+  batch.toggle.textContent = open
+    ? "收起明细"
+    : ("展开明细" + (batch.items.size ? "（" + batch.items.size + "）" : ""));
+}
+
+function openUploadBatch(batch) {
+  if (!batch) { return; }
+  setBatchOpen(batch, true);
+  try { batch.root.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (err) { /* 兼容 */ }
+}
+
+function ensureBatchItem(batch, item) {
+  const key = String((item && (item.file_id || item.tempId)) || "");
+  if (!key) { return null; }
+  let entry = batch.items.get(key);
+  if (!entry) {
+    const row = document.createElement("div");
+    row.className = "upload-batch-row";
+    row.dataset.fileId = key;
+    const name = document.createElement("div");
+    name.className = "upload-batch-name";
+    const state = document.createElement("span");
+    state.className = "badge";
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "upload-batch-action";
+    const reason = document.createElement("div");
+    reason.className = "upload-batch-reason";
+    row.appendChild(name);
+    row.appendChild(state);
+    row.appendChild(action);
+    row.appendChild(reason);
+    batch.body.appendChild(row);
+    entry = {
+      key: key,
+      fileId: String(item.file_id || ""),
+      name: String(item.name || item.filename || key),
+      state: "",
+      detail: "",
+      knowledgeError: "",
+      progress: {},
+      row: row,
+      nameNode: name,
+      stateNode: state,
+      reasonNode: reason,
+      actionNode: action,
+      card: null
+    };
+    batch.items.set(key, entry);
+    action.addEventListener("click", function () {
+      if (entry.fileId) { openBatchItem(batch, entry); }
+    });
+  }
+  entry.fileId = String(item.file_id || entry.fileId || "");
+  entry.name = String(item.name || item.filename || entry.name);
+  entry.state = String(item.state || entry.state || "unknown");
+  entry.detail = String(item.detail || "");
+  entry.knowledgeError = String(item.knowledge_error || "");
+  entry.progress = item.progress || {};
+  entry.nameNode.textContent = entry.name;
+  entry.stateNode.textContent = BATCH_STATE_LABELS[entry.state] || entry.state;
+  entry.stateNode.className = "badge " + batchBadgeClass(entry.state);
+  const reason = entry.knowledgeError || entry.detail;
+  entry.reasonNode.textContent = reason;
+  entry.reasonNode.hidden = !reason;
+  entry.row.dataset.state = entry.state;
+  entry.row.classList.toggle("attention", Boolean(BATCH_ATTENTION[entry.state]));
+  entry.actionNode.hidden = !entry.fileId;
+  entry.actionNode.textContent = BATCH_ATTENTION[entry.state] ? "处理" : "查看";
+  entry.actionNode.title = BATCH_ATTENTION[entry.state]
+    ? "展开这份资料，执行入库 / 跳过 / 修改正文 / 重试"
+    : "展开查看这份资料的状态";
+  return entry;
+}
+
+function openBatchItem(batch, entry) {
+  if (!batch || !entry || !entry.fileId) { return; }
+  batch.detail.hidden = false;
+  batch.detail.innerHTML = "";
+  const card = createUploadCard(entry.name || entry.fileId, batch.detail);
+  card.__fileId = entry.fileId;
+  card.__batch = batch;
+  card.__deferCompanion = true;
+  card.__policy = "unified";
+  card.__policyDone = true;
+  entry.card = card;
+  trackCard(entry.fileId, card);
+  setBatchOpen(batch, true);
+  fetchIngestStatus(card, entry.fileId);
+  try { card.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (err) { /* 兼容 */ }
+}
+
+function addBatchLocalError(batch, name, detail) {
+  if (!batch) { return; }
+  batch.localErrors += 1;
+  ensureBatchItem(batch, {
+    tempId: "localerr_" + batch.localErrors + "_" + Date.now(),
+    name: name || "未命名文件",
+    state: "error",
+    detail: String(detail || "上传失败")
+  });
+  updateBatchUi(batch, batch.lastData);
+}
+
+function batchCounts(batch, data) {
+  const counts = (data && data.counts) || {};
+  const processing = ["processing", "parsing", "checking", "ocr"]
+    .reduce(function (sum, key) { return sum + Number(counts[key] || 0); }, 0);
+  const review = Number(counts.review || 0) + Number(counts.needs_ocr || 0);
+  const blocked = Number(counts.blocked || 0);
+  const failed = Number(counts.failed || 0) + Number(batch.localErrors || 0);
+  const done = Number(counts.done || 0);
+  const skipped = Number(counts.skipped || 0);
+  const ingesting = Number(counts.ingesting || 0);
+  const uploaded = data ? Number(data.total || 0) : Number(batch.uploaded || 0);
+  const total = Math.max(Number(batch.expectedTotal || 0), uploaded);
+  const active = processing + ingesting;
+  const terminal = done + skipped + failed;
+  return {
+    total: total,
+    uploaded: uploaded,
+    processing: processing,
+    review: review,
+    blocked: blocked,
+    failed: failed,
+    done: done,
+    skipped: skipped,
+    ingesting: ingesting,
+    active: active,
+    terminal: terminal,
+    waiting: review + blocked + failed
+  };
+}
+
+function batchSummaryParts(counts, uploadDone) {
+  const parts = [];
+  if (!uploadDone) {
+    parts.push("已提交 " + counts.uploaded + "/" + counts.total);
+  } else {
+    parts.push("共 " + counts.total + " 份");
+  }
+  if (counts.processing) { parts.push("解析/排队 " + counts.processing); }
+  if (counts.review) { parts.push("待确认 " + counts.review); }
+  if (counts.blocked) { parts.push("需修复 " + counts.blocked); }
+  if (counts.ingesting) { parts.push("入库中 " + counts.ingesting); }
+  if (counts.done) { parts.push("完成 " + counts.done); }
+  if (counts.skipped) { parts.push("跳过 " + counts.skipped); }
+  if (counts.failed) { parts.push("失败 " + counts.failed); }
+  return parts;
+}
+
+function updateBatchCompanion(batch, counts) {
+  if (!window.WorkCompanion || batch.finished) { return; }
+  const detail = batchSummaryParts(counts, batch.uploadDone).join(" · ");
+  if (batch.uploadDone && counts.total > 0 && counts.terminal >= counts.total
+      && counts.active === 0 && counts.review === 0 && counts.blocked === 0) {
+    batch.finished = true;
+    window.WorkCompanion.finish(batch.workId, {
+      category: "upload",
+      batch: true,
+      fileCount: counts.total,
+      waitingCount: counts.review + counts.blocked + counts.failed,
+      activeCount: counts.active,
+      doneCount: counts.done + counts.skipped,
+      motion: counts.failed ? "error" : "success",
+      label: counts.failed ? "资料批次完成（含失败）" : "资料批次完成",
+      detail: detail,
+      detailAction: function () { openUploadBatch(batch); }
+    });
+    return;
+  }
+  if (counts.review || counts.blocked || counts.failed) {
+    window.WorkCompanion.update(batch.workId, {
+      category: "upload",
+      batch: true,
+      fileCount: counts.total,
+      waitingCount: counts.review + counts.blocked + counts.failed,
+      activeCount: counts.active,
+      doneCount: counts.done + counts.skipped,
+      motion: "waiting",
+      label: "资料批次需要处理",
+      detail: detail,
+      detailAction: function () { openUploadBatch(batch); }
+    });
+  } else {
+    window.WorkCompanion.update(batch.workId, {
+      category: "upload",
+      batch: true,
+      fileCount: counts.total,
+      waitingCount: counts.review + counts.blocked + counts.failed,
+      activeCount: counts.active,
+      doneCount: counts.done + counts.skipped,
+      motion: "working",
+      label: "资料批次处理中",
+      detail: detail,
+      detailAction: function () { openUploadBatch(batch); }
+    });
+  }
+}
+
+function updateBatchUi(batch, data) {
+  if (!batch) { return; }
+  const counts = batchCounts(batch, data);
+  const parts = batchSummaryParts(counts, batch.uploadDone);
+  batch.title.textContent = "资料批次 · " + counts.total + " 份" + (batch.uploadDone ? "" : "（上传中）");
+  batch.summary.textContent = parts.join(" · ");
+  batch.toggle.textContent = batch.body.hidden
+    ? ("展开明细" + (batch.items.size ? "（" + batch.items.size + "）" : ""))
+    : "收起明细";
+  const pct = counts.total ? Math.min(100, Math.round(counts.terminal / counts.total * 100)) : 0;
+  batch.bar.classList.toggle("determinate", counts.total > 0);
+  const rail = batch.bar.querySelector("i");
+  if (rail) { rail.style.width = pct + "%"; }
+  if (data && Number(data.items_total || 0) > (data.items || []).length) {
+    batch.summary.textContent += " · 另有 " + (Number(data.items_total) - (data.items || []).length)
+      + " 份未列出，请在文件管理查看";
+  }
+  updateBatchCompanion(batch, counts);
+  if (!batch.autoOpened && batch.uploadDone
+      && (counts.review || counts.blocked || counts.failed) && batch.items.size) {
+    batch.autoOpened = true;
+    setBatchOpen(batch, true);
+    setToast("资料批次中有 " + (counts.review + counts.blocked + counts.failed)
+      + " 份需要你处理，点击「处理」逐份确认", "ok");
+  }
+}
+
+function applyBatchData(batch, data) {
+  if (!batch || !data) { return; }
+  batch.lastData = data;
+  (data.items || []).forEach(function (item) {
+    const entry = ensureBatchItem(batch, item);
+    if (entry && entry.card && !entry.card.__batchFetching
+        && String(entry.card.__state || "") !== String(item.state || "")) {
+      entry.card.__batchFetching = true;
+      fetchIngestStatus(entry.card, entry.fileId).finally(function () {
+        entry.card.__batchFetching = false;
+      });
+    }
+  });
+  updateBatchUi(batch, data);
+}
+
+function batchAfterAction(card) {
+  const batch = card && card.__batch;
+  if (!batch) { return; }
+  refreshBatchOnce(batch).then(function (data) {
+    if (data && data.groups && Number(data.groups.active || 0) > 0) {
+      batchRefresh(batch, true);
+    }
+  });
+}
+
+async function refreshBatchOnce(batch) {
+  if (!batch) { return null; }
+  try {
+    const response = await fetch("/ingest/batch/" + encodeURIComponent(batch.id), { cache: "no-store" });
+    if (!response.ok) { return null; }
+    const data = await response.json();
+    applyBatchData(batch, data);
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function batchRefresh(batch, immediate) {
+  if (!batch || batch.polling) { return; }
+  batch.polling = true;
+  let first = Boolean(immediate);
+  try {
+    for (let attempt = 0; attempt < BATCH_MAX_POLLS; attempt += 1) {
+      await sleep(first ? 250 : BATCH_POLL_MS);
+      first = false;
+      const data = await refreshBatchOnce(batch);
+      if (data) {
+        const counts = batchCounts(batch, data);
+        if (batch.uploadDone && data.complete) { break; }
+        if (batch.uploadDone && counts.active === 0
+            && (Number(data.total || 0) > 0 || batch.localErrors >= batch.expectedTotal)) {
+          break;
+        }
+      }
+      if (batch.uploadDone && batch.items.size === 0 && batch.localErrors === 0 && attempt > 2) {
+        break;
+      }
+    }
+  } finally {
+    batch.polling = false;
+    if (!batch.finished) { updateBatchUi(batch, batch.lastData); }
+  }
+}
+
+function finishBatchUploads(batch) {
+  if (!batch) { return; }
+  batch.uploadDone = true;
+  updateBatchUi(batch, batch.lastData);
+  batchRefresh(batch, true);
 }
 
 function setUploadState(card, state, detail, data) {
@@ -2400,7 +2842,7 @@ function setUploadState(card, state, detail, data) {
   badge.className = "badge " + item[1];
   sub.textContent = detail || item[2];
   updateUploadProgress(card, data || { state: state });
-  if (card.__workId) {
+  if (card.__workId && !card.__deferCompanion) {
     const reason = data && (data.knowledge_error
       || (data.lightrag && data.lightrag.error)
       || (data.knowledge && data.knowledge.message));
@@ -3296,6 +3738,7 @@ function openEditor(card, fileId, payload, mode) {
     } finally {
       setBusy(false);
       refreshCount();
+      if (card.__batch) { batchAfterAction(card); }
     }
   };
   saveBtn.addEventListener("click", function () { submit(false); });
@@ -3401,6 +3844,7 @@ async function runIngestAction(card, fileId, action, label) {
   }
   // 刚提交完先用较密的间隔问几次，让「提交中」尽快变成真实进度（快路径在前端轮询里）
   pollIngestStatus(card, fileId, { fast: true, awaitAction: true, fromState: fromState });
+  batchAfterAction(card);
 }
 
 // OCR 结束时的明确反馈（成功 / 失败都要说清楚）。
@@ -3580,32 +4024,56 @@ function pickFile(policyId) {
   picker.click();
 }
 
-async function upload(file, policyId) {
+async function upload(file, policyId, batch) {
   if (!file) { return; }
   const policy = POLICIES[policyId] || POLICIES.unified;
-  const card = createUploadCard(file.name);
-  card.__policy = policyId || "unified";
-  card.__policyDone = false;
-  setUploadState(card, "uploading", policy.label + " · 正在上传文件…（" + policy.hint + "）");
+  const card = batch ? null : createUploadCard(file.name);
+  if (card) {
+    card.__policy = policyId || "unified";
+    card.__policyDone = false;
+    setUploadState(card, "uploading", policy.label + " · 正在上传文件…（" + policy.hint + "）");
+  } else {
+    batch.attempted = (batch.attempted || 0) + 1;
+    updateBatchUi(batch, batch.lastData);
+  }
   const form = new FormData();
   form.append("file", file);
+  if (batch) { form.append("batch_id", batch.id); }
   setToast("正在上传 " + file.name + " …");
   // 上传接口会同步完成本地解析与质检；大文件期间不能让卡片一直写“上传中”。
   let answered = false;
-  const parseHint = window.setTimeout(function () {
+  const parseHint = card ? window.setTimeout(function () {
     if (!answered) {
       setUploadState(card, "parsing", "文件已送达，服务端正在本地解析与质检…（完成后会自动更新）");
     }
-  }, 1500);
+  }, 1500) : 0;
   try {
     const response = await fetch("/upload", { method: "POST", body: form });
     answered = true;
-    window.clearTimeout(parseHint);
+    if (parseHint) { window.clearTimeout(parseHint); }
     let data = {};
     try { data = await response.json(); } catch (err) { data = {}; }
     if (response.ok && data.success) {
-      setToast("已受理，正在本地解析与质量校验", "ok");
       const fileId = String(data.file_id || "").trim();
+      if (batch) {
+        if (!fileId) {
+          addBatchLocalError(batch, file.name, "服务未返回进度编号");
+        } else {
+          batch.uploaded += 1;
+          ensureBatchItem(batch, {
+            file_id: fileId,
+            name: file.name,
+            state: data.state || "processing",
+            detail: data.detail || "",
+            knowledge_error: "",
+            progress: {}
+          });
+          batchRefresh(batch);
+          updateBatchUi(batch, batch.lastData);
+        }
+        return;
+      }
+      setToast("已受理，正在本地解析与质量校验", "ok");
       card.__fileId = fileId;
       trackCard(fileId, card);   // 让「全部允许」开关能找回这张卡片
       if (fileId) {
@@ -3616,14 +4084,22 @@ async function upload(file, policyId) {
       }
     } else {
       const detail = (data && data.detail) ? ((typeof data.detail === "string") ? data.detail : (data.detail.message || JSON.stringify(data.detail))) : ("HTTP " + response.status);
-      setUploadState(card, "error", "上传失败：" + detail);
-      setToast("上传失败", "bad");
+      if (batch) {
+        addBatchLocalError(batch, file.name, detail);
+      } else {
+        setUploadState(card, "error", "上传失败：" + detail);
+      }
+      setToast("上传失败：" + file.name, "bad");
     }
   } catch (err) {
     answered = true;
-    window.clearTimeout(parseHint);
-    setUploadState(card, "error", "上传失败：" + err.message);
-    setToast("上传失败", "bad");
+    if (parseHint) { window.clearTimeout(parseHint); }
+    if (batch) {
+      addBatchLocalError(batch, file.name, err.message);
+    } else {
+      setUploadState(card, "error", "上传失败：" + err.message);
+    }
+    setToast("上传失败：" + file.name, "bad");
   }
 }
 
@@ -5598,6 +6074,7 @@ async function setSessionAllowAll(enabled) {
         }
         if (item.card && item.card.__state === "review") { pollIngestStatus(item.card, item.fileId); }
       });
+      UPLOAD_BATCHES.forEach(function (batch) { batchRefresh(batch, true); });
       return;
     }
     // 关闭：各卡片状态没变，只把开关的样子改回来
@@ -5646,6 +6123,7 @@ async function refreshIngestNow(card) {
   if (BUSY_STATES_UI[data.state]) {
     pollIngestStatus(card, fileId, { fast: true });
   }
+  if (card.__batch) { refreshBatchOnce(card.__batch); }
 }
 
 async function restorePendingReviews() {
@@ -5678,6 +6156,50 @@ async function restorePendingReviews() {
   const seen = {};
   const counts = { pending: 0, actionable: 0, skipped: 0, active: 0 };
   const buckets = ["pending", "actionable", "skipped", "active"];
+
+  // 同一批次的大批量作业恢复成一张批次卡，不再散落成 N 张卡片。
+  const entries = [];
+  groups.forEach(function (group, groupIndex) {
+    group.items.slice(0, 20).forEach(function (item) {
+      entries.push({ item: item, fallback: group.fallback, groupIndex: groupIndex });
+    });
+  });
+  const byBatch = new Map();
+  entries.forEach(function (entry) {
+    const batchId = String(entry.item.batch_id || "");
+    if (!batchId) { return; }
+    if (!byBatch.has(batchId)) { byBatch.set(batchId, []); }
+    byBatch.get(batchId).push(entry);
+  });
+  let batchGroups = 0;
+  let batchItems = 0;
+  let batchedSkipped = 0;
+  byBatch.forEach(function (batchEntries, batchId) {
+    if (batchEntries.length <= BATCH_THRESHOLD) { return; }
+    const batch = createUploadBatch(batchId, batchEntries.length);
+    batch.uploadDone = true;
+    batchEntries.forEach(function (entry) {
+      const item = entry.item;
+      const fileId = String(item.file_id || "");
+      if (!fileId) { return; }
+      seen[fileId] = true;
+      const state = String(item.state || entry.fallback);
+      if (state === "skipped") { batchedSkipped += 1; }
+      ensureBatchItem(batch, {
+        file_id: fileId,
+        name: item.name || item.filename || fileId,
+        state: state,
+        detail: item.detail || "",
+        knowledge_error: item.knowledge_error || "",
+        progress: item.progress || {}
+      });
+    });
+    batchGroups += 1;
+    batchItems += batchEntries.length;
+    updateBatchUi(batch, null);
+    batchRefresh(batch, true);
+  });
+
   groups.forEach(function (group, groupIndex) {
     group.items.slice(0, 20).forEach(function (item) {
       const fileId = String(item.file_id || "");
@@ -5706,13 +6228,14 @@ async function restorePendingReviews() {
   if (counts.actionable) { parts.push(counts.actionable + " 个需要处理"); }
   if (counts.skipped) { parts.push(counts.skipped + " 个最近跳过"); }
   if (counts.active) { parts.push(counts.active + " 个正在处理"); }
+  if (batchItems) { parts.push(batchItems + " 份在 " + batchGroups + " 个批次中"); }
   let text = parts.length ? ("已恢复：" + parts.join(" · ")) : "";
   const skippedTotal = Number(data.skipped_total || 0);
-  if (skippedTotal > counts.skipped) {
-    text += (text ? "；" : "") + "另有 " + (skippedTotal - counts.skipped)
+  if (skippedTotal > counts.skipped + batchedSkipped) {
+    text += (text ? "；" : "") + "另有 " + (skippedTotal - counts.skipped - batchedSkipped)
       + " 个更早跳过的文件，可在「文件管理」继续入库";
   }
-  if (text) { setToast(text, counts.pending ? "ok" : ""); }
+  if (text) { setToast(text, counts.pending || batchItems ? "ok" : ""); }
 }
 
 // ---------- 知识图谱（只读浏览）----------
@@ -6591,15 +7114,21 @@ $("file").addEventListener("change", function (event) {
   const policy = pendingPolicy;
   event.target.value = "";
   if (!files.length) { return; }
+  const batch = (files.length > BATCH_THRESHOLD && policy === "unified")
+    ? createUploadBatch(newBatchId(), files.length)
+    : null;
   if (files.length > 1) {
-    setToast("已选择 " + files.length + " 个文件，逐个上传处理", "info");
+    setToast(batch
+      ? ("已选择 " + files.length + " 个文件，按批次上传处理")
+      : ("已选择 " + files.length + " 个文件，逐个上传处理"), "info");
   }
   // 顺序上传（不是 Promise.all）：上传接口本身很快，并发上传对单线程入库队列没有好处，
-  // 反而更容易把网络/浏览器压出问题。卡片仍会逐个出现，每个都有自己的进度。
+  // 反而更容易把网络/浏览器压出问题。少量文件仍逐张卡片显示；大批量收进一个批次卡。
   (async function () {
     for (let i = 0; i < files.length; i++) {
-      await upload(files[i], policy);
+      await upload(files[i], policy, batch);
     }
+    if (batch) { finishBatchUploads(batch); }
   })();
 });
 
@@ -6613,13 +7142,19 @@ const dropZone = $("dropZone");
 dropZone.addEventListener("drop", function (event) {
   const files = Array.prototype.slice.call((event.dataTransfer && event.dataTransfer.files) || []);
   if (!files.length) { return; }
+  const batch = files.length > BATCH_THRESHOLD
+    ? createUploadBatch(newBatchId(), files.length)
+    : null;
   if (files.length > 1) {
-    setToast("已拖入 " + files.length + " 个文件，逐个上传处理", "info");
+    setToast(batch
+      ? ("已拖入 " + files.length + " 个文件，按批次上传处理")
+      : ("已拖入 " + files.length + " 个文件，逐个上传处理"), "info");
   }
   (async function () {
     for (let i = 0; i < files.length; i++) {
-      await upload(files[i], "unified");
+      await upload(files[i], "unified", batch);
     }
+    if (batch) { finishBatchUploads(batch); }
   })();
 });
 

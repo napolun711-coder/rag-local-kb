@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -36,6 +37,11 @@ SKIPPED_RESTORE_HOURS = 24
 RESTORE_LIMIT = 20
 STALE_ACTIVE_MINUTES = 120
 STALE_INGEST_MINUTES = 60
+BATCH_ITEM_LIMIT = 200
+BATCH_TERMINAL_STATES = ("done", "failed", "skipped")
+BATCH_KNOWLEDGE_REFRESH_SECONDS = 6
+BATCH_KNOWLEDGE_REFRESH_LIMIT = 6
+_KNOWLEDGE_REFRESH_AT: Dict[str, float] = {}
 CAPTION_MARKER = "\n\n<!-- ragkb:manual-caption -->\n"
 
 
@@ -339,6 +345,7 @@ def process_upload(
     content: bytes,
     content_type: str = "",
     *,
+    batch_id: str = "",
     allow_session_auto: bool = True,
 ) -> Dict[str, Any]:
     settings = get_ingest_settings()
@@ -350,6 +357,7 @@ def process_upload(
         created = storage.utc_now()
         result = {
             "file_id": file_id,
+            "batch_id": normalize_batch_id(batch_id),
             "filename": filename,
             "doc_name": Path(filename).stem,
             "content_type": content_type,
@@ -479,6 +487,105 @@ def skipped_jobs(*, hours: int = SKIPPED_RESTORE_HOURS) -> Tuple[List[Dict[str, 
         if _updated_after(item.get("updated_at"), cutoff)
     ]
     return recent[:RESTORE_LIMIT], len(all_items)
+
+
+def normalize_batch_id(value: str) -> str:
+    text = str(value or "").strip()
+    return text if storage.valid_batch_id(text) else storage.new_batch_id()
+
+
+def _batch_item(result: Dict[str, Any]) -> Dict[str, Any]:
+    knowledge = result.get("knowledge") if isinstance(result.get("knowledge"), dict) else {}
+    lightrag = result.get("lightrag") if isinstance(result.get("lightrag"), dict) else {}
+    state = str(result.get("state") or "")
+    return {
+        "file_id": str(result.get("file_id") or ""),
+        "filename": str(result.get("filename") or ""),
+        "name": str(result.get("filename") or result.get("doc_name") or result.get("file_id") or ""),
+        "state": state,
+        "detail": str(result.get("detail") or ""),
+        "knowledge_error": str(knowledge.get("message") or lightrag.get("error") or ""),
+        "progress": dict(knowledge.get("progress") or {}),
+        "track_id": str(knowledge.get("track_id") or lightrag.get("track_id") or ""),
+        "created_at": str(result.get("created_at") or ""),
+        "updated_at": str(result.get("updated_at") or ""),
+    }
+
+
+def _refresh_batch_knowledge(results: List[Dict[str, Any]]) -> None:
+    """Refresh a limited number of ingesting tracks so the batch view can reach done."""
+    now = time.monotonic()
+    pending: List[Tuple[str, str]] = []
+    for item in results:
+        if str(item.get("state") or "") != "ingesting":
+            continue
+        knowledge = item.get("knowledge") if isinstance(item.get("knowledge"), dict) else {}
+        lightrag = item.get("lightrag") if isinstance(item.get("lightrag"), dict) else {}
+        track_id = str(knowledge.get("track_id") or lightrag.get("track_id") or "")
+        file_id = str(item.get("file_id") or "")
+        if not track_id or not file_id:
+            continue
+        if now - float(_KNOWLEDGE_REFRESH_AT.get(file_id, 0.0)) < BATCH_KNOWLEDGE_REFRESH_SECONDS:
+            continue
+        pending.append((str(item.get("updated_at") or ""), file_id))
+    pending.sort()
+    for _, file_id in pending[:BATCH_KNOWLEDGE_REFRESH_LIMIT]:
+        _KNOWLEDGE_REFRESH_AT[file_id] = now
+        outcome = refresh_knowledge_status(file_id)
+        if not outcome.get("ok") and str(outcome.get("code") or "") in (
+            "engine_not_installed",
+            "knowledge_unavailable",
+        ):
+            break
+    if len(_KNOWLEDGE_REFRESH_AT) > 2000:
+        cutoff = now - 300
+        for key in [key for key, seen in _KNOWLEDGE_REFRESH_AT.items() if seen < cutoff]:
+            _KNOWLEDGE_REFRESH_AT.pop(key, None)
+
+
+def batch_status(batch_id: str) -> Optional[Dict[str, Any]]:
+    text = str(batch_id or "").strip()
+    if not storage.valid_batch_id(text):
+        return None
+    _recover_stale_active()
+    settings = get_ingest_settings()
+    results = [
+        item for item in storage.list_results(settings)
+        if str(item.get("batch_id") or "") == text
+    ]
+    _refresh_batch_knowledge(results)
+    results = [
+        item for item in storage.list_results(settings)
+        if str(item.get("batch_id") or "") == text
+    ]
+    results.sort(key=lambda item: str(item.get("created_at") or item.get("file_id") or ""))
+    counts: Dict[str, int] = {}
+    for item in results:
+        state = str(item.get("state") or "unknown")
+        counts[state] = counts.get(state, 0) + 1
+    groups = {
+        "review": counts.get("review", 0) + counts.get("needs_ocr", 0),
+        "actionable": counts.get("blocked", 0) + counts.get("failed", 0),
+        "active": sum(counts.get(name, 0) for name in ACTIVE_STATES),
+        "skipped": counts.get("skipped", 0),
+        "done": counts.get("done", 0),
+        "failed": counts.get("failed", 0),
+    }
+    items = [_batch_item(item) for item in results[:BATCH_ITEM_LIMIT]]
+    total = len(results)
+    complete = bool(total) and all(
+        str(item.get("state") or "") in BATCH_TERMINAL_STATES for item in results
+    )
+    return {
+        "batch_id": text,
+        "total": total,
+        "items_total": total,
+        "items": items,
+        "counts": counts,
+        "groups": groups,
+        "complete": complete,
+        "updated_at": max((str(item.get("updated_at") or "") for item in results), default=""),
+    }
 
 
 def session_allow_all() -> bool:
@@ -1087,9 +1194,11 @@ __all__ = [
     "activate",
     "actionable_jobs",
     "active_jobs",
+    "batch_status",
     "confirm_mode",
     "content_for_edit",
     "edit_content",
+    "normalize_batch_id",
     "pending_reviews",
     "process_upload",
     "session_allow_all",

@@ -68,6 +68,7 @@ def _local_job(result: Dict[str, Any]) -> LocalJobSummary:
         document_ids=_document_ids(result),
         detail=str(result.get("detail") or ""),
         knowledge_message=str(knowledge.get("message") or lightrag.get("error") or ""),
+        batch_id=str(result.get("batch_id") or ""),
     )
 
 

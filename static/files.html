@@ -26,7 +26,7 @@
     · 会动数据的（打开文件夹 / 删除 / 立即扫描）需要本机 + 每次启动的随机令牌，
       手机页面直接不显示这些按钮，硬调也是 403。
 -->
-<link rel="stylesheet" href="/static/files.css?v=20261029-delete-follow">
+<link rel="stylesheet" href="/static/files.css?v=20261029-batch">
 </head>
 <body>
 <header class="bar">
@@ -148,6 +148,14 @@
   <section class="card secondary-card" id="localCard">
     <h2 id="localTitle">本机待处理与已跳过</h2>
     <div class="hint" id="localHint">这里显示本机解析记录：待确认、需修复、入库中与已跳过。待确认请在对话页处理；已跳过的可继续入库。</div>
+    <div class="local-toolbar">
+      <label for="batchFilter">批次</label>
+      <select id="batchFilter" aria-label="按上传批次筛选本机记录">
+        <option value="">全部批次</option>
+      </select>
+      <button type="button" id="retryFailedBtn" hidden>重试失败</button>
+      <span class="hint" id="batchFilterHint" hidden></span>
+    </div>
     <div class="tw skip-scroll">
     <table id="localTable" class="table-spaced">
       <thead>
@@ -221,7 +229,7 @@
   </div>
 </div>
 
-<script src="/static/files.js?v=20261029-delete-follow"></script>
+<script src="/static/files.js?v=20261029-batch"></script>
 
 <!-- 心跳 / 权限 / 关窗口预约停止：三个页面（对话 / 设置 / 文件管理）必须都引这一份，
      少一个就会出现「在新页面操作、旧页面预约的停止到点生效」的事故。 -->

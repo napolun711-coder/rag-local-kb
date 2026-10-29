@@ -34,6 +34,8 @@ const state = {
   // 后端报的**真实**本机记录条数，可能大于 localRows.length（撞上上限时）——
   // 用来在分页条上明说「另有 N 条未载入」，不让截断变成静默行为
   localTotal: 0,
+  localAllRows: [],
+  batchId: new URLSearchParams(window.location.search).get("batch") || "",
   status: "",
   q: "",
   topicId: "",
@@ -176,6 +178,8 @@ async function init() {
   $("deleteDialog").addEventListener("keydown", handleDeleteDialogKeydown);
   $("detailClose").addEventListener("click", closeDetail);
   $("detailBackdrop").addEventListener("click", closeDetail);
+  $("batchFilter").addEventListener("change", function () { applyBatchFilter(this.value); });
+  $("retryFailedBtn").addEventListener("click", retryFailedRows);
   await loadAll();
 }
 
@@ -269,21 +273,141 @@ async function loadList() {
       "&topic_id=" + encodeURIComponent(state.topicId || "");
     const data = await fetchJSON("/api/files/list?" + query);
     state.rows = data.documents || [];
-    state.localRows = (data.local_only || []).filter(function (item) {
+    state.localAllRows = (data.local_only || []).filter(function (item) {
       return Boolean(LOCAL_VISIBLE_STATES[String(item.state || "")]);
     });
+    populateBatchFilter(state.localAllRows);
+    state.localRows = filterLocalRows(state.localAllRows);
     state.localTotal = state.localRows.length;
     state.upstreamOk = !(data.upstream && data.upstream.ok === false);
     if (!state.upstreamOk) { state.selected = {}; }
     applyUpstreamLabels();
     renderRows();
     renderLocalRows();
+    updateLocalToolbar();
     renderPager(data.pagination || {});
     if (data.notice) { setNotice(data.notice, data.upstream && data.upstream.ok ? "" : "bad"); }
   } catch (err) {
     setNotice("读取文件列表失败：" + err.message, "bad");
     state.rows = [];
     renderRows();
+  }
+}
+
+// ---------- 批次筛选 / 批量重试 ----------
+function filterLocalRows(rows) {
+  if (!state.batchId) { return rows; }
+  return rows.filter(function (row) {
+    return String(row.batch_id || "") === state.batchId;
+  });
+}
+
+function batchShortId(value) {
+  const text = String(value || "");
+  return text.length > 12 ? ("…" + text.slice(-12)) : text;
+}
+
+function populateBatchFilter(rows) {
+  const select = $("batchFilter");
+  if (!select) { return; }
+  const previous = state.batchId || "";
+  const counts = new Map();
+  rows.forEach(function (row) {
+    const batchId = String(row.batch_id || "");
+    if (batchId) { counts.set(batchId, (counts.get(batchId) || 0) + 1); }
+  });
+  select.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "全部批次";
+  select.appendChild(all);
+  Array.from(counts.keys()).sort().reverse().forEach(function (batchId) {
+    const option = document.createElement("option");
+    option.value = batchId;
+    option.textContent = "批次 " + batchShortId(batchId) + "（" + counts.get(batchId) + "）";
+    select.appendChild(option);
+  });
+  if (previous && !counts.has(previous)) {
+    const option = document.createElement("option");
+    option.value = previous;
+    option.textContent = "批次 " + batchShortId(previous) + "（无待处理）";
+    select.appendChild(option);
+  }
+  select.value = previous;
+  if (select.value !== previous) {
+    state.batchId = "";
+    select.value = "";
+  }
+}
+
+function applyBatchFilter(value) {
+  state.batchId = String(value || "");
+  state.localPage = 1;
+  state.selected = {};
+  state.localRows = filterLocalRows(state.localAllRows);
+  state.localTotal = state.localRows.length;
+  try {
+    const url = new URL(window.location.href);
+    if (state.batchId) { url.searchParams.set("batch", state.batchId); }
+    else { url.searchParams.delete("batch"); }
+    window.history.replaceState(null, "", url);
+  } catch (err) { /* 兼容 */ }
+  renderLocalRows();
+  updateSelectionUi();
+  updateLocalToolbar();
+}
+
+function updateLocalToolbar() {
+  const select = $("batchFilter");
+  const retry = $("retryFailedBtn");
+  const hint = $("batchFilterHint");
+  if (select) { select.disabled = state.busy || state.deleteMode; }
+  if (retry) {
+    const failed = state.localRows.filter(function (row) {
+      return row.state === "failed" || row.state === "blocked";
+    }).length;
+    retry.hidden = !failed;
+    retry.disabled = state.busy || state.deleteMode || !state.upstreamOk;
+    retry.textContent = "重试失败（" + failed + (failed > 20 ? "，前 20" : "") + "）";
+  }
+  if (hint) {
+    hint.hidden = !state.batchId;
+    hint.textContent = state.batchId ? "当前只显示该批次" : "";
+  }
+}
+
+async function retryFailedRows() {
+  if (state.busy || state.deleteMode || !state.upstreamOk) { return; }
+  const targets = state.localRows.filter(function (row) {
+    return (row.state === "failed" || row.state === "blocked") && row.file_id;
+  }).slice(0, 20);
+  if (!targets.length) { return; }
+  state.busy = true;
+  updateSelectionUi();
+  updateLocalToolbar();
+  let succeeded = 0;
+  let failed = 0;
+  try {
+    for (let index = 0; index < targets.length; index += 1) {
+      flash("正在重试 " + (index + 1) + "/" + targets.length + "：" + (targets[index].name || ""), "");
+      try {
+        await fetchJSON("/api/ingest/action/" + encodeURIComponent(targets[index].file_id), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "retry" })
+        });
+        succeeded += 1;
+      } catch (err) {
+        failed += 1;
+      }
+    }
+    flash("重试完成：成功 " + succeeded + (failed ? "，失败 " + failed : ""), failed ? "bad" : "ok");
+    await loadAll();
+    scheduleIngestRefresh(10);
+  } finally {
+    state.busy = false;
+    updateSelectionUi();
+    updateLocalToolbar();
   }
 }
 
@@ -570,9 +694,12 @@ function renderLocalRows() {
     // 本机表只受搜索词影响（状态筛选不作用于它），所以只有 q 非空时才给「清空搜索」
     $("localRows").innerHTML = '<tr><td colspan="5" class="muted">' + (state.q || state.topicId
       ? '没有匹配的本机记录 <button type="button" class="open" data-clear-filters>清空筛选</button>'
-      : '暂无待处理或已跳过的文件') + '</td></tr>';
+      : (state.batchId
+        ? '这个批次没有待处理记录（可能已全部入库）'
+        : '暂无待处理或已跳过的文件')) + '</td></tr>';
     wireEmptyCta($("localRows"));
     renderLocalPager();
+    updateLocalToolbar();
     return;
   }
   $("localRows").innerHTML = rows.map(function (row, index) {
@@ -613,6 +740,7 @@ function renderLocalRows() {
   wireTopicSelectors($("localRows"));
   renderLocalPager();
   updateSelectionUi();
+  updateLocalToolbar();
 }
 
 // 当前页的本机行，以及它在 state.localRows 里的起始下标。

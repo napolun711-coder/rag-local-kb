@@ -844,6 +844,33 @@ body.graph-open #sideToggle{display:none !important}
 @keyframes ragkb-sweep{0%{transform:translateX(-110%)}55%{transform:translateX(170%)}100%{transform:translateX(300%)}}
 .step .mark .ragkb-dots{margin-left:0;gap:2px}
 .step .mark .ragkb-dots i{width:3px;height:3px}
+/* ---------- 批量上传批次卡 ---------- */
+.upload-batch{width:100%;max-width:var(--read);margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.upload-batch-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.upload-batch-title{flex:1 1 auto;min-width:0;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upload-batch-toggle,.upload-batch-link{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--grey-soft);color:var(--muted);cursor:pointer;text-decoration:none;min-height:26px;display:inline-flex;align-items:center}
+.upload-batch-toggle:hover,.upload-batch-link:hover{background:var(--line);color:var(--text)}
+.upload-batch-link{color:var(--brand-2);border-color:var(--info-line);background:var(--brand-soft)}
+.upload-batch-summary{flex:1 1 100%;margin-top:4px;font-size:12px;line-height:1.5;color:var(--muted)}
+.upload-batch-bar{flex:1 1 100%;height:4px;margin-top:8px;border-radius:999px;background:var(--grey-soft);overflow:hidden}
+.upload-batch-bar i{display:block;height:100%;width:38%;border-radius:inherit;background:linear-gradient(90deg,var(--brand),var(--brand-2));animation:ragkb-sweep 1.35s ease-in-out infinite}
+.upload-batch-bar.determinate i{animation:none;transition:width .45s ease}
+.upload-batch-list{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+.upload-batch-list[hidden],.upload-batch-detail[hidden]{display:none}
+.upload-batch-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 8px;align-items:center;padding:7px 8px;border:1px solid transparent;border-radius:8px;background:var(--surface-inset)}
+.upload-batch-row.attention{border-color:var(--warn-line-3);background:var(--warn-soft-3)}
+.upload-batch-name{min-width:0;font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upload-batch-row .badge{font-size:11px;padding:3px 8px}
+.upload-batch-action{min-height:26px;font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--info-line);background:var(--brand-soft);color:var(--brand-2)}
+.upload-batch-action[hidden],.upload-batch-reason[hidden]{display:none}
+.upload-batch-reason{grid-column:1/-1;font-size:11.5px;line-height:1.45;color:var(--muted);word-break:break-word}
+.upload-batch-detail{margin-top:10px}
+.upload-batch-detail .upload-card{margin:0;box-shadow:none;border-color:var(--line)}
+@media (max-width:620px){
+  .upload-batch{padding:10px 11px}
+  .upload-batch-row{grid-template-columns:minmax(0,1fr) auto}
+  .upload-batch-row .upload-batch-action{grid-column:2;grid-row:1}
+}
 .upload-actions{display:none;gap:8px;margin-top:9px;flex-wrap:wrap}
 .upload-actions button{font-size:12px;padding:4px 11px;border-radius:999px;background:var(--brand-soft);color:var(--brand-2);border:1px solid var(--info-line)}
 .upload-actions button:hover{background:var(--brand-fill)}

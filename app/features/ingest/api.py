@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.features.ingest import service
@@ -34,7 +34,10 @@ def _detail(exc: service.IngestError) -> Dict[str, Any]:
 
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+async def upload_file(
+    file: UploadFile = File(...),
+    batch_id: str = Form(default=""),
+) -> Dict[str, Any]:
     settings = get_ingest_settings()
     filename = file.filename or "upload.bin"
     content = await file.read(settings.max_upload_size + 1)
@@ -44,6 +47,7 @@ async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
             filename,
             content,
             file.content_type or "",
+            batch_id=batch_id,
         )
     except service.IngestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=_detail(exc)) from exc
@@ -52,6 +56,7 @@ async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
         "filename": filename,
         "message": "File accepted for local parsing and quality review",
         "file_id": result["file_id"],
+        "batch_id": result.get("batch_id") or "",
         "state": result["state"],
         "detail": result.get("detail") or "",
         "saved_path": result.get("saved_path") or "",
@@ -113,6 +118,17 @@ def ingest_pending() -> Dict[str, Any]:
             "restore_hours": service.SKIPPED_RESTORE_HOURS,
         },
     }
+
+
+@router.get("/ingest/batch/{batch_id}")
+def ingest_batch(batch_id: str) -> Dict[str, Any]:
+    payload = service.batch_status(batch_id)
+    if payload is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_batch_id", "message": "Invalid ingestion batch id"},
+        )
+    return payload
 
 
 @router.post("/ingest/knowledge-status/{file_id}")

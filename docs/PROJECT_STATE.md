@@ -881,3 +881,77 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   local row, confirmed the button counted one selection, opened the dialog,
   typed `yes`, and saw Enter invoke the delete handler exactly once through a
   test stub. No real deletion or formal data write was performed.
+
+## Batch upload aggregation (2026-10-29)
+
+- Uploads carry an optional `batch_id`. The server validates it or generates one,
+  stores it in `result.json`, and returns it from `/upload`. Existing jobs without
+  a batch id remain valid and are treated as legacy single uploads.
+- Added read-only `GET /ingest/batch/{batch_id}` with per-state counts, grouped
+  counts, capped item details, failure reasons, progress, and a `complete` flag.
+  It refreshes a limited number of ingesting tracks through the knowledge
+  service so a batch can reach `done` without one status request per file.
+- Chat groups more than five unified-file uploads into one batch card. The card
+  shows aggregate state counts, a progress bar, a file-management deep link, and
+  expandable per-file rows. Rows open the existing single-file card on demand,
+  so confirm/edit/skip/retry behavior is unchanged.
+- One batch poller replaces per-file polling for grouped uploads. The companion
+  now shows an aggregate queue state such as
+  `资料队列需要处理 · 共 30 份 · 待处理 30`, not one animated task per file.
+- Page restore groups pending/actionable/skipped/active jobs by `batch_id`.
+  Groups larger than five are restored as a batch card; smaller groups keep the
+  existing individual cards.
+- The files page exposes a batch filter (`/files?batch=<id>`), shows only that
+  batch when selected, and adds `重试失败（N）` for failed/blocked rows in the
+  current filter. Retry runs sequentially through the existing per-file action
+  and is capped at 20 items per click.
+- Small batches (five or fewer) and the image/scan upload entry keep the
+  previous per-file card flow. This avoids changing the OCR convenience path.
+
+### Verification
+
+- Full suite: 96 tests passed.
+- Isolated HTTP smoke created two six-file batches with distinct batch ids:
+  the normal batch reported `review: 6`, the low-quality batch reported
+  `actionable: 6`; `/ingest/pending` returned the same six items per batch; an
+  invalid batch id returned HTTP 400.
+- Headless Chrome restored the batches as four batch cards (including the two
+  from the first smoke attempt), each with six rows and correct
+  `待确认 6` / `需修复 6` summaries. The companion rendered
+  `资料队列需要处理 · 共 24 份 · 待处理 24`.
+- Browser CDP uploaded six files through the real file input, observed the new
+  batch card, six rows, server-side `review: 6`, automatic expansion, and the
+  companion aggregate `共 30 份 · 待处理 30`. One row expanded into the normal
+  per-file card with `待确认入库`.
+- Batch knowledge refresh smoke: six reviewed files were submitted; the first
+  batch status read reported `active: 1, done: 5`; after the refresh interval it
+  reported `active: 0, done: 6, complete: true`.
+- Files page filtered to the failed batch showed six rows, the
+  `当前只显示该批次` hint, and `重试失败（6）`; the review batch showed six rows
+  and the retry button hidden.
+- All isolated app, fake shell, and Chrome processes were stopped; no formal
+  data was written.
+- The default lifecycle group was restarted with the batch routes. `/health` was
+  healthy, `/web`, `/files`, `/memory`, and `/settings` returned HTTP 200, an
+  unknown valid batch id returned an empty aggregate, and the chat/files assets
+  were served with the new `20261029-batch` cache version.
+
+### Remaining risks
+
+- The browser upload loop is still client-side and sequential. Refreshing or
+  closing the page before the loop finishes loses the remaining selected files.
+  A durable server-side queue remains Wave B work.
+- Large batches still parse synchronously one file per upload request; the batch
+  card makes the wait understandable but does not make parsing concurrent.
+- Batch grouping applies to unified uploads only. Image/scan uploads keep
+  individual cards so the existing auto-OCR policy still runs.
+- The batch poller stops when there are no active items and waits for user
+  action, even if other pages change those items. Reloading restores the true
+  state.
+- The batch endpoint refreshes at most six ingesting tracks per poll, throttled
+  to one refresh per track every six seconds.
+- Files-page bulk retry is sequential and capped at 20 per click; the retry
+  click itself was not exercised in the browser (the button and row filter were
+  rendered and verified).
+- The default lifecycle group was restarted for the new backend batch routes;
+  any subsequent backend change still requires another restart.

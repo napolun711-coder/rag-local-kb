@@ -25,6 +25,7 @@ class LocalJobSummary:
     topic_name: str = ""
     detail: str = ""
     knowledge_message: str = ""
+    batch_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class LocalJobSummary:
             "topic_name": self.topic_name,
             "detail": self.detail,
             "knowledge_message": self.knowledge_message,
+            "batch_id": self.batch_id,
         }
 
 

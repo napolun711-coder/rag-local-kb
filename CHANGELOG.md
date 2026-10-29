@@ -16,6 +16,9 @@
   non-terminal local jobs, not only skipped files
 - files page: keep the delete action bar visible while selecting across pages,
   submit with Enter after typing `Yes`, and repeat the original-file boundary
+- batch upload: group more than five files into one collapsible batch card with
+  aggregate counts, a single poller, companion queue state, page-restore
+  grouping, and a files-page batch filter with bulk retry for failed items
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

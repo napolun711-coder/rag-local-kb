@@ -15,6 +15,7 @@ from app.features.ingest.config import IngestSettings
 from app.platform.paths import BASE_DIR
 
 FILE_ID_RE = re.compile(r"^\d{14}-[a-f0-9]{8}$")
+BATCH_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
 RESULT_NAME = "result.json"
 CONTENT_NAME = "content.md"
 FALLBACK_FILENAME = "upload.bin"
@@ -35,8 +36,16 @@ def new_file_id() -> str:
     return datetime.now().strftime("%Y%m%d%H%M%S") + "-" + uuid4().hex[:8]
 
 
+def new_batch_id() -> str:
+    return "batch_" + datetime.now().strftime("%Y%m%d%H%M%S") + "_" + uuid4().hex[:8]
+
+
 def valid_file_id(file_id: str) -> bool:
     return bool(FILE_ID_RE.fullmatch(str(file_id or "")))
+
+
+def valid_batch_id(batch_id: str) -> bool:
+    return bool(BATCH_ID_RE.fullmatch(str(batch_id or "")))
 
 
 def job_dir(settings: IngestSettings, file_id: str) -> Path:
@@ -154,6 +163,7 @@ __all__ = [
     "display_path",
     "job_dir",
     "list_results",
+    "new_batch_id",
     "new_file_id",
     "read_content",
     "read_result",
@@ -162,6 +172,7 @@ __all__ = [
     "result_path",
     "save_job_source",
     "utc_now",
+    "valid_batch_id",
     "valid_file_id",
     "write_content",
     "write_result",

@@ -215,6 +215,11 @@ body.delete-mode .page-subbar{
 .primary-card h2{font-size:17px}
 .secondary-card{margin-top:10px}
 .secondary-card h2{font-size:14px}
+.local-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 10px}
+.local-toolbar label{font-size:12.5px;color:var(--muted)}
+.local-toolbar select{min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:inherit;font-size:12.5px}
+.local-toolbar button{min-height:30px;padding:3px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px}
+.local-toolbar button:disabled{opacity:.55;cursor:not-allowed}
 .skip-scroll{max-height:270px;overflow:auto}
 .skip-scroll thead th{position:sticky;top:0;z-index:1;background:var(--panel)}
 
