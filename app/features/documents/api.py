@@ -87,8 +87,10 @@ _LOCAL_STATE_LABELS = {
     "blocked": "未通过质量门",
     "failed": "解析失败",
     "skipped": "已跳过",
+    "queued": "排队中",
     "ingesting": "提交中",
     "done": "已入库",
+    "cancelled": "已取消",
 }
 
 

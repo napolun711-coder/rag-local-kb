@@ -19,6 +19,10 @@
 - batch upload: group more than five files into one collapsible batch card with
   aggregate counts, a single poller, companion queue state, page-restore
   grouping, and a files-page batch filter with bulk retry for failed items
+- upload queue: `/upload` returns 202 and enqueues a durable job; a bounded
+  background worker survives restarts, retries unexpected failures with
+  backoff, supports pause/resume and queued-job cancellation, and deduplicates
+  uploads by content hash
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

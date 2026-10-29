@@ -220,6 +220,7 @@ body.delete-mode .page-subbar{
 .local-toolbar select{min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:inherit;font-size:12.5px}
 .local-toolbar button{min-height:30px;padding:3px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:12.5px}
 .local-toolbar button:disabled{opacity:.55;cursor:not-allowed}
+.local-toolbar .grow{flex:1 1 auto}
 .skip-scroll{max-height:270px;overflow:auto}
 .skip-scroll thead th{position:sticky;top:0;z-index:1;background:var(--panel)}
 

@@ -51,7 +51,7 @@
   const DOCK_POSITION_KEY = "work_companion_position_v1";
 
   const BUSY = new Set([
-    "uploading", "parsing", "checking", "ocr", "ingesting", "indexing",
+    "uploading", "queued", "parsing", "checking", "ocr", "ingesting", "indexing",
     "thinking", "working", "generating"
   ]);
   const PRIORITY = { chat: 50, material: 40, upload: 30, system: 20 };
@@ -522,6 +522,7 @@
   function ingestLabel(state) {
     return {
       uploading: "正在上传文件…",
+      queued: "正在排队等待解析…",
       parsing: "正在解析文件…",
       checking: "正在校验内容…",
       ocr: "正在进行 OCR 文字识别…",

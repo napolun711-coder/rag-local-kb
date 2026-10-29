@@ -55,8 +55,8 @@ const state = {
 
 // 本机表展示所有还需要用户关注或仍在处理的状态；已入库的归知识库文档表。
 const LOCAL_VISIBLE_STATES = {
-  review: 1, needs_ocr: 1, blocked: 1, failed: 1,
-  skipped: 1, ingesting: 1, processing: 1
+  queued: 1, processing: 1, review: 1, needs_ocr: 1, blocked: 1,
+  failed: 1, skipped: 1, ingesting: 1, cancelled: 1
 };
 
 function escapeHtml(text) {
@@ -180,7 +180,10 @@ async function init() {
   $("detailBackdrop").addEventListener("click", closeDetail);
   $("batchFilter").addEventListener("change", function () { applyBatchFilter(this.value); });
   $("retryFailedBtn").addEventListener("click", retryFailedRows);
+  $("queueToggleBtn").addEventListener("click", toggleQueue);
   await loadAll();
+  refreshQueueStatus();
+  window.setInterval(refreshQueueStatus, 10000);
 }
 
 // ---------- 取数 ----------
@@ -373,6 +376,49 @@ function updateLocalToolbar() {
   if (hint) {
     hint.hidden = !state.batchId;
     hint.textContent = state.batchId ? "当前只显示该批次" : "";
+  }
+}
+
+async function refreshQueueStatus() {
+  const label = $("queueStatus");
+  const button = $("queueToggleBtn");
+  if (!label || !button) { return; }
+  try {
+    const data = await fetchJSON("/ingest/queue/status", { cache: "no-store" });
+    const paused = Boolean(data.paused);
+    const queued = Number(data.queued || 0);
+    const processing = Number(data.processing || 0);
+    label.hidden = false;
+    label.textContent = "队列：" + (queued || processing || paused
+      ? ("排队 " + queued + " · 处理中 " + processing + (paused ? " · 已暂停" : ""))
+      : "空闲");
+    button.hidden = !(queued || processing || paused);
+    button.textContent = paused ? "继续队列" : "暂停队列";
+    button.dataset.paused = paused ? "1" : "0";
+    button.disabled = state.busy;
+  } catch (err) {
+    label.hidden = true;
+    button.hidden = true;
+  }
+}
+
+async function toggleQueue() {
+  const button = $("queueToggleBtn");
+  if (!button || state.busy) { return; }
+  const paused = button.dataset.paused === "1";
+  button.disabled = true;
+  try {
+    await fetchJSON("/ingest/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paused: !paused })
+    });
+    flash(paused ? "队列已继续" : "队列已暂停：已排队文件会保持排队", "ok");
+  } catch (err) {
+    setNotice("队列操作失败：" + err.message, "bad");
+  } finally {
+    await refreshQueueStatus();
+    if (document.body.contains(button)) { button.disabled = state.busy; }
   }
 }
 
@@ -720,8 +766,14 @@ function renderLocalRows() {
         || stateName === "blocked" || stateName === "failed")
       ? '<a class="open" href="/" title="回到对话页处理这份文件">去处理</a> '
       : '';
-    const busyText = (stateName === "ingesting" || stateName === "processing")
-      ? '<span class="muted">入库中…</span> ' : '';
+    const busyText = stateName === "queued"
+      ? '<span class="muted">排队中…</span> '
+      : ((stateName === "ingesting" || stateName === "processing")
+        ? '<span class="muted">入库中…</span> ' : '');
+    const cancelButton = stateName === "queued"
+      ? '<button type="button" class="open" data-cancel-local="' + (slice.start + index) + '"'
+        + (state.busy ? ' disabled' : '') + ' title="取消排队；不会删除原件">取消排队</button> '
+      : '';
     return '<tr>' +
       // data-local 必须是**在 state.localRows 里的绝对下标**：切过页之后
       // 表内下标不再等于数组下标，直接用 index 会勾错行
@@ -732,7 +784,7 @@ function renderLocalRows() {
       (note ? '<span class="path">' + escapeHtml(note) + '</span>' : "") + '</td>' +
       '<td class="hide-md">' + topicCellHtml(row, "data-topic-local", slice.start + index) + '</td>' +
       '<td>' + escapeHtml(String(row.created_at || "").slice(0, 16)) + '</td>' +
-      '<td>' + busyText + handleButton + resumeButton + originActionsHtml(row) +
+      '<td>' + busyText + cancelButton + handleButton + resumeButton + originActionsHtml(row) +
       '<button type="button" class="open" data-detail-local="' + (slice.start + index) + '">详情</button></td>' +
       '</tr>';
   }).join("");
@@ -821,6 +873,12 @@ function wireRowEvents(container) {
       if (row) { resumeLocal(row, node); }
     });
   });
+  Array.prototype.slice.call(container.querySelectorAll("[data-cancel-local]")).forEach(function (node) {
+    node.addEventListener("click", function () {
+      const row = state.localRows[Number(node.getAttribute("data-cancel-local"))];
+      if (row) { cancelLocal(row, node); }
+    });
+  });
   Array.prototype.slice.call(container.querySelectorAll("[data-row]")).forEach(function (node) {
     node.addEventListener("change", function () {
       const row = state.rows[Number(node.getAttribute("data-row"))];
@@ -865,6 +923,36 @@ function scheduleIngestRefresh(attempts) {
     if (still) { scheduleIngestRefresh(attempts - 1); }
     else { await loadOverview().catch(function () {}); }
   }, 6000);
+}
+
+async function cancelLocal(row, button) {
+  if (state.busy || !row.file_id) { return; }
+  state.busy = true;
+  button.disabled = true;
+  button.textContent = "取消中…";
+  updateSelectionUi();
+  updateLocalToolbar();
+  try {
+    await fetchJSON("/api/ingest/action/" + encodeURIComponent(row.file_id), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel" })
+    });
+    flash("已取消排队；原件与上传留档保留", "ok");
+    await loadAll();
+  } catch (err) {
+    setNotice("取消失败：" + err.message, "bad");
+  } finally {
+    state.busy = false;
+    if (document.body.contains(button)) {
+      button.disabled = false;
+      button.textContent = "取消排队";
+    }
+    renderRows();
+    renderLocalRows();
+    updateSelectionUi();
+    updateLocalToolbar();
+  }
 }
 
 async function resumeLocal(row, button) {

@@ -26,7 +26,7 @@
     · 会动数据的（打开文件夹 / 删除 / 立即扫描）需要本机 + 每次启动的随机令牌，
       手机页面直接不显示这些按钮，硬调也是 403。
 -->
-<link rel="stylesheet" href="/static/files.css?v=20261029-batch">
+<link rel="stylesheet" href="/static/files.css?v=20261029-queue">
 </head>
 <body>
 <header class="bar">
@@ -155,6 +155,9 @@
       </select>
       <button type="button" id="retryFailedBtn" hidden>重试失败</button>
       <span class="hint" id="batchFilterHint" hidden></span>
+      <span class="grow"></span>
+      <span class="hint" id="queueStatus" hidden></span>
+      <button type="button" id="queueToggleBtn" hidden>暂停队列</button>
     </div>
     <div class="tw skip-scroll">
     <table id="localTable" class="table-spaced">
@@ -229,7 +232,7 @@
   </div>
 </div>
 
-<script src="/static/files.js?v=20261029-batch"></script>
+<script src="/static/files.js?v=20261029-queue"></script>
 
 <!-- 心跳 / 权限 / 关窗口预约停止：三个页面（对话 / 设置 / 文件管理）必须都引这一份，
      少一个就会出现「在新页面操作、旧页面预约的停止到点生效」的事故。 -->

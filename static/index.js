@@ -2296,7 +2296,7 @@ async function retryWithUpstream(view, button) {
 
 const DOTS_HTML = '<span class="ragkb-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
 const BUSY_STATES_UI = {
-  uploading: 1, parsing: 1, checking: 1, ocr: 1, ingesting: 1, processing: 1
+  uploading: 1, queued: 1, parsing: 1, checking: 1, ocr: 1, ingesting: 1, processing: 1
 };
 
 // 徽章文字只在内容真的变了时才重绘：重绘会重启动画，三点会看起来"卡一下"。
@@ -2384,6 +2384,7 @@ const BATCH_ATTENTION = { review: 1, needs_ocr: 1, blocked: 1, failed: 1, skippe
 const BATCH_TERMINAL = { done: 1, failed: 1, skipped: 1 };
 const BATCH_STATE_LABELS = {
   uploading: "上传中",
+  queued: "排队中",
   processing: "解析中",
   parsing: "解析中",
   checking: "校验中",
@@ -2393,6 +2394,8 @@ const BATCH_STATE_LABELS = {
   blocked: "未通过校验",
   failed: "处理失败",
   skipped: "已跳过",
+  cancelled: "已取消",
+  duplicate: "已存在",
   ingesting: "入库中",
   done: "已入库",
   error: "上传失败",
@@ -2417,11 +2420,11 @@ function newBatchId() {
 
 function batchBadgeClass(state) {
   if (state === "review") { return "review"; }
-  if (state === "needs_ocr" || state === "uploading" || state === "processing"
-      || state === "parsing" || state === "checking" || state === "ocr"
-      || state === "ingesting") { return "processing"; }
+  if (state === "needs_ocr" || state === "uploading" || state === "queued"
+      || state === "processing" || state === "parsing" || state === "checking"
+      || state === "ocr" || state === "ingesting") { return "processing"; }
   if (state === "done") { return "done"; }
-  if (state === "skipped") { return "skipped"; }
+  if (state === "skipped" || state === "cancelled" || state === "duplicate") { return "skipped"; }
   if (state === "blocked") { return "blocked"; }
   if (state === "failed" || state === "error") { return "failed"; }
   return "";
@@ -2482,6 +2485,7 @@ function createUploadBatch(batchId, expectedTotal) {
     uploaded: 0,
     attempted: 0,
     localErrors: 0,
+    duplicates: 0,
     items: new Map(),
     attempts: 0,
     polling: false,
@@ -2565,7 +2569,9 @@ function ensureBatchItem(batch, item) {
     };
     batch.items.set(key, entry);
     action.addEventListener("click", function () {
-      if (entry.fileId) { openBatchItem(batch, entry); }
+      if (!entry.fileId) { return; }
+      if (entry.state === "queued") { cancelQueuedItem(batch, entry); return; }
+      openBatchItem(batch, entry);
     });
   }
   entry.fileId = String(item.file_id || entry.fileId || "");
@@ -2582,11 +2588,15 @@ function ensureBatchItem(batch, item) {
   entry.reasonNode.hidden = !reason;
   entry.row.dataset.state = entry.state;
   entry.row.classList.toggle("attention", Boolean(BATCH_ATTENTION[entry.state]));
-  entry.actionNode.hidden = !entry.fileId;
-  entry.actionNode.textContent = BATCH_ATTENTION[entry.state] ? "处理" : "查看";
-  entry.actionNode.title = BATCH_ATTENTION[entry.state]
-    ? "展开这份资料，执行入库 / 跳过 / 修改正文 / 重试"
-    : "展开查看这份资料的状态";
+  entry.actionNode.hidden = !entry.fileId || entry.state === "cancelled" || entry.state === "duplicate";
+  entry.actionNode.textContent = entry.state === "queued"
+    ? "取消"
+    : (BATCH_ATTENTION[entry.state] ? "处理" : "查看");
+  entry.actionNode.title = entry.state === "queued"
+    ? "取消排队；原件与上传留档保留"
+    : (BATCH_ATTENTION[entry.state]
+      ? "展开这份资料，执行入库 / 跳过 / 修改正文 / 重试"
+      : "展开查看这份资料的状态");
   return entry;
 }
 
@@ -2607,6 +2617,31 @@ function openBatchItem(batch, entry) {
   try { card.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (err) { /* 兼容 */ }
 }
 
+async function cancelQueuedItem(batch, entry) {
+  if (!batch || !entry || !entry.fileId) { return; }
+  const node = entry.actionNode;
+  node.disabled = true;
+  node.textContent = "取消中…";
+  try {
+    const response = await fetch("/ingest/action/" + encodeURIComponent(entry.fileId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel" })
+    });
+    let data = {};
+    try { data = await response.json(); } catch (err) { data = {}; }
+    if (!response.ok) {
+      setToast(errorText(data, response.status), "bad");
+    } else {
+      setToast("已取消排队；原件与上传留档保留", "ok");
+    }
+  } catch (err) {
+    setToast("取消失败：" + err.message, "bad");
+  }
+  await refreshBatchOnce(batch);
+  node.disabled = false;
+}
+
 function addBatchLocalError(batch, name, detail) {
   if (!batch) { return; }
   batch.localErrors += 1;
@@ -2619,8 +2654,22 @@ function addBatchLocalError(batch, name, detail) {
   updateBatchUi(batch, batch.lastData);
 }
 
+function addBatchDuplicate(batch, name, detail) {
+  if (!batch) { return; }
+  batch.duplicates += 1;
+  batch.uploaded += 1;
+  ensureBatchItem(batch, {
+    tempId: "dup_" + batch.duplicates + "_" + Date.now(),
+    name: name || "未命名文件",
+    state: "duplicate",
+    detail: String(detail || "相同内容已存在，未重复入库")
+  });
+  updateBatchUi(batch, batch.lastData);
+}
+
 function batchCounts(batch, data) {
   const counts = (data && data.counts) || {};
+  const queued = Number(counts.queued || 0);
   const processing = ["processing", "parsing", "checking", "ocr"]
     .reduce(function (sum, key) { return sum + Number(counts[key] || 0); }, 0);
   const review = Number(counts.review || 0) + Number(counts.needs_ocr || 0);
@@ -2628,20 +2677,28 @@ function batchCounts(batch, data) {
   const failed = Number(counts.failed || 0) + Number(batch.localErrors || 0);
   const done = Number(counts.done || 0);
   const skipped = Number(counts.skipped || 0);
+  const cancelled = Number(counts.cancelled || 0);
+  const duplicates = Number(batch.duplicates || 0);
   const ingesting = Number(counts.ingesting || 0);
-  const uploaded = data ? Number(data.total || 0) : Number(batch.uploaded || 0);
+  const uploaded = Math.max(
+    data ? Number(data.total || 0) : 0,
+    Number(batch.uploaded || 0)
+  );
   const total = Math.max(Number(batch.expectedTotal || 0), uploaded);
-  const active = processing + ingesting;
-  const terminal = done + skipped + failed;
+  const active = queued + processing + ingesting;
+  const terminal = done + skipped + failed + cancelled + duplicates;
   return {
     total: total,
     uploaded: uploaded,
+    queued: queued,
     processing: processing,
     review: review,
     blocked: blocked,
     failed: failed,
     done: done,
     skipped: skipped,
+    cancelled: cancelled,
+    duplicates: duplicates,
     ingesting: ingesting,
     active: active,
     terminal: terminal,
@@ -2656,12 +2713,15 @@ function batchSummaryParts(counts, uploadDone) {
   } else {
     parts.push("共 " + counts.total + " 份");
   }
-  if (counts.processing) { parts.push("解析/排队 " + counts.processing); }
+  if (counts.queued) { parts.push("排队 " + counts.queued); }
+  if (counts.processing) { parts.push("解析 " + counts.processing); }
   if (counts.review) { parts.push("待确认 " + counts.review); }
   if (counts.blocked) { parts.push("需修复 " + counts.blocked); }
   if (counts.ingesting) { parts.push("入库中 " + counts.ingesting); }
   if (counts.done) { parts.push("完成 " + counts.done); }
   if (counts.skipped) { parts.push("跳过 " + counts.skipped); }
+  if (counts.cancelled) { parts.push("已取消 " + counts.cancelled); }
+  if (counts.duplicates) { parts.push("已存在 " + counts.duplicates); }
   if (counts.failed) { parts.push("失败 " + counts.failed); }
   return parts;
 }
@@ -2678,7 +2738,7 @@ function updateBatchCompanion(batch, counts) {
       fileCount: counts.total,
       waitingCount: counts.review + counts.blocked + counts.failed,
       activeCount: counts.active,
-      doneCount: counts.done + counts.skipped,
+      doneCount: counts.done + counts.skipped + counts.cancelled + counts.duplicates,
       motion: counts.failed ? "error" : "success",
       label: counts.failed ? "资料批次完成（含失败）" : "资料批次完成",
       detail: detail,
@@ -2693,7 +2753,7 @@ function updateBatchCompanion(batch, counts) {
       fileCount: counts.total,
       waitingCount: counts.review + counts.blocked + counts.failed,
       activeCount: counts.active,
-      doneCount: counts.done + counts.skipped,
+      doneCount: counts.done + counts.skipped + counts.cancelled + counts.duplicates,
       motion: "waiting",
       label: "资料批次需要处理",
       detail: detail,
@@ -2706,7 +2766,7 @@ function updateBatchCompanion(batch, counts) {
       fileCount: counts.total,
       waitingCount: counts.review + counts.blocked + counts.failed,
       activeCount: counts.active,
-      doneCount: counts.done + counts.skipped,
+      doneCount: counts.done + counts.skipped + counts.cancelled + counts.duplicates,
       motion: "working",
       label: "资料批次处理中",
       detail: detail,
@@ -2793,6 +2853,10 @@ async function batchRefresh(batch, immediate) {
       if (data) {
         const counts = batchCounts(batch, data);
         if (batch.uploadDone && data.complete) { break; }
+        if (batch.uploadDone && counts.active === 0 && counts.total > 0
+            && counts.terminal >= counts.total) {
+          break;
+        }
         if (batch.uploadDone && counts.active === 0
             && (Number(data.total || 0) > 0 || batch.localErrors >= batch.expectedTotal)) {
           break;
@@ -2820,6 +2884,7 @@ function setUploadState(card, state, detail, data) {
   const sub = card.querySelector(".upload-sub");
   const table = {
     uploading: ["上传中", "uploading", "正在上传文件…"],
+    queued: ["排队中", "processing", "已进入本地解析队列，等待后台 worker 处理"],
     parsing: ["本地解析中", "processing", "正在本地解析文档内容…"],
     checking: ["校验中", "processing", "正在做质量校验…"],
     needs_ocr: ["需要 OCR", "needs_ocr", "本地提取不到足够文字：可用「图片 / 扫描件」入口或点「OCR 解析」"],
@@ -2830,6 +2895,8 @@ function setUploadState(card, state, detail, data) {
     // 质量门通过 ≠ 直接入库，停下来等你点头（确认门）
     review: ["待确认入库", "review", "已通过质量校验，等你确认后才会进知识库"],
     skipped: ["已跳过", "skipped", "已跳过：这个文件没有入库（点「仍要入库」可以反悔）"],
+    cancelled: ["已取消", "skipped", "已取消排队；原件与上传留档保留"],
+    duplicate: ["已存在", "skipped", "相同内容已存在，未重复入库"],
     blocked: ["✗ 未通过校验", "blocked", "未通过质量校验，已拦截：可先「修改正文」再重试，或点「仍要入库」自己担责放行"],
     failed: ["✗ 处理失败", "failed", "处理失败，可点击「重试」或查看 logs/app.log"],
     error: ["✗ 上传失败", "failed", "上传失败"],
@@ -2888,6 +2955,9 @@ function describeIngest(data) {
   }
   if (data.state === "skipped") {
     return data.detail || "已跳过：这个文件没有入库";
+  }
+  if (data.state === "queued" || data.state === "cancelled" || data.state === "duplicate") {
+    return data.detail || "";
   }
   const parts = [];
   if (data.doc_name) {
@@ -2974,6 +3044,10 @@ function renderIngestActions(card, data) {
   if (can.resume) {
     definitions.push(["仍要入库", "resume", "confirm",
       "把这份已跳过的内容重新提交知识库；本机原件与解析结果不会变动"]);
+  }
+  if (can.cancel) {
+    definitions.push(["取消排队", "cancel", "ghost",
+      "把这份文件从解析队列移除；原件与上传留档保留，可重新上传或删除"]);
   }
   // 「仍要入库」= 人工推翻质量校验的出口：质检会一直跑，只有它被拦下时这个按钮才出现。
   // 点了会在档案里留下 forced 记录（可事后复查这份是怎么进来的），所以把后果写在悬停提示里。
@@ -3808,9 +3882,12 @@ async function runIngestAction(card, fileId, action, label) {
   if (action === "ocr") { card.__ocrOutcomeNotified = false; }
   card.__busy = true;
   card.__busyLabel = action === "skip" ? "正在跳过"
-    : ((action === "ingest" || action === "resume") ? "正在提交" : "正在处理");
+    : (action === "cancel" ? "正在取消"
+      : ((action === "ingest" || action === "resume") ? "正在提交" : "正在处理"));
   if (action === "ingest" || action === "resume") {
     setUploadState(card, "ingesting", "已受理，正在提交知识库…（通常几秒内会有结果）");
+  } else if (action === "cancel") {
+    setUploadState(card, "processing", "正在取消排队…");
   } else if (action === "skip") {
     setUploadState(card, "skipped", "已按你的选择跳过，正在登记…");
   } else {
@@ -3987,6 +4064,9 @@ async function pollIngestStatus(card, fileId, options) {
     if (data.state === "skipped") {
       return;   // 已跳过：用户已经决定不入库（想反悔就点「仍要入库」）
     }
+    if (data.state === "cancelled") {
+      return;   // 已取消排队：终态，原件与留档保留
+    }
   }
   setUploadState(card, "unknown", "处理时间较长，可稍后直接提问相关内容");
 }
@@ -4055,6 +4135,16 @@ async function upload(file, policyId, batch) {
     try { data = await response.json(); } catch (err) { data = {}; }
     if (response.ok && data.success) {
       const fileId = String(data.file_id || "").trim();
+      if (data.duplicate) {
+        if (batch) {
+          addBatchDuplicate(batch, file.name, data.detail || "");
+        } else {
+          card.__fileId = fileId;
+          setUploadState(card, "duplicate", data.detail || "相同内容已存在，未重复入库");
+          setToast(data.detail || "相同内容已存在，未重复入库", "ok");
+        }
+        return;
+      }
       if (batch) {
         if (!fileId) {
           addBatchLocalError(batch, file.name, "服务未返回进度编号");
@@ -4063,7 +4153,7 @@ async function upload(file, policyId, batch) {
           ensureBatchItem(batch, {
             file_id: fileId,
             name: file.name,
-            state: data.state || "processing",
+            state: data.state || "queued",
             detail: data.detail || "",
             knowledge_error: "",
             progress: {}
@@ -4073,12 +4163,12 @@ async function upload(file, policyId, batch) {
         }
         return;
       }
-      setToast("已受理，正在本地解析与质量校验", "ok");
+      setToast("已受理，正在排队解析", "ok");
       card.__fileId = fileId;
       trackCard(fileId, card);   // 让「全部允许」开关能找回这张卡片
       if (fileId) {
-        setUploadState(card, "parsing", data.detail || "");
-        pollIngestStatus(card, fileId);
+        setUploadState(card, data.state || "queued", data.detail || "");
+        pollIngestStatus(card, fileId, { fast: true, fromState: "queued" });
       } else {
         setUploadState(card, "unknown", "已受理（服务未返回进度编号）");
       }

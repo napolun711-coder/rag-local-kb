@@ -23,6 +23,10 @@ class UploadBatchUiContractTests(unittest.TestCase):
             "batchAfterAction",
             "__deferCompanion",
             "资料批次",
+            "queued",
+            "取消排队",
+            "addBatchDuplicate",
+            "cancelQueuedItem",
         ):
             self.assertIn(value, INDEX_JS, value)
         self.assertIn(".upload-batch", INDEX_CSS)
@@ -30,11 +34,15 @@ class UploadBatchUiContractTests(unittest.TestCase):
     def test_files_page_exposes_batch_filter_and_retry(self) -> None:
         self.assertIn('id="batchFilter"', FILES_HTML)
         self.assertIn('id="retryFailedBtn"', FILES_HTML)
+        self.assertIn('id="queueToggleBtn"', FILES_HTML)
         for value in (
             "filterLocalRows",
             "populateBatchFilter",
             "applyBatchFilter",
             "retryFailedRows",
+            "cancelLocal",
+            "refreshQueueStatus",
+            "toggleQueue",
             "batch_id",
             "重试失败",
         ):

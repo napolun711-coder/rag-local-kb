@@ -938,11 +938,12 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 
 ### Remaining risks
 
-- The browser upload loop is still client-side and sequential. Refreshing or
-  closing the page before the loop finishes loses the remaining selected files.
-  A durable server-side queue remains Wave B work.
-- Large batches still parse synchronously one file per upload request; the batch
-  card makes the wait understandable but does not make parsing concurrent.
+- The browser upload loop is still client-side and sequential. Wave B makes
+  accepted jobs durable, but files that have not yet been sent to `/upload`
+  before a refresh or page close are still lost. A resumable client upload
+  session would be a further step.
+- Wave B moved parsing out of the upload request into a bounded background
+  worker pool; see the durable queue section below.
 - Batch grouping applies to unified uploads only. Image/scan uploads keep
   individual cards so the existing auto-OCR policy still runs.
 - The batch poller stops when there are no active items and waits for user
@@ -955,3 +956,77 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   rendered and verified).
 - The default lifecycle group was restarted for the new backend batch routes;
   any subsequent backend change still requires another restart.
+
+## Durable ingestion queue (2026-10-29)
+
+- `/upload` now returns HTTP 202 after validation, content hashing, archive, and
+  a durable `queued` result write. Local parsing, quality, OCR, and optional
+  knowledge submission run in a background worker.
+- Added `app/features/ingest/worker.py` with a bounded worker pool (default 2,
+  `RAGKB_INGEST_WORKERS`), retry limit (`RAGKB_INGEST_MAX_ATTEMPTS`, default 3),
+  and exponential backoff (`RAGKB_INGEST_RETRY_BACKOFF_SECONDS`, default 5).
+- On startup, jobs left in `processing/parsing/checking/ocr` are requeued.
+  Queued jobs survive a process restart and are processed by the next worker.
+  Unexpected pipeline exceptions requeue with backoff until the attempt limit,
+  then become `failed` with the exception type in the detail.
+- Uploads are content-hash deduplicated. A duplicate returns `duplicate=true`
+  with the existing file id and state `duplicate`; no second archive or job is
+  created. Failed/cancelled jobs do not block a re-upload.
+- Added queue controls: `GET /ingest/queue/status`, `POST /ingest/queue`
+  (`paused`), and the queued-job `cancel` action. Pausing is a runtime control
+  (not persisted across restart); cancelling is allowed only while `queued`,
+  preserves originals and archives, and ends in the terminal `cancelled` state.
+- Retry now re-enqueues the job instead of parsing synchronously inside the
+  action request. The existing `retry` action remains available for
+  failed/blocked/needs_ocr jobs.
+- Chat single-file cards now show `排队中`, `已取消`, and `已存在`, offer
+  `取消排队`, and keep polling queued jobs. Batch cards count queued,
+  cancelled, and duplicate rows; queued rows expose a `取消` action. The
+  companion treats queued as busy.
+- The files page shows `排队中` rows with a `取消排队` action, a batch filter,
+  a queue status line, and a global pause/resume control. Bulk retry remains a
+  sequential client loop capped at 20 items.
+- Inbox scanning still passes `allow_session_auto=False`, so queued inbox jobs
+  keep the no-auto-submit guarantee when they are later parsed.
+
+### Verification
+
+- Full suite: 103 tests passed, including worker enqueue, dedup, claim/process,
+  backoff, max-attempt failure, restart recovery, pause, and status tests.
+- Isolated HTTP smoke: `/upload` returned HTTP 202 `queued` in 0.461 seconds;
+  the worker moved the job to `review`; pausing kept the next upload queued and
+  the queue status reported `paused=true, queued=1`; cancel returned
+  `cancelled`; duplicate content returned the same file id with
+  `duplicate=true`; a queued job survived an app process restart and was
+  processed to `review` on the next start with `attempts=1`.
+- A 12-file batch smoke uploaded six normal and six low-quality files as
+  `queued`; an immediate batch read showed `review: 5, queued: 1`; after the
+  worker drained, the normal batch reported `review: 6` and the low-quality
+  batch reported `actionable: 6`.
+- Headless Chrome rendered the restored chat with five batch cards and the
+  companion aggregate `资料队列需要处理 · 共 30 份 · 待处理 30`; the files page
+  rendered six filtered rows, `当前只显示该批次`, and the queue status
+  `队列：空闲`.
+- All isolated app and fake-shell processes were stopped; no formal data was
+  written.
+
+### Remaining risks
+
+- Client uploads are still sent one file at a time by the browser; accepted jobs
+  are durable, but a page refresh before later files are sent still loses those
+  files.
+- Pause state is in memory and resets to running on restart. Cancellation is
+  limited to queued jobs; a running parse is not interrupted.
+- Content dedup only applies to new uploads that carry `content_hash`; legacy
+  jobs from before this change are not indexed by hash.
+- Batch duplicate rows are tracked by the browser (the server batch endpoint
+  only knows queued jobs); a refreshed page does not restore duplicate rows.
+- The worker parses at most two files concurrently by default. OCR-heavy
+  batches can still take time; the queue UI now shows that state.
+- The worker pool runs inside the application process. A multi-process
+  deployment would need a shared queue; the lifecycle is single-process.
+- Real LightRAG indexing and chat retrieval were not re-run in this wave; the
+  existing fake-shell success path and the live default environment remain the
+  surrounding evidence.
+- The default lifecycle group must be restarted to load the worker and the new
+  upload contract.

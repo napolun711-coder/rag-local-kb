@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -31,14 +32,14 @@ CONTENT_MAX_CHARS = 500_000
 REVIEW_STATES = ("review", "needs_ocr", "blocked")
 EDITABLE_STATES = REVIEW_STATES + ("skipped",)
 ACTIONABLE_STATES = ("blocked", "failed")
-ACTIVE_STATES = ("processing", "parsing", "checking", "ocr", "ingesting")
+ACTIVE_STATES = ("queued", "processing", "parsing", "checking", "ocr", "ingesting")
 PENDING_STATES = ("review", "needs_ocr")
 SKIPPED_RESTORE_HOURS = 24
 RESTORE_LIMIT = 20
 STALE_ACTIVE_MINUTES = 120
 STALE_INGEST_MINUTES = 60
 BATCH_ITEM_LIMIT = 200
-BATCH_TERMINAL_STATES = ("done", "failed", "skipped")
+BATCH_TERMINAL_STATES = ("done", "failed", "skipped", "cancelled")
 BATCH_KNOWLEDGE_REFRESH_SECONDS = 6
 BATCH_KNOWLEDGE_REFRESH_LIMIT = 6
 _KNOWLEDGE_REFRESH_AT: Dict[str, float] = {}
@@ -340,6 +341,18 @@ def _run_pipeline(
     return result
 
 
+def _find_duplicate(settings: IngestSettings, digest: str) -> Optional[Dict[str, Any]]:
+    if not digest:
+        return None
+    for item in storage.list_results(settings):
+        if str(item.get("content_hash") or "") != digest:
+            continue
+        if str(item.get("state") or "") in ("failed", "cancelled"):
+            continue
+        return item
+    return None
+
+
 def process_upload(
     filename: str,
     content: bytes,
@@ -350,7 +363,20 @@ def process_upload(
 ) -> Dict[str, Any]:
     settings = get_ingest_settings()
     _validate(filename, len(content), settings)
+    digest = hashlib.sha256(content).hexdigest()
     with _LOCK:
+        duplicate = _find_duplicate(settings, digest)
+        if duplicate is not None:
+            return {
+                "file_id": str(duplicate.get("file_id") or ""),
+                "batch_id": normalize_batch_id(batch_id),
+                "filename": filename,
+                "state": "duplicate",
+                "duplicate": True,
+                "detail": f"相同内容已存在：{duplicate.get('filename') or duplicate.get('doc_name') or '已有资料'}",
+                "saved_path": str(duplicate.get("saved_path") or ""),
+                "lightrag": duplicate.get("lightrag") or {"state": "not_submitted", "track_id": ""},
+            }
         file_id = storage.new_file_id()
         archived = storage.archive_upload(settings, filename, content)
         source = storage.save_job_source(settings, file_id, filename, content)
@@ -361,21 +387,27 @@ def process_upload(
             "filename": filename,
             "doc_name": Path(filename).stem,
             "content_type": content_type,
+            "content_hash": digest,
             "saved_path": storage.display_path(archived),
             "source_path": storage.display_path(source),
-            "state": "processing",
-            "detail": "已接收，正在本地解析",
+            "state": "queued",
+            "detail": "已进入本地解析队列",
+            "queued_at": created,
+            "attempts": 0,
+            "next_attempt_at": "",
+            "allow_session_auto": bool(allow_session_auto),
             "created_at": created,
             "updated_at": created,
-            "timeline": [{"step": "upload", "state": "done", "at": created, "detail": ""}],
+            "timeline": [
+                {"step": "upload", "state": "done", "at": created, "detail": ""},
+                {"step": "queue", "state": "queued", "at": created, "detail": ""},
+            ],
             "lightrag": {"state": "not_submitted", "track_id": ""},
             "knowledge": {"state": "not_submitted", "track_id": ""},
             "knowledge_gateway_ready": False,
         }
         storage.write_result(settings, file_id, result)
-        return _public_status(
-            _run_pipeline(settings, result, allow_session_auto=allow_session_auto)
-        )
+        return _public_status(result)
 
 
 def _can(status: Dict[str, Any]) -> Dict[str, bool]:
@@ -395,6 +427,7 @@ def _can(status: Dict[str, Any]) -> Dict[str, bool]:
         ),
         "retry": state in ("failed", "blocked", "needs_ocr"),
         "resume": state == "skipped",
+        "cancel": state == "queued",
         "skip": state in REVIEW_STATES,
         "edit": editable,
         "refresh": bool(track_id) and state in ("ingesting", "done"),
@@ -570,6 +603,7 @@ def batch_status(batch_id: str) -> Optional[Dict[str, Any]]:
         "skipped": counts.get("skipped", 0),
         "done": counts.get("done", 0),
         "failed": counts.get("failed", 0),
+        "cancelled": counts.get("cancelled", 0),
     }
     items = [_batch_item(item) for item in results[:BATCH_ITEM_LIMIT]]
     total = len(results)
@@ -802,6 +836,31 @@ def activate(file_id: str, action: str) -> Dict[str, Any]:
                     "status": _public_status(result),
                 }
             return _retry_result(settings, result)
+        elif action == "cancel":
+            if state != "queued":
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "只有排队中的文件可以取消",
+                    "status": _public_status(result),
+                }
+            result["state"] = "cancelled"
+            result["detail"] = "已取消排队；原件与上传留档保留"
+            result["updated_at"] = storage.utc_now()
+            result["timeline"] = list(result.get("timeline") or []) + [{
+                "step": "cancel",
+                "state": "cancelled",
+                "at": result["updated_at"],
+                "detail": "User cancelled the queued job",
+            }]
+            storage.write_result(settings, file_id, result)
+            return {
+                "ok": True,
+                "state": "cancelled",
+                "message": result["detail"],
+                "duplicate_submit": False,
+                "status": _public_status(result),
+            }
         elif action == "resume":
             if state != "skipped":
                 return {
@@ -1139,17 +1198,26 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
 
 
 def _retry_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, Any]:
-    result["state"] = "processing"
-    result["detail"] = "正在重新解析"
-    result["updated_at"] = storage.utc_now()
+    now = storage.utc_now()
+    result["state"] = "queued"
+    result["detail"] = "已重新排队，等待本地解析"
+    result["queued_at"] = now
+    result["attempts"] = 0
+    result["next_attempt_at"] = ""
+    result["updated_at"] = now
+    result["timeline"] = list(result.get("timeline") or []) + [{
+        "step": "retry",
+        "state": "queued",
+        "at": now,
+        "detail": "User requested a retry",
+    }]
     storage.write_result(settings, result["file_id"], result)
-    updated = _run_pipeline(settings, result)
     return {
         "ok": True,
-        "state": updated.get("state"),
-        "message": updated.get("detail") or "重试完成",
+        "state": "queued",
+        "message": result["detail"],
         "duplicate_submit": False,
-        "status": _public_status(updated),
+        "status": _public_status(result),
     }
 
 

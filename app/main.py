@@ -49,6 +49,12 @@ async def lifespan(_: FastAPI):
     except Exception:
         LOGGER.exception("Inbox scanner startup failed (ignored)")
     try:
+        from app.features.ingest import worker as ingest_worker
+
+        ingest_worker.start()
+    except Exception:
+        LOGGER.exception("Ingestion worker startup failed (ignored)")
+    try:
         from app.adapters.lightrag.client import LightRagHttpClient
         from app.features.knowledge import index_guard
 
@@ -79,6 +85,12 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
+        try:
+            from app.features.ingest import worker as ingest_worker
+
+            ingest_worker.stop()
+        except Exception:
+            LOGGER.exception("Ingestion worker shutdown failed (ignored)")
         try:
             from app.features.inbox import service as inbox_service
 

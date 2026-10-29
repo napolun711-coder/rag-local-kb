@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from app.features.ingest import service
+from app.features.ingest import service, worker
 from app.features.ingest.config import get_ingest_settings
 
 router = APIRouter(tags=["ingest"])
@@ -29,11 +29,15 @@ class IngestSession(BaseModel):
     allow_all: bool = False
 
 
+class QueueState(BaseModel):
+    paused: bool = False
+
+
 def _detail(exc: service.IngestError) -> Dict[str, Any]:
     return {"error": exc.code, "message": exc.message}
 
 
-@router.post("/upload")
+@router.post("/upload", status_code=202)
 async def upload_file(
     file: UploadFile = File(...),
     batch_id: str = Form(default=""),
@@ -58,6 +62,7 @@ async def upload_file(
         "file_id": result["file_id"],
         "batch_id": result.get("batch_id") or "",
         "state": result["state"],
+        "duplicate": bool(result.get("duplicate")),
         "detail": result.get("detail") or "",
         "saved_path": result.get("saved_path") or "",
         "lightrag": result.get("lightrag") or {"state": "not_configured", "track_id": ""},
@@ -118,6 +123,16 @@ def ingest_pending() -> Dict[str, Any]:
             "restore_hours": service.SKIPPED_RESTORE_HOURS,
         },
     }
+
+
+@router.get("/ingest/queue/status")
+def ingest_queue_status() -> Dict[str, Any]:
+    return {"ok": True, **worker.status()}
+
+
+@router.post("/ingest/queue")
+def ingest_queue_state(data: QueueState) -> Dict[str, Any]:
+    return {"ok": True, **worker.set_paused(data.paused)}
 
 
 @router.get("/ingest/batch/{batch_id}")
