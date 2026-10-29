@@ -7660,6 +7660,10 @@ function renderMoreMenu() {
   if (sep) { sep.hidden = !(showStop && showClear); }
 }
 
+window.addEventListener("ragkb-session", function () {
+  if (moreMenu && !moreMenu.hidden) { renderMoreMenu(); }
+});
+
 function openMoreMenu() {
   if (!moreMenu) { return; }
   closeSidebar();                 // 抽屉与菜单不同屏

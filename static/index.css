@@ -305,6 +305,7 @@ body.graph-open #sideToggle{display:none !important}
   display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;
   border-radius:10px;font-size:14px;font-weight:500;color:var(--text);text-align:left;
 }
+.mm-item[hidden]{display:none !important}
 .mm-item:hover{background:var(--side-hover)}
 .mm-item .mm-ico{flex:0 0 18px;display:inline-flex;align-items:center;justify-content:center;color:var(--side-text-faint)}
 .mm-item .mm-txt{flex:1 1 auto;min-width:0}
@@ -556,6 +557,8 @@ body.graph-open #sideToggle{display:none !important}
     transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
   }
   .app.nav-open .sidebar{transform:translateX(0)}
+  /* 手机端只保留「≡」抽屉入口；桌面收起态图标轨不能压住左上角。 */
+  .side-rail{display:none !important}
   .side-mask{display:block;position:fixed;inset:0;z-index:44;background:var(--overlay-strong)}
   .side-mask[hidden]{display:none}
   /* 触屏没有 hover：删除对话的「×」必须常态可见 */
@@ -1139,19 +1142,39 @@ body.graph-open #sideToggle{display:none !important}
   .graph-panel{width:232px;flex:0 0 232px}
 }
 @media (max-width:620px){
-  .graph-bar{padding:8px 12px}
-  .graph-bar .g-sub{display:none}
-  .graph-body{flex-direction:column}
-  .graph-rail{
-    width:100%;flex:0 0 auto;flex-direction:row;align-items:center;gap:8px;
-    border-right:1px solid var(--side-line);border-bottom:1px solid var(--line);overflow-x:auto;padding:9px 12px;
+  /* 手机上的图谱以画布为主：工具条横向滚动，不换行；画布吃满剩余高度。 */
+  .graph-view{min-height:0}
+  .graph-bar{
+    padding:7px 10px;gap:6px;flex-wrap:nowrap;overflow-x:auto;
+    scrollbar-width:none;
   }
+  .graph-bar::-webkit-scrollbar{display:none}
+  .graph-bar .g-sub{display:none}
+  .graph-bar .g-actions{flex:0 0 auto;flex-wrap:nowrap;margin-left:0}
+  .graph-bar .mini{padding:6px 10px;white-space:nowrap}
+  .graph-3d-hint{display:none}
+  .graph-body{flex:1 1 auto;min-height:0;flex-direction:column}
+  .graph-rail{
+    width:100%;flex:0 0 auto;flex-direction:row;align-items:center;gap:7px;
+    border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;
+    padding:7px 10px;scrollbar-width:none;
+  }
+  .graph-rail::-webkit-scrollbar{display:none}
   .graph-rail .gr-title,.graph-rail .gr-hint{display:none}
-  .gr-search{flex:0 0 186px}
+  .gr-search{flex:0 0 176px}
+  .graph-rail > .gr-global{
+    flex:0 0 auto;width:auto;min-width:138px;padding:7px 10px;
+  }
+  .gr-global .gg-name,.gr-global .gg-meta{
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .gr-global .gg-meta{max-width:190px}
   .gr-chips{flex-wrap:nowrap}
-  .graph-canvas-wrap{min-height:280px}
-  .graph-panel{width:100%;flex:0 0 auto;border-left:0;border-top:1px solid var(--line);max-height:42vh}
-  .graph-legend{max-width:78%}
+  .graph-canvas-wrap{flex:1 1 auto;min-height:0;height:auto}
+  #graphCanvas{height:100%;min-height:0}
+  .graph-panel{width:100%;flex:0 0 auto;border-left:0;border-top:1px solid var(--line);max-height:38vh}
+  .graph-panel[hidden]{display:none !important}
+  .graph-legend{max-width:72%}
 }
 
 
