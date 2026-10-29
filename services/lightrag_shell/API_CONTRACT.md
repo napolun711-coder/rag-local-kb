@@ -13,6 +13,14 @@ return fabricated query results or mark documents as ingested.
 - `GET /documents`
 - `GET /documents/track_status/{track_id}`
 - `DELETE /documents/delete_document`
+- `GET /graph/global?max_nodes=400`
+- `GET /graph/subgraph?label=&depth=2&max_nodes=60`
+- `GET /graph/popular?limit=16`
+- `GET /graph/search?q=&limit=20`
+
+The graph endpoints are a deliberately read-only allowlist. They proxy
+LightRAG's `/graphs` and `/graph/label/*` queries and never expose entity or
+relation create, edit, merge, or delete operations.
 
 ## Unconfigured engine
 

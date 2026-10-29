@@ -208,6 +208,57 @@ class LightRagHttpClient(KnowledgeGateway):
         payload = response.json()
         return payload if isinstance(payload, dict) else {"data": payload}
 
+    def _graph_get(self, path: str, params: Mapping[str, Any]) -> Dict[str, Any]:
+        try:
+            response = self.session.get(
+                self._url(path),
+                params=dict(params),
+                timeout=self.timeout,
+                verify=self.settings.verify_tls,
+            )
+        except requests.RequestException as exc:
+            raise KnowledgeUnavailable(type(exc).__name__) from exc
+        self._raise_for_response(response)
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise KnowledgeHTTPError(502, "Knowledge graph returned invalid JSON") from exc
+        return payload if isinstance(payload, dict) else {"data": payload}
+
+    def graph_global(self, *, max_nodes: int = 400) -> Dict[str, Any]:
+        return self._graph_get("/graph/global", {"max_nodes": max(1, int(max_nodes))})
+
+    def graph_subgraph(
+        self,
+        label: str,
+        *,
+        depth: int = 2,
+        max_nodes: int = 60,
+    ) -> Dict[str, Any]:
+        return self._graph_get(
+            "/graph/subgraph",
+            {
+                "label": str(label).strip(),
+                "depth": max(1, min(3, int(depth))),
+                "max_nodes": max(10, min(200, int(max_nodes))),
+            },
+        )
+
+    def graph_popular(self, *, limit: int = 16) -> Dict[str, Any]:
+        return self._graph_get(
+            "/graph/popular",
+            {"limit": max(1, min(100, int(limit)))},
+        )
+
+    def graph_search(self, query: str, *, limit: int = 20) -> Dict[str, Any]:
+        return self._graph_get(
+            "/graph/search",
+            {
+                "q": str(query).strip(),
+                "limit": max(1, min(50, int(limit))),
+            },
+        )
+
     def delete_document(
         self,
         document_id: str,

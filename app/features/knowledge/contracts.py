@@ -61,6 +61,24 @@ class KnowledgeGateway(Protocol):
     def document_status(self, track_id: str) -> Dict[str, Any]:
         ...
 
+    def graph_global(self, *, max_nodes: int = 400) -> Dict[str, Any]:
+        ...
+
+    def graph_subgraph(
+        self,
+        label: str,
+        *,
+        depth: int = 2,
+        max_nodes: int = 60,
+    ) -> Dict[str, Any]:
+        ...
+
+    def graph_popular(self, *, limit: int = 16) -> Dict[str, Any]:
+        ...
+
+    def graph_search(self, query: str, *, limit: int = 20) -> Dict[str, Any]:
+        ...
+
     def delete_document(
         self,
         document_id: str,

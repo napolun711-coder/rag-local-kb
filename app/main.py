@@ -157,6 +157,7 @@ def create_app() -> FastAPI:
     application.include_router(ocr_api.router)
     application.include_router(tts_api.router)
     application.include_router(knowledge_api.router)
+    application.include_router(knowledge_api.graph_router)
     application.include_router(settings_api.router)
     register_exception_handlers(application)
     return application

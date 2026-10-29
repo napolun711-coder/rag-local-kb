@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 import requests
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -93,6 +93,14 @@ def _request_json(method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
     except Exception:
         payload = {"data": response.text}
     return payload if isinstance(payload, dict) else {"data": payload}
+
+
+def _list_items(payload: Dict[str, Any]) -> list[Any]:
+    items = payload.get("items")
+    if isinstance(items, list):
+        return items
+    data = payload.get("data")
+    return data if isinstance(data, list) else []
 
 
 @app.get("/health")
@@ -199,6 +207,65 @@ def document_status(track_id: str) -> Dict[str, Any]:
 @app.delete("/documents/delete_document")
 def delete_document(payload: Dict[str, Any]) -> Dict[str, Any]:
     return _request_json("DELETE", "/documents/delete_document", json=payload)
+
+
+@app.get("/graph/popular")
+def graph_popular(limit: int = Query(16, ge=1, le=100)) -> Dict[str, Any]:
+    payload = _request_json(
+        "GET",
+        "/graph/label/popular",
+        params={"limit": limit},
+    )
+    return {"items": _list_items(payload)}
+
+
+@app.get("/graph/search")
+def graph_search(
+    q: str = Query(..., min_length=1, max_length=64),
+    limit: int = Query(20, ge=1, le=50),
+) -> Dict[str, Any]:
+    query = q.strip()
+    if not query:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_query", "message": "Search query cannot be blank."},
+        )
+    payload = _request_json(
+        "GET",
+        "/graph/label/search",
+        params={"q": query, "limit": limit},
+    )
+    return {"items": _list_items(payload)}
+
+
+@app.get("/graph/global")
+def graph_global(
+    max_nodes: int = Query(400, ge=1, le=1000),
+) -> Dict[str, Any]:
+    return _request_json(
+        "GET",
+        "/graphs",
+        params={"label": "*", "max_depth": 3, "max_nodes": max_nodes},
+    )
+
+
+@app.get("/graph/subgraph")
+def graph_subgraph(
+    label: str = Query(..., min_length=1, max_length=128),
+    depth: int = Query(2, ge=1, le=3),
+    max_nodes: int = Query(60, ge=10, le=200),
+) -> Dict[str, Any]:
+    center = label.strip()
+    if not center:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_label", "message": "Graph label cannot be blank."},
+        )
+    return _request_json(
+        "GET",
+        "/graphs",
+        params={"label": center, "max_depth": depth, "max_nodes": max_nodes},
+    )
 
 
 def run() -> None:

@@ -3736,16 +3736,17 @@ const GRAPH_TYPE_COLORS = {
   other: "#6b7280", unknown: "#6b7280"
 };
 const GV = {
-  nodes: [], edges: [], byId: {}, adj: {},
+  nodes: [], edges: [], allNodes: [], allEdges: [], byId: {}, adj: {},
   pos2: {}, pos3: {}, level: {}, radius: {}, proj: {}, delay: {},
   ideal2: {}, clusterOf: {}, planned: {}, jitterAmp: 0,
   view: { scale: 1, tx: 0, ty: 0 },
   mode: "2d", rot: { yaw: -0.62, pitch: 0.36 },
   scope: "global",                 // global＝整张银河图；ego＝以某实体为中心的自我图
   center: "", clusters: 0,
-  selected: null, hover: null, hot: {}, focusId: "", focusing: false,
+  selected: null, selectedEdge: null, hover: null, hot: {}, focusId: "", focusing: false,
   drag: null, pan: null, rotate: null, moved: false, truncated: false,
   touchX: 0, touchY: 0, touchRot: null,
+  hiddenTypes: {}, legendKey: "",
   born: 0, animSpan: 0, animDone: true, dpr: 1,
   bgCanvas: document.createElement("canvas")
 };
@@ -3782,11 +3783,12 @@ function gvSplitFiles(raw) {
 }
 
 function gvReset() {
-  GV.nodes = []; GV.edges = []; GV.byId = {}; GV.adj = {};
+  GV.nodes = []; GV.edges = []; GV.allNodes = []; GV.allEdges = []; GV.byId = {}; GV.adj = {};
   GV.pos2 = {}; GV.pos3 = {}; GV.level = {}; GV.radius = {}; GV.proj = {}; GV.delay = {};
   GV.ideal2 = {}; GV.clusterOf = {}; GV.planned = {}; GV.jitterAmp = 0;
-  GV.selected = null; GV.hover = null; GV.hot = {}; GV.focusId = ""; GV.focusing = false;
+  GV.selected = null; GV.selectedEdge = null; GV.hover = null; GV.hot = {}; GV.focusId = ""; GV.focusing = false;
   GV.drag = null; GV.pan = null; GV.rotate = null;
+  GV.hiddenTypes = {}; GV.legendKey = "";
   GV.clusters = 0; GV.truncated = false; GV.animDone = true;
   $("graphTip").hidden = true;
 }
@@ -4208,6 +4210,17 @@ function gvT(id, now) {
 
 // ---------- 聚焦（悬停/选中）：关联凸显、非关联微下沉 ----------
 function gvRebuildFocus() {
+  if (GV.selectedEdge) {
+    const edge = GV.edges.find(function (item) { return item.id === GV.selectedEdge; });
+    if (edge) {
+      GV.focusId = edge.source;
+      GV.focusing = true;
+      GV.hot = {};
+      GV.hot[edge.source] = true;
+      GV.hot[edge.target] = true;
+      return;
+    }
+  }
   const focus = GV.hover || GV.selected || "";
   GV.focusId = focus;
   GV.focusing = !!focus;
@@ -4313,7 +4326,8 @@ function gvDrawEdge(ctx, e) {
   const a = GV.proj[e.source];
   const b = GV.proj[e.target];
   if (!a || !b) { return; }
-  const focusEdge = GV.focusing && GV.hot[e.source] && GV.hot[e.target];
+  const selectedEdge = GV.selectedEdge === e.id;
+  const focusEdge = selectedEdge || (GV.focusing && GV.hot[e.source] && GV.hot[e.target]);
   const dimmed = GV.focusing && !focusEdge;
   // 远景 + 非关联的边干脆不画：166 个节点时画面立刻清爽很多
   if (dimmed && GV.view.scale < 0.42) { return; }
@@ -4651,24 +4665,104 @@ function gvRenderLegend() {
   const host = $("graphLegend");
   if (!host) { return; }
   const types = {};
-  GV.nodes.forEach(function (n) { types[n.type || "未标注"] = true; });
+  (GV.allNodes || []).forEach(function (n) { types[n.type || ""] = true; });
   const names = Object.keys(types);
-  if (names.length < 2) { host.hidden = true; host.innerHTML = ""; return; }
+  if (names.length < 2) {
+    host.hidden = true;
+    host.innerHTML = "";
+    host.dataset.key = "";
+    return;
+  }
+  const key = names.map(function (type) {
+    return type + ":" + (GV.hiddenTypes[type] ? "0" : "1");
+  }).join("|");
+  if (host.dataset.key === key) {
+    host.hidden = false;
+    return;
+  }
+  host.dataset.key = key;
   host.innerHTML = "";
   names.slice(0, 8).forEach(function (type) {
-    const span = document.createElement("span");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.graphType = type;
+    button.className = GV.hiddenTypes[type] ? "off" : "";
+    button.title = GV.hiddenTypes[type] ? "显示此类型" : "隐藏此类型";
     const dot = document.createElement("i");
     dot.style.background = graphTypeColor(type);
-    span.appendChild(dot);
-    span.appendChild(document.createTextNode(type));
-    host.appendChild(span);
+    button.appendChild(dot);
+    button.appendChild(document.createTextNode(type || "未标注"));
+    host.appendChild(button);
   });
   host.hidden = false;
 }
 
+function gvToggleType(type) {
+  const hidden = GV.hiddenTypes || {};
+  if (!hidden[type]) {
+    const remaining = Object.keys((GV.allNodes || []).reduce(function (out, node) {
+      if (node.type !== type) { out[node.type || ""] = true; }
+      return out;
+    }, {})).filter(function (name) { return !hidden[name]; });
+    if (!remaining.length) {
+      setToast("至少保留一种实体类型", "");
+      return;
+    }
+  }
+  hidden[type] = !hidden[type];
+  GV.hiddenTypes = hidden;
+  const hadPanel = !!(GV.selected || GV.selectedEdge);
+  gvApplyTypeFilter();
+  if (hadPanel && !GV.selected && !GV.selectedEdge) {
+    gvPanelPlaceholder();
+  }
+}
+
+function gvHitEdge(x, y) {
+  let best = null;
+  let bestDistance = Infinity;
+  const threshold = 8 / GV.view.scale;
+  GV.edges.forEach(function (edge) {
+    const a = GV.proj[edge.source];
+    const b = GV.proj[edge.target];
+    if (!a || !b) { return; }
+    if (GV.focusing && GV.view.scale < 0.42
+      && GV.selectedEdge !== edge.id
+      && !(GV.hot[edge.source] && GV.hot[edge.target])) { return; }
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const length = Math.sqrt(dx * dx + dy * dy) || 1;
+    let bow = Math.min(46, Math.max(9, length * 0.11));
+    if (edge.__count > 1) {
+      bow += (edge.__idx - (edge.__count - 1) / 2) * length * 0.16;
+    }
+    const cx = (a.x + b.x) / 2 - (dy / length) * bow;
+    const cy = (a.y + b.y) / 2 + (dx / length) * bow;
+    let lastX = a.x, lastY = a.y;
+    for (let step = 1; step <= 16; step++) {
+      const t = step / 16;
+      const inv = 1 - t;
+      const px = inv * inv * a.x + 2 * inv * t * cx + t * t * b.x;
+      const py = inv * inv * a.y + 2 * inv * t * cy + t * t * b.y;
+      const sx = px - lastX, sy = py - lastY;
+      const len2 = sx * sx + sy * sy;
+      const q = len2 > 0 ? Math.max(0, Math.min(1, ((x - lastX) * sx + (y - lastY) * sy) / len2)) : 0;
+      const dx2 = x - (lastX + q * sx);
+      const dy2 = y - (lastY + q * sy);
+      const distance = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = edge.id;
+      }
+      lastX = px;
+      lastY = py;
+    }
+  });
+  return bestDistance <= threshold ? best : null;
+}
+
 function gvHit(clientX, clientY) {
   const cv = $("graphCanvas");
-  if (!cv) { return { id: null, wx: 0, wy: 0 }; }
+  if (!cv) { return { id: null, edgeId: null, wx: 0, wy: 0 }; }
   const rect = cv.getBoundingClientRect();
   const x = (clientX - rect.left - rect.width / 2 - GV.view.tx) / GV.view.scale;
   const y = (clientY - rect.top - rect.height / 2 - GV.view.ty) / GV.view.scale;
@@ -4680,7 +4774,7 @@ function gvHit(clientX, clientY) {
     const r = (GV.radius[n.id] || GRAPH_NODE_BASE) * (p.s || 1) + 5 / GV.view.scale;
     if ((x - p.x) * (x - p.x) + (y - p.y) * (y - p.y) <= r * r) { hit = n.id; break; }
   }
-  return { id: hit, wx: x, wy: y };
+  return { id: hit, edgeId: hit ? null : gvHitEdge(x, y), wx: x, wy: y };
 }
 
 function gvFit() {
@@ -4780,6 +4874,7 @@ function gvShowTip(id, clientX, clientY) {
 }
 
 function gvSelect(id) {
+  GV.selectedEdge = null;
   GV.selected = id || null;
   const node = GV.byId[GV.selected];
   const panel = $("graphPanel");
@@ -4809,33 +4904,96 @@ function gvSelect(id) {
   const centerBtn = $("gpCenter");
   centerBtn.textContent = GV.scope === "global" ? "展开它的关系图" : "以它为中心";
   $("gpAsk").onclick = function () { graphAskEntity(node.id); };
+  $("gpAsk").textContent = "就这个实体提问";
   centerBtn.onclick = function () { loadGraphSubgraph(node.id); };
-  // 关联实体可点：在右侧直接跳到邻居，省得回画布找
+  const nearTitle = $("gpNearTitle");
+  if (nearTitle) { nearTitle.textContent = "直接关联"; }
+  // 关联关系可点：点邻居直接打开这条边的关系详情。
   const near = $("gpNear");
   if (near) {
     near.innerHTML = "";
-    const list = (GV.adj[node.id] || []).slice(0, 12);
-    if (!list.length) {
+    const related = GV.edges.filter(function (edge) {
+      return edge.source === node.id || edge.target === node.id;
+    }).slice(0, 12);
+    if (!related.length) {
       const none = document.createElement("div");
       none.className = "gp-kind";
       none.textContent = "（没有直接关联）";
       near.appendChild(none);
     }
-    list.forEach(function (id) {
+    related.forEach(function (edge) {
+      const otherId = edge.source === node.id ? edge.target : edge.source;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = id;
-      btn.title = "选中这个关联实体";
-      btn.addEventListener("click", function () { gvSelect(id); });
+      btn.textContent = otherId;
+      btn.title = edge.desc || edge.keywords || "查看关系详情";
+      btn.addEventListener("click", function () { gvSelectEdge(edge.id); });
       near.appendChild(btn);
     });
   }
   gvDraw();
 }
 
+function gvSelectEdge(id) {
+  const edge = GV.edges.find(function (item) { return item.id === id; });
+  if (!edge) { gvPanelPlaceholder(); return; }
+  GV.selected = null;
+  GV.selectedEdge = edge.id;
+  GV.hover = null;
+  $("graphTip").hidden = true;
+  const panel = $("graphPanel");
+  panel.hidden = false;
+  panel.classList.remove("empty");
+  $("gpName").textContent = edge.source + " — " + edge.target;
+  const weight = edge.weight === undefined || edge.weight === null || edge.weight === ""
+    ? ""
+    : " · 权重 " + edge.weight;
+  $("gpType").textContent = "关系" + (edge.type ? "：" + edge.type : "") + weight;
+  $("gpDesc").textContent = edge.desc || edge.keywords
+    || "这条关系没有描述。";
+  const files = $("gpFiles");
+  files.innerHTML = "";
+  if (!edge.files.length) {
+    const none = document.createElement("div");
+    none.className = "gp-kind";
+    none.textContent = "（未记录来源文档）";
+    files.appendChild(none);
+  }
+  edge.files.forEach(function (path) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = path;
+    btn.title = "就这份资料提问";
+    btn.addEventListener("click", function () { graphAskFile(path); });
+    files.appendChild(btn);
+  });
+  const nearTitle = $("gpNearTitle");
+  if (nearTitle) { nearTitle.textContent = "关系两端"; }
+  const near = $("gpNear");
+  near.innerHTML = "";
+  [edge.source, edge.target].forEach(function (name, index) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = (index === 0 ? "起点 · " : "终点 · ") + name;
+    btn.title = "选中实体 " + name;
+    btn.addEventListener("click", function () { gvSelect(name); });
+    near.appendChild(btn);
+  });
+  const ask = $("gpAsk");
+  ask.textContent = "就这条关系提问";
+  ask.onclick = function () {
+    gvGoAsk("「" + edge.source + "」和「" + edge.target + "」是什么关系？请结合我的资料说明。");
+  };
+  const centerBtn = $("gpCenter");
+  centerBtn.textContent = "以起点为中心";
+  centerBtn.onclick = function () { loadGraphSubgraph(edge.source); };
+  gvDraw();
+}
+
 // 没选中实体时：把预留出来的一栏变成"怎么用"的引导，而不是留白
 function gvPanelPlaceholder() {
   GV.selected = null;
+  GV.selectedEdge = null;
   const panel = $("graphPanel");
   panel.hidden = false;
   panel.classList.add("empty");
@@ -4844,8 +5002,11 @@ function gvPanelPlaceholder() {
   $("gpDesc").textContent = "点画布上的任意节点（或从左边搜索、点热门实体），"
     + "这里会显示它的类型、描述、来源文档与「直接关联」，还能就它提问。";
   $("gpFiles").innerHTML = "";
+  const nearTitle = $("gpNearTitle");
+  if (nearTitle) { nearTitle.textContent = "直接关联"; }
   const near = $("gpNear");
   if (near) { near.innerHTML = ""; }
+  $("gpAsk").textContent = "就这个实体提问";
   $("graphTip").hidden = true;
   gvDraw();
 }
@@ -4871,33 +5032,80 @@ function graphAskFile(path) {
 function gvApplyData(data) {
   const nodes = (data.nodes || []).map(function (raw) {
     const props = raw.properties || {};
+    const rawType = props.entity_type;
+    const type = Array.isArray(rawType)
+      ? rawType.filter(Boolean).join(" / ")
+      : String(rawType || "").trim();
     return {
       id: raw.id,
-      type: props.entity_type || "",
+      type: type,
       desc: props.description || "",
       files: gvSplitFiles(props.file_path)
     };
   });
   const edges = (data.edges || []).map(function (raw) {
-    return { source: raw.source, target: raw.target };
+    const props = raw.properties || {};
+    return {
+      id: raw.id || (raw.source + "-" + raw.target),
+      source: raw.source,
+      target: raw.target,
+      type: raw.type || "",
+      desc: props.description || "",
+      keywords: props.keywords || "",
+      weight: props.weight,
+      files: gvSplitFiles(props.file_path)
+    };
   });
   const truncated = !!data.is_truncated;
   gvReset();
-  GV.nodes = nodes;
-  GV.edges = edges;
+  GV.allNodes = nodes;
+  GV.allEdges = edges;
   GV.truncated = truncated;
-  nodes.forEach(function (n) { GV.byId[n.id] = n; });
-  // 邻接表（两种布局共用）
-  nodes.forEach(function (n) { GV.adj[n.id] = []; });
-  edges.forEach(function (e) {
-    if (GV.adj[e.source] && GV.adj[e.target]) {
-      GV.adj[e.source].push(e.target);
-      GV.adj[e.target].push(e.source);
-    }
-  });
   if (!nodes.length) {
+    gvPanelPlaceholder();
     gvShowOverlay("empty");
     $("graphSub").textContent = GV.scope === "global" ? "知识库里还没有实体" : "「" + GV.center + "」没有关联的实体";
+    return false;
+  }
+  gvApplyTypeFilter();
+  return GV.nodes.length > 0;
+}
+
+// 类型筛选只改“当前可见集合”，原始图数据保留，切回类型时无需重新请求后端。
+function gvApplyTypeFilter() {
+  const hidden = GV.hiddenTypes || {};
+  const nodes = (GV.allNodes || []).filter(function (node) {
+    return !hidden[node.type || ""];
+  });
+  const visible = {};
+  nodes.forEach(function (node) { visible[node.id] = true; });
+  const edges = (GV.allEdges || []).filter(function (edge) {
+    return visible[edge.source] && visible[edge.target];
+  });
+  GV.nodes = nodes;
+  GV.edges = edges;
+  GV.byId = {};
+  GV.adj = {};
+  nodes.forEach(function (node) {
+    GV.byId[node.id] = node;
+    GV.adj[node.id] = [];
+  });
+  edges.forEach(function (edge) {
+    if (GV.adj[edge.source] && GV.adj[edge.target]) {
+      GV.adj[edge.source].push(edge.target);
+      GV.adj[edge.target].push(edge.source);
+    }
+  });
+  if (GV.selected && !GV.byId[GV.selected]) { GV.selected = null; }
+  if (GV.selectedEdge && !edges.some(function (edge) { return edge.id === GV.selectedEdge; })) {
+    GV.selectedEdge = null;
+  }
+  if (!nodes.length) {
+    GV.animDone = true;
+    gvShowOverlay("empty");
+    $("graphSub").textContent = "当前筛选没有可显示的实体";
+    gvRenderLegend();
+    gvDraw();
     return false;
   }
   gvLayout();
@@ -4905,8 +5113,26 @@ function gvApplyData(data) {
   gvShowOverlay(null);
   gvUpdateSub();
   gvUpdateScopeUI();
+  const meta = $("graphGlobalMeta");
+  if (meta && GV.scope === "global") {
+    meta.textContent = GV.nodes.length + " 个实体 · " + GV.edges.length + " 条关系"
+      + (GV.clusters > 1 ? " · " + GV.clusters + " 个星团" : "");
+  }
   gvStartAnim();
+  gvRenderLegend();
+  gvDraw();
   return true;
+}
+
+async function graphResponseError(response) {
+  try {
+    const data = await response.json();
+    const error = data && data.error;
+    if (error && typeof error === "object" && error.message) { return String(error.message); }
+    if (typeof error === "string") { return error; }
+    if (data && typeof data.detail === "string") { return data.detail; }
+  } catch (err) { /* 非 JSON 错误响应只保留状态码 */ }
+  return "HTTP " + response.status;
 }
 
 // 默认视图：整张知识图谱
@@ -4917,8 +5143,8 @@ async function loadGraphGlobal() {
   try {
     // 参数名必须是 max_nodes：后端只认这个名字，写 ?max= 会被忽略、
     // 页面拿到的是**服务端默认值**（默认也是 400，所以以前"看起来能用"）。
-    const resp = await fetch("/api/graph/global", { cache: "no-store" });
-    if (!resp.ok) { throw new Error("HTTP " + resp.status); }
+    const resp = await fetch("/api/graph/global?max_nodes=400", { cache: "no-store" });
+    if (!resp.ok) { throw new Error(await graphResponseError(resp)); }
     const data = await resp.json();
     if (!gvApplyData(data)) { return; }
     const meta = $("graphGlobalMeta");
@@ -4943,10 +5169,10 @@ async function loadGraphSubgraph(label) {
   if (suggest) { suggest.hidden = true; }
   try {
     const resp = await fetch(
-      "/api/graph/subgraph?label=" + encodeURIComponent(name) + "&depth=2&max=60",
+      "/api/graph/subgraph?label=" + encodeURIComponent(name) + "&depth=2&max_nodes=60",
       { cache: "no-store" }
     );
-    if (!resp.ok) { throw new Error("HTTP " + resp.status); }
+    if (!resp.ok) { throw new Error(await graphResponseError(resp)); }
     const data = await resp.json();
     if (!gvApplyData(data)) { return; }
     gvSelect(GV.byId[name] ? name : GV.nodes[0].id);
@@ -4968,7 +5194,7 @@ async function loadGraphPopular() {
   if (!host) { return; }
   try {
     const resp = await fetch("/api/graph/popular?limit=16", { cache: "no-store" });
-    if (!resp.ok) { throw new Error("HTTP " + resp.status); }
+    if (!resp.ok) { throw new Error(await graphResponseError(resp)); }
     const data = await resp.json();
     const items = data.items || [];
     host.innerHTML = "";
@@ -4998,6 +5224,7 @@ function graphBindSearch() {
     graphSearchTimer = setTimeout(async function () {
       try {
         const resp = await fetch("/api/graph/search?q=" + encodeURIComponent(q) + "&limit=20", { cache: "no-store" });
+        if (!resp.ok) { throw new Error(await graphResponseError(resp)); }
         const data = await resp.json();
         const items = data.items || [];
         list.innerHTML = "";
@@ -5021,7 +5248,13 @@ function graphBindSearch() {
         });
         list.hidden = false;
       } catch (err) {
-        list.hidden = true;
+        list.innerHTML = "";
+        const failed = document.createElement("div");
+        failed.className = "gp-kind";
+        failed.style.padding = "6px 9px";
+        failed.textContent = "搜索失败：" + (err && err.message ? err.message : err);
+        list.appendChild(failed);
+        list.hidden = false;
       }
     }, 200);
   });
@@ -5075,6 +5308,8 @@ function graphBindCanvas() {
       }
     } else if (hit.id) {
       GV.drag = { id: hit.id };
+    } else if (hit.edgeId) {
+      GV.hover = null;
     } else {
       GV.pan = { x: event.clientX, y: event.clientY, tx: GV.view.tx, ty: GV.view.ty };
     }
@@ -5106,7 +5341,7 @@ function graphBindCanvas() {
     const hit = gvHit(event.clientX, event.clientY);
     if (hit.id !== GV.hover) {
       GV.hover = hit.id;
-      cv.style.cursor = hit.id ? "pointer" : (GV.mode === "3d" ? "move" : "grab");
+      cv.style.cursor = (hit.id || hit.edgeId) ? "pointer" : (GV.mode === "3d" ? "move" : "grab");
       gvShowTip(hit.id, event.clientX, event.clientY);
       gvDraw();
     } else if (hit.id) {
@@ -5128,7 +5363,13 @@ function graphBindCanvas() {
     if (moved) { return; }
     const hit = gvHit(event.clientX, event.clientY);
     if (wasDrag) { gvSelect(GV.hover || GV.selected); return; }
-    gvSelect(hit.id || null);
+    if (hit.id) {
+      gvSelect(hit.id);
+    } else if (hit.edgeId) {
+      gvSelectEdge(hit.edgeId);
+    } else {
+      gvSelect(null);
+    }
   });
   cv.addEventListener("mouseleave", function () {
     GV.hover = null;
@@ -5146,6 +5387,8 @@ function graphBindCanvas() {
       GV.touchRot = { x: t.clientX, y: t.clientY, yaw: GV.rot.yaw, pitch: GV.rot.pitch };
     } else if (hit.id) {
       GV.drag = { id: hit.id };
+    } else if (hit.edgeId) {
+      GV.hover = null;
     } else {
       GV.pan = { x: t.clientX, y: t.clientY, tx: GV.view.tx, ty: GV.view.ty };
     }
@@ -5177,7 +5420,13 @@ function graphBindCanvas() {
     GV.touchRot = null;
     if (GV.moved) { return; }
     const hit = gvHit(GV.touchX, GV.touchY);
-    gvSelect(hit.id || null);
+    if (hit.id) {
+      gvSelect(hit.id);
+    } else if (hit.edgeId) {
+      gvSelectEdge(hit.edgeId);
+    } else {
+      gvSelect(null);
+    }
   });
 }
 
@@ -5374,6 +5623,19 @@ function initGraphView() {
   close.addEventListener("click", closeGraph);
   $("graphBackGlobal").addEventListener("click", graphBackToGlobal);
   $("graphGlobalBtn").addEventListener("click", graphBackToGlobal);
+  $("graphRefresh").addEventListener("click", function () {
+    if (GV.center) {
+      loadGraphSubgraph(GV.center);
+    } else {
+      loadGraphGlobal();
+    }
+  });
+  $("graphLegend").addEventListener("click", function (event) {
+    const button = event.target && event.target.closest
+      ? event.target.closest("button[data-graph-type]")
+      : null;
+    if (button) { gvToggleType(button.getAttribute("data-graph-type") || ""); }
+  });
   $("graphModes").addEventListener("click", function (event) {
     const btn = event.target && event.target.closest ? event.target.closest("button[data-mode]") : null;
     if (btn) { gvSetMode(btn.getAttribute("data-mode")); }

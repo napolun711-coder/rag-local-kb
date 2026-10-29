@@ -1037,6 +1037,12 @@ a{color:inherit;text-decoration:none}
 }
 .graph-legend[hidden]{display:none}
 .graph-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:-1px}
+.graph-legend button{
+  display:inline-flex;align-items:center;gap:4px;padding:2px 5px;border:0;border-radius:5px;
+  background:transparent;color:var(--muted);font:inherit;font-size:11.5px;cursor:pointer;
+}
+.graph-legend button:hover{background:var(--grey-soft);color:var(--grey-text)}
+.graph-legend button.off{opacity:.42;text-decoration:line-through}
 /* 平面 / 三维 切换 + 悬停浮层 + 三维操作提示 */
 .g-modes{display:inline-flex;background:var(--side-hover);border:1px solid var(--line);border-radius:9px;padding:2px}
 .g-modes button{

@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.adapters.lightrag.client import LightRagHttpClient
+from app.adapters.lightrag.errors import (
+    KnowledgeEngineNotInstalled,
+    KnowledgeError,
+    KnowledgeHTTPError,
+    KnowledgeIndexMismatch,
+    KnowledgeUnavailable,
+)
 from app.features.knowledge import index_guard
+from app.platform.errors import AppError
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+graph_router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
 class IndexAcceptRequest(BaseModel):
@@ -21,6 +30,21 @@ def _require_local(request: Request) -> None:
     host = (request.client.host if request.client else "").strip()
     if host not in {"127.0.0.1", "::1"}:
         raise HTTPException(status_code=403, detail="This API is local-only")
+
+
+def _graph_result(call: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
+    try:
+        return call()
+    except KnowledgeEngineNotInstalled as exc:
+        raise AppError(503, "engine_not_installed", str(exc)) from exc
+    except KnowledgeUnavailable as exc:
+        raise AppError(503, "knowledge_unavailable", str(exc)) from exc
+    except KnowledgeIndexMismatch as exc:
+        raise AppError(409, "index_rebuild_required", str(exc)) from exc
+    except KnowledgeHTTPError as exc:
+        raise AppError(502, "knowledge_error", str(exc)) from exc
+    except KnowledgeError as exc:
+        raise AppError(502, "graph_failed", str(exc)) from exc
 
 
 @router.get("/status")
@@ -74,3 +98,50 @@ def accept_index_compatibility(data: IndexAcceptRequest) -> Dict[str, Any]:
             },
         ) from exc
     return {"ok": True, **result}
+
+
+@graph_router.get("/popular")
+def graph_popular(
+    limit: int = Query(16, ge=1, le=100),
+) -> Dict[str, Any]:
+    return _graph_result(lambda: LightRagHttpClient().graph_popular(limit=limit))
+
+
+@graph_router.get("/search")
+def graph_search(
+    q: str = Query(..., min_length=1, max_length=64),
+    limit: int = Query(20, ge=1, le=50),
+) -> Dict[str, Any]:
+    query = q.strip()
+    if not query:
+        raise AppError(422, "invalid_query", "Search query cannot be blank.")
+    return _graph_result(
+        lambda: LightRagHttpClient().graph_search(query, limit=limit)
+    )
+
+
+@graph_router.get("/global")
+def graph_global(
+    max_nodes: int = Query(400, ge=1, le=1000),
+) -> Dict[str, Any]:
+    return _graph_result(
+        lambda: LightRagHttpClient().graph_global(max_nodes=max_nodes)
+    )
+
+
+@graph_router.get("/subgraph")
+def graph_subgraph(
+    label: str = Query(..., min_length=1, max_length=128),
+    depth: int = Query(2, ge=1, le=3),
+    max_nodes: int = Query(60, ge=10, le=200),
+) -> Dict[str, Any]:
+    center = label.strip()
+    if not center:
+        raise AppError(422, "invalid_label", "Graph label cannot be blank.")
+    return _graph_result(
+        lambda: LightRagHttpClient().graph_subgraph(
+            center,
+            depth=depth,
+            max_nodes=max_nodes,
+        )
+    )

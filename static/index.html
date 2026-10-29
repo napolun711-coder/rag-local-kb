@@ -238,6 +238,7 @@
             <button type="button" data-mode="3d" title="三维视图：拖动旋转，适合看层级与解缠绕">三维</button>
           </span>
           <button type="button" id="graphBackGlobal" class="mini">返回全局</button>
+          <button type="button" id="graphRefresh" class="mini">刷新</button>
           <button type="button" id="graphRelayout" class="mini">复位视角</button>
           <button type="button" id="graphClose" class="mini">返回对话</button>
         </span>
@@ -294,7 +295,7 @@
           <div class="gp-desc" id="gpDesc"></div>
           <div class="gp-block-title">来源文档</div>
           <div class="gp-files" id="gpFiles"></div>
-          <div class="gp-block-title">直接关联</div>
+          <div class="gp-block-title" id="gpNearTitle">直接关联</div>
           <div class="gp-files" id="gpNear"></div>
           <div class="gp-actions">
             <button type="button" id="gpAsk" class="mini strong">就这个实体提问</button>
