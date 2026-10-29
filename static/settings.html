@@ -535,20 +535,21 @@
         <span class="chev">▾</span>
     </div>
     <p class="hint">
-        原始对话持久化、Tier 1 快记忆、历史召回与上下文注入。保存后需重启服务生效。
+        默认使用「Balanced Local Memory」：持久化会话、注入近期历史、Tier 1 快记忆、
+        跨会话历史召回和后台规则提取，全部在本机完成，不调用云模型。保存后需重启服务生效。
         记忆管理页支持查看、确认、拒绝、编辑、失效、删除和监督建议，写操作仅限本机。
     </p>
     <h2 class="subhead tight">运行参数</h2>
     <div class="row"><label>启用记忆</label>
         <select id="memory_enabled">
-            <option value="">（跟随默认：关闭）</option>
+            <option value="">（跟随默认：开启）</option>
             <option value="true">开启：持久化会话并启用长期记忆</option>
             <option value="false">关闭：不创建或打开记忆库</option>
         </select>
     </div>
     <div class="row"><label>上下文注入</label>
         <select id="memory_context_enabled">
-            <option value="">（跟随默认：关闭）</option>
+            <option value="">（跟随默认：开启）</option>
             <option value="true">开启：把相关记忆与近期历史带入回答</option>
             <option value="false">关闭：只持久化，不注入上下文</option>
         </select>
@@ -556,14 +557,14 @@
     </div>
     <div class="row"><label>Tier 1 快记忆</label>
         <select id="memory_fast_memory">
-            <option value="">（跟随默认：关闭）</option>
+            <option value="">（跟随默认：开启）</option>
             <option value="true">开启：从当前消息即时提取明确偏好/约束</option>
             <option value="false">关闭</option>
         </select>
     </div>
-    <div class="row"><label>长期记忆预算</label><input type="number" id="memory_context_budget" min="100" max="8000" step="1" placeholder="默认 900 tokens"></div>
-    <div class="row"><label>近期历史条数</label><input type="number" id="memory_recent_history_messages" min="0" max="40" step="1" placeholder="默认 8 条"></div>
-    <div class="row"><label>近期历史预算</label><input type="number" id="memory_recent_history_tokens" min="0" max="16000" step="1" placeholder="默认 1200 tokens"></div>
+    <div class="row"><label>长期记忆预算</label><input type="number" id="memory_context_budget" min="100" max="8000" step="1" placeholder="默认 1200 tokens"></div>
+    <div class="row"><label>近期历史条数</label><input type="number" id="memory_recent_history_messages" min="0" max="40" step="1" placeholder="默认 12 条"></div>
+    <div class="row"><label>近期历史预算</label><input type="number" id="memory_recent_history_tokens" min="0" max="16000" step="1" placeholder="默认 2000 tokens"></div>
     <div class="row"><label>上游历史模式</label>
         <select id="memory_upstream_history">
             <option value="off">off：不向上游发送会话历史</option>
@@ -580,25 +581,25 @@
     </div>
     <div class="row"><label>历史召回</label>
         <select id="memory_recall_enabled">
-            <option value="">（跟随默认：关闭）</option>
+            <option value="">（跟随默认：开启）</option>
             <option value="true">开启：从当前会话之外的本地历史中召回相关片段</option>
             <option value="false">关闭</option>
         </select>
     </div>
-    <div class="row"><label>历史召回预算</label><input type="number" id="memory_recall_budget" min="80" max="2000" step="1" placeholder="默认 400 tokens"></div>
-    <div class="row"><label>历史召回条数</label><input type="number" id="memory_recall_max_items" min="1" max="20" step="1" placeholder="默认 5 条"></div>
+    <div class="row"><label>历史召回预算</label><input type="number" id="memory_recall_budget" min="80" max="2000" step="1" placeholder="默认 600 tokens"></div>
+    <div class="row"><label>历史召回条数</label><input type="number" id="memory_recall_max_items" min="1" max="20" step="1" placeholder="默认 6 条"></div>
 
     <h2 class="subhead">自动提取</h2>
     <div class="row"><label>自动提取</label>
         <select id="memory_auto_extract">
-            <option value="">（跟随默认：关闭）</option>
+            <option value="">（跟随默认：开启）</option>
             <option value="true">开启：把符合条件的对话加入提取任务</option>
             <option value="false">关闭</option>
         </select>
     </div>
     <div class="row"><label>后台 worker</label>
         <select id="memory_worker">
-            <option value="">（跟随默认：关闭）</option>
+            <option value="">（跟随默认：开启）</option>
             <option value="true">开启：后台执行提取任务</option>
             <option value="false">关闭</option>
         </select>
@@ -608,7 +609,7 @@
     <div class="row"><label>每批最大消息数</label><input type="number" id="memory_extract_max_messages" min="1" max="200" step="1" placeholder="默认 20 条"></div>
     <div class="row"><label>每批最大输入</label><input type="number" id="memory_extract_max_input_tokens" min="200" max="32000" step="1" placeholder="默认 4000 tokens"></div>
     <div class="row"><label>普通提取延迟</label><input type="number" id="memory_extract_debounce_seconds" min="0" max="86400" step="1" placeholder="默认 300 秒"></div>
-    <p class="note-line">当前版本自动提取使用本地规则，不调用额外 LLM。监督策略仍在后台配置文件中维护，不在本页开放修改。</p>
+    <p class="note-line">默认自动提取使用本地规则，不调用额外 LLM；监督策略仍在后台配置文件中维护，不在本页开放修改。</p>
 
     <h2 class="subhead">当前状态</h2>
     <div class="row"><label>持久化状态</label><span id="memoryState" class="muted">读取中...</span></div>

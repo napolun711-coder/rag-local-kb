@@ -30,6 +30,10 @@
   originals and support double-click/Enter opening; query failures preserve the
   upstream reason and offer retry, no-database continuation, and upload actions;
   image original links use the supported origin endpoint
+- memory: default to Balanced Local Memory — session history, context injection,
+  fast memory, cross-session recall, and rule-based background extraction are on
+  by default, with 12 recent messages / 2,000 tokens, 1,200 memory tokens, and
+  600 recall tokens
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

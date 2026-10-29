@@ -1137,3 +1137,51 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   unmatched and show a localized reason.
 - The actual upstream error text is truncated to 300–800 characters for display;
   full details remain in the service logs.
+
+## Balanced Local Memory default (2026-10-29)
+
+- Default memory configuration is now enabled instead of off: local session
+  storage, context injection, Tier 1 fast memory, recent history, cross-session
+  history recall, rule-based background extraction, and the extraction worker.
+- Code and settings-schema defaults:
+  - recent history: 12 messages / 2,000 tokens
+  - long-term memory: 1,200 tokens
+  - history recall: 600 tokens / 6 items
+  - upstream history and memory: on
+  - extraction: every 6 turns, 20 messages / 4,000 tokens per batch,
+    300-second normal debounce
+  - extraction backend: local rules (`off` LLM backend), no cloud extraction
+- The formal runtime configuration was updated through the local settings API,
+  which created its normal configuration backup. The service was restarted.
+- The settings page now describes Balanced Local Memory and marks the empty
+  option as “跟随默认：开启”; budget placeholders match the new defaults.
+- Current memory status after restart: DB ready, context injection enabled,
+  fast memory enabled, upstream history on, auto extraction on, worker running,
+  6 sessions / 25 messages, 0 long-term memories and 0 extraction jobs. The zero
+  memory count is expected until new conversations trigger extraction.
+- No formal chat message or memory content was created during this change.
+
+### Verification
+
+- Added four M1 tests covering code defaults, settings-schema defaults, context
+  assembly with temporary SQLite data, and upstream option injection. All four
+  passed, along with the three existing history-search tests.
+- Runtime after restart: `/api/memory/status` reports `ready=true`,
+  `context_enabled=true`, `fast_memory=true`, `upstream_history=on`,
+  `auto_extract=true`, `worker_running=true`; `/web`, `/memory`, and `/settings`
+  return HTTP 200.
+- No full regression or real multi-turn memory chat was run in this wave.
+
+### Remaining risks
+
+- Rule-based extraction is conservative; it will not produce web-model-style
+  semantic summaries. LLM extraction remains an opt-in backend outside the
+  current settings page.
+- The new default injects up to roughly 3,800 tokens (2,000 recent history +
+  1,200 memory + 600 recall). This is still far below a 128k–1M-token web
+  context window; it targets selective personal continuity, not raw capacity.
+- Memory count stays 0 until new conversations trigger extraction. A real
+  three-turn pronoun test, cross-session recall test, and memory edit/delete
+  test are still required before describing the system as web-grade.
+- `external-reference-app` remains read-only and was not used as a data/config source;
+  no private reference data was read.

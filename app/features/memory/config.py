@@ -69,21 +69,21 @@ def _choice(
 
 @dataclass(frozen=True)
 class MemorySettings:
-    memory_enabled: bool = False
+    memory_enabled: bool = True
     memory_db_path: str = ""
-    memory_context_enabled: bool = False
-    memory_fast_memory: bool = False
-    memory_context_budget: int = 900
-    memory_recent_history_messages: int = 8
-    memory_recent_history_tokens: int = 1200
-    memory_upstream_history: str = "off"
-    memory_upstream_memory: str = "off"
+    memory_context_enabled: bool = True
+    memory_fast_memory: bool = True
+    memory_context_budget: int = 1200
+    memory_recent_history_messages: int = 12
+    memory_recent_history_tokens: int = 2000
+    memory_upstream_history: str = "on"
+    memory_upstream_memory: str = "on"
     chat_topic_filter: bool = False
-    memory_recall_enabled: bool = False
-    memory_recall_budget: int = 400
-    memory_recall_max_items: int = 5
-    memory_auto_extract: bool = False
-    memory_worker: bool = False
+    memory_recall_enabled: bool = True
+    memory_recall_budget: int = 600
+    memory_recall_max_items: int = 6
+    memory_auto_extract: bool = True
+    memory_worker: bool = True
     memory_extract_every_turns: int = 6
     memory_extract_max_messages: int = 20
     memory_extract_max_input_tokens: int = 4000
@@ -98,49 +98,49 @@ class MemorySettings:
 def _build_memory_settings() -> MemorySettings:
     file_values = _read_env_file(ENV_FILE)
     return MemorySettings(
-        memory_enabled=_bool("RAGKB_MEMORY_ENABLED", file_values),
+        memory_enabled=_bool("RAGKB_MEMORY_ENABLED", file_values, True),
         memory_db_path=_value("RAGKB_MEMORY_DB_PATH", file_values, ""),
-        memory_context_enabled=_bool("RAGKB_MEMORY_CONTEXT_ENABLED", file_values),
-        memory_fast_memory=_bool("RAGKB_MEMORY_FAST_MEMORY", file_values),
+        memory_context_enabled=_bool("RAGKB_MEMORY_CONTEXT_ENABLED", file_values, True),
+        memory_fast_memory=_bool("RAGKB_MEMORY_FAST_MEMORY", file_values, True),
         memory_context_budget=_integer(
-            "RAGKB_MEMORY_CONTEXT_BUDGET", file_values, 900, minimum=100, maximum=8000
+            "RAGKB_MEMORY_CONTEXT_BUDGET", file_values, 1200, minimum=100, maximum=8000
         ),
         memory_recent_history_messages=_integer(
             "RAGKB_MEMORY_RECENT_HISTORY_MESSAGES",
             file_values,
-            8,
+            12,
             minimum=0,
             maximum=40,
         ),
         memory_recent_history_tokens=_integer(
             "RAGKB_MEMORY_RECENT_HISTORY_TOKENS",
             file_values,
-            1200,
+            2000,
             minimum=0,
             maximum=16000,
         ),
         memory_upstream_history=_choice(
             "RAGKB_MEMORY_UPSTREAM_HISTORY",
             file_values,
-            "off",
+            "on",
             ("auto", "on", "off"),
         ),
         memory_upstream_memory=_choice(
             "RAGKB_MEMORY_UPSTREAM_MEMORY",
             file_values,
-            "off",
+            "on",
             ("auto", "on", "off"),
         ),
         chat_topic_filter=_bool("RAGKB_CHAT_TOPIC_FILTER", file_values),
-        memory_recall_enabled=_bool("RAGKB_MEMORY_RECALL_ENABLED", file_values),
+        memory_recall_enabled=_bool("RAGKB_MEMORY_RECALL_ENABLED", file_values, True),
         memory_recall_budget=_integer(
-            "RAGKB_MEMORY_RECALL_BUDGET", file_values, 400, minimum=80, maximum=2000
+            "RAGKB_MEMORY_RECALL_BUDGET", file_values, 600, minimum=80, maximum=2000
         ),
         memory_recall_max_items=_integer(
-            "RAGKB_MEMORY_RECALL_MAX_ITEMS", file_values, 5, minimum=1, maximum=20
+            "RAGKB_MEMORY_RECALL_MAX_ITEMS", file_values, 6, minimum=1, maximum=20
         ),
-        memory_auto_extract=_bool("RAGKB_MEMORY_AUTO_EXTRACT", file_values),
-        memory_worker=_bool("RAGKB_MEMORY_WORKER", file_values),
+        memory_auto_extract=_bool("RAGKB_MEMORY_AUTO_EXTRACT", file_values, True),
+        memory_worker=_bool("RAGKB_MEMORY_WORKER", file_values, True),
         memory_extract_every_turns=_integer(
             "RAGKB_MEMORY_EXTRACT_EVERY_TURNS",
             file_values,
