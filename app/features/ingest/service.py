@@ -462,7 +462,12 @@ def _public_status(result: Dict[str, Any]) -> Dict[str, Any]:
 def status(file_id: str) -> Optional[Dict[str, Any]]:
     settings = get_ingest_settings()
     result = storage.read_result(settings, file_id)
-    return _public_status(result) if result else None
+    if result is None:
+        return None
+    if str(result.get("state") or "") == "ingesting":
+        _refresh_single_knowledge_if_due(result)
+        result = storage.read_result(settings, file_id) or result
+    return _public_status(result)
 
 
 def pending_reviews() -> List[Dict[str, Any]]:
@@ -543,6 +548,20 @@ def _batch_item(result: Dict[str, Any]) -> Dict[str, Any]:
         "created_at": str(result.get("created_at") or ""),
         "updated_at": str(result.get("updated_at") or ""),
     }
+
+
+def _refresh_single_knowledge_if_due(result: Dict[str, Any]) -> None:
+    knowledge = result.get("knowledge") if isinstance(result.get("knowledge"), dict) else {}
+    lightrag = result.get("lightrag") if isinstance(result.get("lightrag"), dict) else {}
+    track_id = str(knowledge.get("track_id") or lightrag.get("track_id") or "")
+    file_id = str(result.get("file_id") or "")
+    if not track_id or not file_id:
+        return
+    now = time.monotonic()
+    if now - float(_KNOWLEDGE_REFRESH_AT.get(file_id, 0.0)) < BATCH_KNOWLEDGE_REFRESH_SECONDS:
+        return
+    _KNOWLEDGE_REFRESH_AT[file_id] = now
+    refresh_knowledge_status(file_id)
 
 
 def _refresh_batch_knowledge(results: List[Dict[str, Any]]) -> None:
@@ -960,6 +979,25 @@ def activate(file_id: str, action: str) -> Dict[str, Any]:
         }
 
 
+def _append_timeline_step(result: Dict[str, Any], step: str, state: str, detail: str = "") -> None:
+    timeline = list(result.get("timeline") or [])
+    row = {
+        "step": step,
+        "state": state,
+        "at": storage.utc_now(),
+        "detail": detail,
+    }
+    if timeline:
+        last = timeline[-1]
+        if (str(last.get("step") or "") == step
+                and str(last.get("state") or "") == state
+                and str(last.get("detail") or "") == detail):
+            return
+    timeline.append(row)
+    result["timeline"] = timeline
+    result["updated_at"] = row["at"]
+
+
 def _knowledge_failure(
     settings: IngestSettings,
     result: Dict[str, Any],
@@ -1165,6 +1203,7 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
             result["detail"] = "知识库索引已完成"
             knowledge["state"] = "done"
             knowledge.pop("message", None)
+            _append_timeline_step(result, "index", "done", "知识库索引已完成")
         elif remote_state == "failed":
             errors = [str(item.get("error_msg") or "") for item in documents if isinstance(item, dict) and str(item.get("status") or "").lower() in ("failed", "error")]
             result["state"] = "review"
@@ -1172,12 +1211,17 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
             knowledge["state"] = "failed"
             if any(errors):
                 knowledge["message"] = errors[0][:500]
+            _append_timeline_step(
+                result, "index", "failed",
+                knowledge.get("message") or result["detail"],
+            )
         elif remote_state == "missing":
             result["state"] = "review"
             result["detail"] = "知识库没有返回这份文档的解析记录，请重新提交或删除"
             knowledge["state"] = "failed"
             knowledge["code"] = "track_not_found"
             knowledge["message"] = "知识库未返回该跟踪号的文档（可能未成功受理）"
+            _append_timeline_step(result, "index", "failed", knowledge["message"])
         else:
             result["state"] = "ingesting"
             result["detail"] = "知识库正在解析并建立索引"

@@ -1030,3 +1030,59 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   surrounding evidence.
 - The default lifecycle group must be restarted to load the worker and the new
   upload contract.
+
+## Ingest status and timeline UX follow-up (2026-10-29)
+
+- The timeline renderer now normalizes backend rows (`step/detail/state`) into
+  clear labels and hints: upload, queue, worker start, local parse, quality,
+  knowledge submission, and knowledge indexing. A terminal index step is added
+  when indexing completes or fails. Unknown internal steps no longer render as
+  the literal text `步骤`.
+- `/ingest/status` now refreshes an ingesting knowledge track when due, using the
+  same six-second throttle as the batch endpoint. Single-file cards progress to
+  `已入库` without the user clicking `刷新状态`; the frontend still keeps an
+  explicit refresh fallback.
+- On success the card stays in the conversation as a compact confirmation. The
+  timeline auto-collapses, a success note explains that the file is searchable,
+  and the actions are `继续提问` and `继续上传`. The card does not disappear, so
+  the user keeps a visible confirmation.
+- On failure or a knowledge-index failure the card keeps the reason in the
+  subtitle/timeline and shows a concise next-step note. Actions include retry,
+  edit, skip/force where applicable, and `文件管理`.
+- The poll cap is now roughly 30 minutes. On timeout the card keeps its last
+  state and says to click `刷新状态`; it no longer silently changes to an
+  unactionable unknown state.
+- Fixed a Windows read/write race in `storage.write_result`/`read_result`:
+  unique temp names, bounded retries for `PermissionError`, and read retries.
+  This prevents a concurrent status poll from turning a successful parse into a
+  spurious worker retry.
+- Worker timeline rows use `后台开始处理`, `等待重试`, and `后台处理失败` where
+  appropriate, so retries are distinguishable from a duplicate queue step.
+
+### Verification
+
+- Focused tests: 21 ingest worker/upload-chain tests passed, plus the existing
+  batch/UI contract tests.
+- Targeted isolated browser retest (app + compatible knowledge shell):
+  - upload reached `待确认入库`;
+  - clicking `入库` produced `✓ 已入库` **without clicking 刷新状态**;
+  - success note, `继续提问` and `继续上传` actions were present; the timeline
+    was collapsed by default;
+  - expanding the timeline showed seven labeled rows:
+    `上传文件 / 进入解析队列 / 后台开始处理 / 本地解析 / 质量校验 /
+     提交知识库 / 知识库索引`, with hints and no `步骤` placeholder;
+  - the failure card showed a quality-gate failure note and actions
+    `跳过 / 仍要入库 / 重试 / 修改正文 / 文件管理`;
+  - the final app log contained no `PermissionError` or `Ingestion job failed`.
+- No full regression was rerun, by the requested test boundary.
+
+### Remaining risks
+
+- A genuine transient processing error still produces a `等待重试` row; that is
+  intentional and now distinguishable.
+- The success card remains in the conversation as a compact record; it is not
+  auto-deleted. Users can start a new conversation from the sidebar.
+- The status GET now performs a throttled knowledge query while ingesting; if
+  the engine is unreachable, the poll may wait for the engine connect timeout.
+- The default lifecycle group needs a restart to load the backend status and
+  storage changes; static chat assets use the `20261029-status-ux` version.

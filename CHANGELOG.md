@@ -23,6 +23,9 @@
   background worker survives restarts, retries unexpected failures with
   backoff, supports pause/resume and queued-job cancellation, and deduplicates
   uploads by content hash
+- ingest UX: labeled processing timeline, automatic knowledge-index status
+  updates without manual refresh, compact success cards with next actions,
+  actionable failure guidance, and a retry-safe atomic result writer
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

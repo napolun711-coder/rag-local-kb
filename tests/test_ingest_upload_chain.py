@@ -265,6 +265,30 @@ class UploadChainTests(unittest.TestCase):
         self.assertTrue(outcome["ok"])
         self.assertEqual(outcome["state"], "ingesting")
 
+    def test_status_refreshes_an_ingesting_track_before_returning(self) -> None:
+        self._write(_result(
+            state="ingesting",
+            knowledge={"state": "submitted", "track_id": "track-status"},
+            lightrag={"state": "submitted", "track_id": "track-status"},
+        ))
+
+        def fake_refresh(target: str):
+            stored = storage.read_result(self.settings, target)
+            stored["state"] = "done"
+            stored["detail"] = "知识库索引已完成"
+            storage.write_result(self.settings, target, stored)
+            return {"ok": True, "state": "done"}
+
+        service._KNOWLEDGE_REFRESH_AT.pop(FILE_ID, None)
+        with (
+            self._patch(),
+            patch.object(service, "refresh_knowledge_status", side_effect=fake_refresh) as refresh,
+        ):
+            payload = service.status(FILE_ID)
+        refresh.assert_called_once_with(FILE_ID)
+        self.assertEqual(payload["state"], "done")
+        self.assertEqual(payload["detail"], "知识库索引已完成")
+
     def test_duplicate_ingest_is_idempotent_while_submission_is_active(self) -> None:
         self._write(_result(
             state="ingesting",

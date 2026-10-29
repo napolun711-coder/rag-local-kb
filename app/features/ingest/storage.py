@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -115,12 +116,29 @@ def read_content(settings: IngestSettings, file_id: str) -> str:
 def write_result(settings: IngestSettings, file_id: str, payload: Dict[str, Any]) -> Path:
     target = result_path(settings, file_id)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(".result.json.tmp")
+    # Unique temp names avoid two writers sharing one temp file. On Windows,
+    # os.replace can also fail transiently while a status reader has the target
+    # open, so retry briefly instead of treating a read/write race as a job error.
+    temporary = target.with_name("." + target.name + "." + uuid4().hex + ".tmp")
     temporary.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    os.replace(temporary, target)
+    try:
+        for attempt in range(6):
+            try:
+                os.replace(temporary, target)
+                return target
+            except PermissionError:
+                if attempt >= 5:
+                    raise
+                time.sleep(0.03 * (attempt + 1))
+    finally:
+        if temporary.exists():
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
     return target
 
 
@@ -131,11 +149,17 @@ def read_result(settings: IngestSettings, file_id: str) -> Optional[Dict[str, An
         return None
     if not target.is_file():
         return None
-    try:
-        payload = json.loads(target.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return payload if isinstance(payload, dict) else None
+    for attempt in range(4):
+        try:
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else None
+        except PermissionError:
+            if attempt >= 3:
+                return None
+            time.sleep(0.02 * (attempt + 1))
+        except (OSError, ValueError):
+            return None
+    return None
 
 
 def list_results(settings: IngestSettings) -> list[Dict[str, Any]]:

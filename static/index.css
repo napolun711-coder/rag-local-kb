@@ -887,6 +887,9 @@ body.graph-open #sideToggle{display:none !important}
 .review-head .lv{flex:0 0 auto;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--ok-soft);color:var(--ok-text)}
 .review-head.attention .lv{background:var(--warn-badge-bg);color:var(--warn-badge-text)}
 .review-head.risk .lv{background:var(--bad-soft);color:var(--bad-text)}
+.outcome-note{margin-top:9px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.55}
+.outcome-note.success{border-color:var(--ok-line);background:var(--ok-soft);color:var(--ok-text)}
+.outcome-note.failure{border-color:var(--bad-line);background:var(--bad-soft);color:var(--bad-text)}
 .review-reason{margin:5px 0 0;color:var(--grey-text-dim)}
 .review-check{margin:3px 0 0;color:var(--muted)}
 .review-check b{color:var(--grey-text-dim);font-weight:600}
@@ -922,9 +925,13 @@ body.graph-open #sideToggle{display:none !important}
 .force-note .force-body{margin-top:4px;line-height:1.6}
 /* ---------- 处理过程时间线（一步一行：谁做的 / 花多久 / 现在到哪）---------- */
 .steps{margin-top:9px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface-input);font-size:12.5px;color:var(--grey-text)}
-.steps-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}
+.steps-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px;cursor:pointer;user-select:none}
+.steps-head:focus-visible{outline:2px solid var(--brand-line-focus);outline-offset:2px;border-radius:4px}
+.steps-head::after{content:"▾";font-size:10px;color:var(--muted);transition:transform .15s}
+.steps-head.closed::after{transform:rotate(-90deg)}
 .steps-head b{color:var(--grey-text-dim);font-weight:600}
 .steps-body{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.steps-body[hidden]{display:none}
 .step{display:flex;align-items:flex-start;gap:7px;line-height:1.65}
 .step .mark{flex:0 0 14px;text-align:center;color:var(--step-mark);font-size:12px}
 .step .label{flex:0 0 auto;color:var(--grey-text-dim);font-weight:600}

@@ -127,6 +127,26 @@ class IngestWorkerTests(unittest.TestCase):
         self.assertEqual(after["state"], "queued")
         self.assertIn("重启", after["detail"])
 
+    def test_write_result_retries_a_transient_permission_error(self) -> None:
+        file_id = "20261029123456-abcdef12"
+        original = os.replace
+        calls = {"count": 0}
+
+        def flaky_replace(source, target):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise PermissionError("reader holds the target")
+            return original(source, target)
+
+        with patch.object(storage.os, "replace", side_effect=flaky_replace):
+            storage.write_result(self.settings, file_id, {
+                "file_id": file_id,
+                "state": "review",
+                "timeline": [],
+            })
+        self.assertEqual(calls["count"], 2)
+        self.assertEqual(storage.read_result(self.settings, file_id)["state"], "review")
+
     def test_pause_blocks_run_once_and_status_reports_queue(self) -> None:
         self._upload("alpha.txt", b"paused-job")
         with self._patch():

@@ -90,7 +90,7 @@ def recover() -> int:
             "step": "recover",
             "state": "queued",
             "at": now,
-            "detail": "Previous parsing process stopped",
+            "detail": "上次解析被服务重启中断",
         }]
         storage.write_result(settings, file_id, item)
         recovered += 1
@@ -124,10 +124,10 @@ def _claim_one() -> Optional[Dict[str, Any]]:
             fresh["started_at"] = now
             fresh["updated_at"] = now
             fresh["timeline"] = list(fresh.get("timeline") or []) + [{
-                "step": "queue",
+                "step": "worker",
                 "state": "processing",
                 "at": now,
-                "detail": f"Worker attempt {attempts}/{max_attempts()}",
+                "detail": f"第 {attempts}/{max_attempts()} 次尝试",
             }]
             storage.write_result(settings, file_id, fresh)
             _IN_FLIGHT.add(file_id)
@@ -155,10 +155,10 @@ def _handle_exception(settings, file_id: str, exc: Exception) -> None:
             result["next_attempt_at"] = next_at.isoformat()
         result["updated_at"] = now
         result["timeline"] = list(result.get("timeline") or []) + [{
-            "step": "queue",
+            "step": "worker",
             "state": result["state"],
             "at": now,
-            "detail": type(exc).__name__,
+            "detail": result["detail"],
         }]
         storage.write_result(settings, file_id, result)
 

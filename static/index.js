@@ -3079,6 +3079,13 @@ function renderIngestActions(card, data) {
       definitions.push(["修改正文", "edit-full", "ghost"]);
     }
   }
+  if (data.state === "done") {
+    definitions.push(["继续提问", "focus-input", "confirm"]);
+    definitions.push(["继续上传", "upload-more", "ghost"]);
+  }
+  if (data.knowledge_error || data.state === "failed" || data.state === "blocked") {
+    definitions.push(["文件管理", "files", "ghost"]);
+  }
   box.innerHTML = "";
   if (!definitions.length) { box.style.display = "none"; return; }
   definitions.forEach(function (item) {
@@ -3091,6 +3098,18 @@ function renderIngestActions(card, data) {
       if (item[1] === "edit") { toggleEditor(card, card.__fileId); return; }
       if (item[1] === "edit-full") { toggleEditor(card, card.__fileId, "full"); return; }
       if (item[1] === "edit-caption") { toggleEditor(card, card.__fileId, "caption"); return; }
+      if (item[1] === "focus-input") {
+        input.focus();
+        scrollBottom(true);
+        return;
+      }
+      if (item[1] === "upload-more") { pickFile("unified"); return; }
+      if (item[1] === "files") {
+        const batchId = card.__batch && card.__batch.id ? card.__batch.id : "";
+        window.open("/files" + (batchId ? "?batch=" + encodeURIComponent(batchId) : ""),
+          "_blank", "noopener");
+        return;
+      }
       runIngestAction(card, card.__fileId, item[1], item[0]);
     });
     box.appendChild(button);
@@ -3162,6 +3181,49 @@ function revealIngestCard(card) {
   });
 }
 
+function renderOutcomeNote(card, data) {
+  const main = card.querySelector(".upload-main");
+  if (!main) { return; }
+  const knowledgeError = String((data && data.knowledge_error) || "");
+  let kind = "";
+  let text = "";
+  if (data && data.state === "done") {
+    kind = "success";
+    text = "已入库，可以继续提问。处理过程已收起，需要时点「处理过程」展开。";
+  } else if (knowledgeError) {
+    kind = "failure";
+    text = "入库失败。原件与解析结果保留：可点「入库」重试，"
+      + "或点「文件管理」查看记录与失败原因。";
+  } else if (data && data.state === "failed") {
+    kind = "failure";
+    text = "解析失败。可点「重试」；仍失败时请修改原件后重新上传，"
+      + "或点「文件管理」保留留档。";
+  } else if (data && data.state === "blocked") {
+    kind = "failure";
+    text = "未通过质量校验。可先「修改正文」再「重试」，或「跳过」保留留档；"
+      + "需要人工放行可点「仍要入库」。";
+  }
+  if (!text) {
+    if (card.__outcomeNote && card.__outcomeNote.parentNode) {
+      card.__outcomeNote.parentNode.removeChild(card.__outcomeNote);
+    }
+    card.__outcomeNote = null;
+    return;
+  }
+  if (!card.__outcomeNote) {
+    card.__outcomeNote = document.createElement("div");
+  }
+  const note = card.__outcomeNote;
+  note.className = "outcome-note " + kind;
+  note.textContent = text;
+  const anchor = (card.__steps && card.__steps.parentNode === main)
+    ? card.__steps
+    : card.__actions;
+  if (note.parentNode !== main || note.nextSibling !== anchor) {
+    main.insertBefore(note, anchor);
+  }
+}
+
 function renderIngest(card, data) {
   card.__lastStatusAt = Date.now();   // 自愈看门狗用：多久没拿到过新状态
   const previousState = String(card.__lastIngestState || "");
@@ -3173,6 +3235,7 @@ function renderIngest(card, data) {
   renderForceNote(card, data);
   renderReviewPanel(card, data);
   renderTimeline(card, data);
+  renderOutcomeNote(card, data);
   renderUpstreamDetail(card, data);
   // 必须放在 renderTimeline 之后：详情开关的文案要报「处理过程 N 步」
   updateReviewToggle(card, data);
@@ -3442,12 +3505,108 @@ function formatSeconds(value) {
   return hours + " 小时 " + (minutes - hours * 60) + " 分";
 }
 
+const TIMELINE_STEP_LABELS = {
+  upload: "上传文件",
+  queue: "进入解析队列",
+  worker: "后台开始处理",
+  parse: "本地解析",
+  ocr: "OCR 识别",
+  quality: "质量校验",
+  edit: "修改正文",
+  knowledge: "提交知识库",
+  index: "知识库索引",
+  resume: "继续入库",
+  force: "人工放行",
+  retry: "重新排队",
+  cancel: "取消排队",
+  recover: "重启恢复"
+};
+const TIMELINE_STEP_HINTS = {
+  upload: "文件已保存到本机",
+  queue: "等待后台 worker 解析",
+  worker: "worker 接手解析",
+  parse: "读取并提取正文",
+  ocr: "识别图片中的文字",
+  quality: "检查内容是否适合入库",
+  edit: "保存修改并重新质检",
+  knowledge: "提交知识库并建立索引",
+  index: "建立向量索引并完成",
+  resume: "把跳过内容重新提交",
+  force: "按人工选择跳过质检结论",
+  retry: "重新排队解析",
+  cancel: "已取消，原件与留档保留",
+  recover: "服务重启后继续处理"
+};
+
+function timelineUiState(value) {
+  const state = String(value || "").toLowerCase();
+  if (state === "done" || state === "completed" || state === "success" || state === "review") {
+    return "done";
+  }
+  if (state === "failed" || state === "blocked" || state === "needs_ocr" || state === "error") {
+    return "failed";
+  }
+  if (state === "skipped" || state === "cancelled") { return "skipped"; }
+  if (state === "current" || state === "processing" || state === "parsing"
+      || state === "checking" || state === "ocr" || state === "ingesting"
+      || state === "queued") {
+    return "current";
+  }
+  return "pending";
+}
+
+function normalizeTimeline(data) {
+  const rawRows = Array.isArray(data && data.timeline) ? data.timeline : [];
+  return rawRows.map(function (raw, index) {
+    const source = raw || {};
+    const step = String(source.step || source.key || "step");
+    let state = timelineUiState(source.state);
+    // 后面还有步骤，说明这一步已经结束；只有最后一行可以保持“进行中”。
+    if (index < rawRows.length - 1 && state === "current") { state = "done"; }
+    let elapsed = Number(source.elapsed_s);
+    if (!isFinite(elapsed) || elapsed <= 0) {
+      const nextAt = rawRows[index + 1] && rawRows[index + 1].at;
+      if (source.at && nextAt) {
+        const delta = (Date.parse(nextAt) - Date.parse(source.at)) / 1000;
+        if (isFinite(delta) && delta > 0) { elapsed = delta; }
+      }
+    }
+    let label = String(source.label || TIMELINE_STEP_LABELS[step] || step);
+    if (!source.label && step === "worker") {
+      const rawState = String(source.state || "").toLowerCase();
+      if (rawState === "queued") { label = "等待重试"; }
+      else if (rawState === "failed") { label = "后台处理失败"; }
+    }
+    return {
+      key: step + "#" + (index + 1),
+      state: state,
+      label: label,
+      hint: String(source.hint || source.detail || TIMELINE_STEP_HINTS[step] || ""),
+      at: String(source.at || ""),
+      elapsed_s: elapsed
+    };
+  });
+}
+
+function timelineSpentSeconds(data, rows) {
+  if (!rows.length) { return 0; }
+  const start = Date.parse(rows[0].at || "");
+  if (!isFinite(start)) { return 0; }
+  const state = String((data && data.state) || "");
+  const terminal = state === "done" || state === "failed" || state === "blocked"
+    || state === "needs_ocr" || state === "skipped" || state === "cancelled"
+    || state === "review";
+  const end = terminal ? Date.parse(rows[rows.length - 1].at || "") : Date.now();
+  if (!isFinite(end) || end <= start) { return 0; }
+  return (end - start) / 1000;
+}
+
 function renderTimeline(card, data) {
   // 过程表全部来自 GET /ingest/status 的 timeline 段：刷新页面、重开浏览器看到的是同一份，
   // 不用盯着「正在解析…」猜。忙碌时每 2.5 秒轮询一次，所以「进行中」那一步的秒数是活的。
   const main = card.querySelector(".upload-main");
   if (!main) { return; }
-  const rows = Array.isArray(data.timeline) ? data.timeline : [];
+  const rows = normalizeTimeline(data);
   if (!rows.length) {
     if (card.__steps && card.__steps.parentNode) { card.__steps.parentNode.removeChild(card.__steps); }
     card.__steps = null;
@@ -3459,6 +3618,9 @@ function renderTimeline(card, data) {
     box.className = "steps";
     const head = document.createElement("div");
     head.className = "steps-head";
+    head.setAttribute("role", "button");
+    head.tabIndex = 0;
+    head.title = "点击展开 / 收起处理过程";
     const title = document.createElement("b");
     title.textContent = "处理过程";
     const total = document.createElement("span");
@@ -3470,6 +3632,23 @@ function renderTimeline(card, data) {
     box.appendChild(body);
     card.__steps = box;
     card.__stepsSig = "";
+    box.__sync = function () {
+      const open = card.__stepsOpen !== false;
+      body.hidden = !open;
+      head.classList.toggle("closed", !open);
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    const toggle = function () {
+      card.__stepsOpen = card.__stepsOpen === false;
+      box.__sync();
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
+    });
     // 有待确认面板时挂进它的详情区（跟着「详情 ▾」一起折叠）；
     // 没有面板（解析中 / 失败 / 已入库）时时间线就是主内容，照旧直接放在按钮上方。
     if (card.__reviewMore) { card.__reviewMore.appendChild(box); }
@@ -3483,9 +3662,20 @@ function renderTimeline(card, data) {
   // 待确认面板出现后，时间线要跟着搬进折叠区；离开待确认时再搬回 main。
   const stepsHome = card.__reviewMore || main;
   if (panel.parentNode !== stepsHome) { stepsHome.appendChild(panel); }
-  const spent = formatSeconds(data.timeline_elapsed_s);
+  const isDone = String(data.state || "") === "done";
+  if (isDone) {
+    if (!card.__stepsAutoCollapsed) {
+      card.__stepsOpen = false;
+      card.__stepsAutoCollapsed = true;
+    }
+  } else {
+    card.__stepsAutoCollapsed = false;
+    if (card.__stepsOpen === undefined) { card.__stepsOpen = true; }
+  }
+  if (panel.__sync) { panel.__sync(); }
+  const spent = formatSeconds(timelineSpentSeconds(data, rows));
   panel.querySelector(".steps-head span").textContent = spent
-    ? ("已过 " + spent + (data.state === "done" ? "（含知识库建索引）" : ""))
+    ? ("已过 " + spent + (isDone ? "（含知识库建索引）" : ""))
     : (rows.length + " 步");
   // 轮询时只更新"用时"和状态发生变化的行，不整块 innerHTML 重绘：
   // 每 0.8 秒重建一次会让"进行中"的动画反复从头开始，看起来像页面在闪 / 在刷屏。
@@ -3999,11 +4189,12 @@ async function pollIngestStatus(card, fileId, options) {
   // 队列是单线程的：前面还有作业时，刚提交的动作可能几分钟才轮到。
   // 这段时间里「状态没变」不代表提交失败，只是还没开始；等满 2 分钟再提示重试。
   const actionDeadline = awaitAction ? Date.now() + 120000 : 0;
-  const maxAttempts = 240;   // 240 × 2.5 秒 = 10 分钟
+  const maxAttempts = 720;   // 720 × 2.5 秒 ≈ 30 分钟；超时后明确提示手动续跟踪
   // 同一张卡片只保留一轮轮询：手动「刷新状态」/ 新动作会替换旧循环，
   // 避免两个循环互相覆盖，也避免旧循环在网络卡住后一直占着。
   const seq = (card.__pollSeq || 0) + 1;
   card.__pollSeq = seq;
+  let lastData = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await sleep(fast && attempt < 6 ? 800 : 2500);
     if (card.__pollSeq !== seq) { return; }
@@ -4017,6 +4208,7 @@ async function pollIngestStatus(card, fileId, options) {
     if (card.__pollSeq !== seq) { return; }
     data = await refreshKnowledgeStatus(card, fileId, data, Boolean(awaitAction && attempt === 0));
     if (card.__pollSeq !== seq) { return; }
+    lastData = data;
     if (card.__knowledgeFailures === 3) {
       setToast("暂时查不到知识库索引状态，可稍后点「刷新状态」", "bad");
     }
@@ -4068,7 +4260,15 @@ async function pollIngestStatus(card, fileId, options) {
       return;   // 已取消排队：终态，原件与留档保留
     }
   }
-  setUploadState(card, "unknown", "处理时间较长，可稍后直接提问相关内容");
+  if (lastData) {
+    card.__busy = false;
+    setUploadState(card, lastData.state || "unknown",
+      "自动更新超时；点「刷新状态」继续跟踪最新进度", lastData);
+    renderIngestActions(card, lastData);
+    setToast("自动更新超时，可点卡片上的「刷新状态」继续跟踪", "bad");
+  } else {
+    setUploadState(card, "unknown", "暂时读不到状态；点「刷新状态」继续跟踪");
+  }
 }
 
 // 上传入口策略：两个入口走**同一条**流水线（本地解析 → 质量校验 → 确认门 → 入库），
