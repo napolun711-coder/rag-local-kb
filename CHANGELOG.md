@@ -10,6 +10,8 @@
   after a page refresh; recently skipped jobs can be resumed from chat
 - upload chain: the session allow-all switch and manual force submission now
   perform the actions the UI describes
+- upload chain: stale `ingesting` jobs with no knowledge document after 60
+  minutes return to review with an explicit `track_not_found` reason
 - files page: show state, failure reason, and recovery actions for all
   non-terminal local jobs, not only skipped files
 - settings: mark unimplemented confirmation modes and remove the false

@@ -799,7 +799,9 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   as a fixed skipped-restore window; `auto` and `off` confirmation modes are
   marked unimplemented. The unsupported-setting validation is unchanged.
 - Stale local `processing/parsing/checking/ocr` jobs older than 120 minutes are
-  marked failed on restore so a crashed parse can be retried.
+  marked failed on restore so a crashed parse can be retried. An `ingesting` job
+  whose knowledge track returns no documents after 60 minutes is moved back to
+  `review` with `track_not_found`, making it resubmittable instead of stuck.
 
 ### Verification
 
@@ -820,6 +822,15 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   overview reported the job in the knowledge base.
 - Both isolated processes were stopped; artifacts remain under
   `.integration-run/wave1-app` only.
+- The default lifecycle group was restarted on the committed source. Its
+  `/health` reported LightRAG, Ollama, and local vector storage ready; `/web`,
+  `/files`, `/memory`, and `/settings` returned HTTP 200.
+- Three previously stuck `ingesting` jobs in the formal data directory were
+  status-refreshed from the live engine: two had failed chunks and moved to
+  `review` with `APIConnectionError` reasons; one track returned no documents
+  and moved to `review` with `track_not_found`. No file, content, or knowledge
+  record was deleted. The formal overview then reported `ingesting: 0` and
+  `waiting_review: 4`.
 
 ### Remaining risks
 

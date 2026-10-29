@@ -35,6 +35,7 @@ PENDING_STATES = ("review", "needs_ocr")
 SKIPPED_RESTORE_HOURS = 24
 RESTORE_LIMIT = 20
 STALE_ACTIVE_MINUTES = 120
+STALE_INGEST_MINUTES = 60
 CAPTION_MARKER = "\n\n<!-- ragkb:manual-caption -->\n"
 
 
@@ -206,6 +207,16 @@ def _updated_after(value: Any, cutoff: datetime) -> bool:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return moment >= cutoff
+
+
+def _older_than(value: Any, minutes: int) -> bool:
+    try:
+        moment = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment <= datetime.now(timezone.utc) - timedelta(minutes=max(1, int(minutes)))
 
 
 def _restore_items(
@@ -832,11 +843,18 @@ def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Di
             "status": _public_status(result),
         }
     document_name = _document_name(result)
+    submitted_at = storage.utc_now()
     result["state"] = "ingesting"
     result["detail"] = "正在提交知识库"
-    result["knowledge"] = {"state": "submitting", "document_name": document_name, "track_id": ""}
+    result["submitted_at"] = submitted_at
+    result["knowledge"] = {
+        "state": "submitting",
+        "document_name": document_name,
+        "track_id": "",
+        "submitted_at": submitted_at,
+    }
     result["lightrag"] = {"state": "submitting", "track_id": ""}
-    result["updated_at"] = storage.utc_now()
+    result["updated_at"] = submitted_at
     storage.write_result(settings, result["file_id"], result)
     try:
         response = get_knowledge_gateway().upload_document(
@@ -888,6 +906,7 @@ def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Di
         "state": "submitted",
         "document_name": document_name,
         "track_id": track_id,
+        "submitted_at": submitted_at,
         "response": response,
     }
     result["lightrag"] = {"state": "submitted", "track_id": track_id}
@@ -955,10 +974,17 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
         total = int(response.get("total_count") or len(documents) or 0)
         done_count = sum(1 for state in states if state in ("processed", "completed", "success"))
         failed_count = sum(1 for state in states if state in ("failed", "error"))
+        submitted_at = (
+            knowledge.get("submitted_at")
+            or result.get("submitted_at")
+            or result.get("created_at")
+        )
         if total > 0 and done_count >= total:
             remote_state = "done"
         elif total > 0 and failed_count and done_count + failed_count >= total:
             remote_state = "failed"
+        elif total == 0 and _older_than(submitted_at, STALE_INGEST_MINUTES):
+            remote_state = "missing"
         else:
             remote_state = "processing"
         progress = {
@@ -980,6 +1006,12 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
             knowledge["state"] = "failed"
             if any(errors):
                 knowledge["message"] = errors[0][:500]
+        elif remote_state == "missing":
+            result["state"] = "review"
+            result["detail"] = "知识库没有返回这份文档的解析记录，请重新提交或删除"
+            knowledge["state"] = "failed"
+            knowledge["code"] = "track_not_found"
+            knowledge["message"] = "知识库未返回该跟踪号的文档（可能未成功受理）"
         else:
             result["state"] = "ingesting"
             result["detail"] = "知识库正在解析并建立索引"

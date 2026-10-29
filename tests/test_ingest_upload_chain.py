@@ -236,6 +236,35 @@ class UploadChainTests(unittest.TestCase):
         self.assertTrue(stored["forced"])
         self.assertIn("force", [row["step"] for row in stored["timeline"]])
 
+    def test_old_track_without_documents_becomes_actionable(self) -> None:
+        old = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
+        self._write(_result(
+            state="ingesting",
+            created_at=old,
+            knowledge={"state": "submitted", "track_id": "track-lost"},
+            lightrag={"state": "submitted", "track_id": "track-lost"},
+        ))
+        gateway = _Gateway(status={"documents": [], "total_count": 0})
+        with self._patch(), patch.object(service, "get_knowledge_gateway", return_value=gateway):
+            outcome = service.refresh_knowledge_status(FILE_ID)
+        self.assertTrue(outcome["ok"])
+        self.assertEqual(outcome["state"], "review")
+        self.assertEqual(outcome["status"]["knowledge"]["code"], "track_not_found")
+        self.assertTrue(outcome["status"]["can"]["ingest"])
+
+    def test_recent_track_without_documents_stays_ingesting(self) -> None:
+        self._write(_result(
+            state="ingesting",
+            created_at=storage.utc_now(),
+            knowledge={"state": "submitted", "track_id": "track-new"},
+            lightrag={"state": "submitted", "track_id": "track-new"},
+        ))
+        gateway = _Gateway(status={"documents": [], "total_count": 0})
+        with self._patch(), patch.object(service, "get_knowledge_gateway", return_value=gateway):
+            outcome = service.refresh_knowledge_status(FILE_ID)
+        self.assertTrue(outcome["ok"])
+        self.assertEqual(outcome["state"], "ingesting")
+
     def test_duplicate_ingest_is_idempotent_while_submission_is_active(self) -> None:
         self._write(_result(
             state="ingesting",
