@@ -169,6 +169,7 @@ FIELDS.forEach(function (pair) {
 // 用户改完最后一个字段直接点「重新加载」就漏掉了。
 var BASELINE = {};
 var DIRTY = {};
+var ACTION_BAR_FORCED = false;
 // 字段的 <label> 没有 for，顺手把标签文本收起来，供"会丢哪几项"的说明用
 var FIELD_LABELS = {};
 
@@ -194,10 +195,23 @@ function refreshDirty(node) {
 
 function renderDirty() {
     const node = document.getElementById("dirty");
-    if (!node) { return; }
     const count = dirtyIds().length;
-    node.textContent = count ? ("有 " + count + " 项未保存的改动") : "";
-    node.hidden = count === 0;
+    if (node) {
+        node.textContent = count ? ("有 " + count + " 项未保存的改动") : "";
+        node.hidden = count === 0;
+    }
+    renderActionBar();
+}
+
+function renderActionBar() {
+    const bar = document.getElementById("actionBar");
+    const button = document.getElementById("settingsActionsBtn");
+    if (!bar) { return; }
+    const visible = dirtyIds().length > 0 || ACTION_BAR_FORCED;
+    bar.hidden = !visible;
+    document.body.classList.toggle("has-action-bar", visible);
+    if (button) { button.setAttribute("aria-expanded", visible ? "true" : "false"); }
+    if (!visible) { closeBarMore(); }
 }
 
 function snapshotFields() {
@@ -850,6 +864,8 @@ const SECTIONS = [
 ];
 const COLLAPSE_KEY = "local-rag-kb.settings.collapsed";
 const SETTINGS_PROFILE_KEY = "local-rag-kb.settings.profile-view";
+const LAST_SECTION_KEY = "local-rag-kb.settings.last-section";
+let ACTIVE_NAV_ID = "";
 const SETTINGS_PROFILES = {
     local: { label: "全本地" },
     cloud: { label: "云端服务" },
@@ -1371,14 +1387,20 @@ function saveCollapsed() {
 }
 
 function applyCollapsed() {
-    // 默认只展开第①组，其余收起：整页高度从「要滚很久」变成基本一屏
+    // 单开手风琴：刷新后优先恢复最后查看的分组，其余收起。
     const saved = readCollapsed();
-    const list = saved || SECTIONS.filter(function (item) { return item.id !== "sec-llm"; })
-        .map(function (item) { return item.id; });
+    let preferred = "";
+    try { preferred = localStorage.getItem(LAST_SECTION_KEY) || ""; } catch (err) { preferred = ""; }
+    if (!document.getElementById(preferred)) {
+        if (saved) {
+            preferred = (SECTIONS.find(function (item) { return saved.indexOf(item.id) < 0; }) || {}).id || "";
+        }
+        if (!preferred) { preferred = "sec-llm"; }
+    }
     SECTIONS.forEach(function (item) {
         const card = document.getElementById(item.id);
         if (!card) { return; }
-        card.classList.toggle("collapsed", list.indexOf(item.id) >= 0);
+        card.classList.toggle("collapsed", item.id !== preferred);
     });
     syncExpanded();
 }
@@ -1386,6 +1408,14 @@ function applyCollapsed() {
 function toggleSection(id) {
     const card = document.getElementById(id);
     if (!card) { return; }
+    const opening = card.classList.contains("collapsed");
+    if (opening) {
+        SECTIONS.forEach(function (item) {
+            if (item.id === id) { return; }
+            const other = document.getElementById(item.id);
+            if (other) { other.classList.add("collapsed"); }
+        });
+    }
     card.classList.toggle("collapsed");
     saveCollapsed();
     syncExpanded();
@@ -1408,6 +1438,10 @@ function setActiveNav(id) {
         node.classList.toggle("active", selected);
         if (selected) { active = node; }
     });
+    if (active && ACTIVE_NAV_ID !== id) {
+        ACTIVE_NAV_ID = id;
+        try { localStorage.setItem(LAST_SECTION_KEY, id); } catch (err) { /* 忽略 */ }
+    }
     const list = document.getElementById("navlist");
     if (!list || !active) { return; }
     const listRect = list.getBoundingClientRect();
@@ -1428,24 +1462,159 @@ function setActiveNav(id) {
 function gotoSection(id) {
     const card = document.getElementById(id);
     if (!card) { return; }
+    SECTIONS.forEach(function (item) {
+        if (item.id === id) { return; }
+        const other = document.getElementById(item.id);
+        if (other) { other.classList.add("collapsed"); }
+    });
     card.classList.remove("collapsed");
     saveCollapsed();
     syncExpanded();
     setActiveNav(id);
+    try { history.replaceState(null, "", "#" + id); } catch (err) { /* 忽略 */ }
     card.scrollIntoView({ behavior: "smooth", block: "start" });
+    setSettingsNavOpen(false);
+}
+
+function setSettingsNavOpen(open) {
+    const nav = document.getElementById("settingsNav");
+    const backdrop = document.getElementById("settingsNavBackdrop");
+    const button = document.getElementById("settingsDirBtn");
+    const shouldOpen = !!open && window.matchMedia
+        && window.matchMedia("(max-width: 900px)").matches;
+    if (nav) { nav.classList.toggle("is-open", shouldOpen); }
+    if (backdrop) { backdrop.hidden = !shouldOpen; }
+    if (button) { button.setAttribute("aria-expanded", shouldOpen ? "true" : "false"); }
+    document.body.classList.toggle("nav-open", shouldOpen);
+    if (shouldOpen) {
+        const close = document.getElementById("settingsNavClose");
+        if (close) { close.focus(); }
+    }
+}
+
+function closeBarMore() {
+    const menu = document.getElementById("barSecondary");
+    const button = document.getElementById("barMoreBtn");
+    if (menu) { menu.classList.remove("is-open"); }
+    if (button) { button.setAttribute("aria-expanded", "false"); }
+}
+
+function initShellControls() {
+    const dirBtn = document.getElementById("settingsDirBtn");
+    const navClose = document.getElementById("settingsNavClose");
+    const backdrop = document.getElementById("settingsNavBackdrop");
+    const actionsBtn = document.getElementById("settingsActionsBtn");
+    const moreBtn = document.getElementById("barMoreBtn");
+    const menu = document.getElementById("barSecondary");
+
+    if (dirBtn) {
+        dirBtn.addEventListener("click", function () {
+            const nav = document.getElementById("settingsNav");
+            setSettingsNavOpen(!(nav && nav.classList.contains("is-open")));
+        });
+    }
+    if (navClose) { navClose.addEventListener("click", function () { setSettingsNavOpen(false); }); }
+    if (backdrop) { backdrop.addEventListener("click", function () { setSettingsNavOpen(false); }); }
+    if (actionsBtn) {
+        actionsBtn.addEventListener("click", function () {
+            if (dirtyIds().length) { return; }
+            ACTION_BAR_FORCED = !ACTION_BAR_FORCED;
+            renderActionBar();
+        });
+    }
+    if (moreBtn && menu) {
+        moreBtn.addEventListener("click", function (event) {
+            event.stopPropagation();
+            const open = !menu.classList.contains("is-open");
+            menu.classList.toggle("is-open", open);
+            moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+        menu.addEventListener("click", function (event) { event.stopPropagation(); });
+    }
+    document.addEventListener("click", function () { closeBarMore(); });
+    document.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") { return; }
+        closeBarMore();
+        setSettingsNavOpen(false);
+    });
 }
 
 function initScrollSpy() {
-    if (!("IntersectionObserver" in window)) { setActiveNav("sec-llm"); return; }
-    const observer = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-            if (entry.isIntersecting) { setActiveNav(entry.target.id); }
+    let scheduled = false;
+
+    function update() {
+        scheduled = false;
+        const header = document.querySelector(".header");
+        const offset = (header ? header.getBoundingClientRect().height : 0) + 24;
+        let current = SECTIONS.length ? SECTIONS[0].id : "";
+        let bestVisible = -1;
+        const viewportBottom = window.innerHeight;
+        SECTIONS.forEach(function (item) {
+            const card = document.getElementById(item.id);
+            if (!card) { return; }
+            const rect = card.getBoundingClientRect();
+            const visible = Math.min(rect.bottom, viewportBottom) - Math.max(rect.top, offset);
+            if (visible >= bestVisible) {
+                bestVisible = visible;
+                current = item.id;
+            }
         });
-    }, { rootMargin: "-72px 0px -68% 0px", threshold: 0 });
-    SECTIONS.forEach(function (item) {
-        const card = document.getElementById(item.id);
-        if (card) { observer.observe(card); }
+        if (current) { setActiveNav(current); }
+    }
+
+    function schedule() {
+        if (scheduled) { return; }
+        scheduled = true;
+        window.requestAnimationFrame(update);
+    }
+
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    schedule();
+}
+
+function initQuickActions() {
+    const box = document.getElementById("settingsQuickActions");
+    const topBtn = document.getElementById("topBtn");
+    const lastBtn = document.getElementById("lastPositionBtn");
+    if (!box || !topBtn || !lastBtn) { return; }
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function lastSection() {
+        try {
+            const id = localStorage.getItem(LAST_SECTION_KEY) || "";
+            return document.getElementById(id) ? id : "";
+        } catch (err) {
+            return "";
+        }
+    }
+
+    function update() {
+        const enoughContent = document.documentElement.scrollHeight > window.innerHeight + 240;
+        box.hidden = !(enoughContent && window.scrollY > 360);
+        lastBtn.hidden = !lastSection();
+    }
+
+    lastBtn.addEventListener("click", function () {
+        const id = lastSection();
+        if (id) { gotoSection(id); }
     });
+    topBtn.addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    });
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+
+    let hash = "";
+    try {
+        hash = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+    } catch (err) {
+        hash = "";
+    }
+    if (hash && document.getElementById(hash)) {
+        window.setTimeout(function () { gotoSection(hash); }, 0);
+    }
 }
 
 // 折叠状态下的「当前值摘要」：不用展开就能看到关键状态
@@ -2186,6 +2355,7 @@ function initA11y() {
 }
 
 function initLayout() {
+    initShellControls();
     initSettingsProfile();
     markUnavailableSettings();
     renderRouteOverview();
@@ -2193,9 +2363,11 @@ function initLayout() {
     buildNav();
     applyCollapsed();
     initScrollSpy();
+    initQuickActions();
     initA11y();
     initDirtyTracking();
     initSecretClear();
+    renderActionBar();
 }
 
 initLayout();

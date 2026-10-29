@@ -13,19 +13,20 @@
 </head>
 <body>
 <header>
+  <div class="page-logo" aria-hidden="true">RAG</div>
   <h1>记忆管理</h1>
-  <span class="muted" id="mode">本机可编辑 · 加载中…</span>
+  <nav class="app-nav" aria-label="应用页面">
+    <a href="/web">对话</a>
+    <a href="/files">文件</a>
+    <a href="/memory" aria-current="page">记忆</a>
+    <a href="/settings">设置</a>
+  </nav>
   <span class="grow"></span>
   <button id="themeBtn" class="theme-btn" type="button" data-theme-toggle title="外观"></button>
   <button id="refresh" class="primary" type="button">刷新</button>
 </header>
-<nav class="app-nav" aria-label="应用页面">
-  <a href="/web">对话</a>
-  <a href="/files">文件</a>
-  <a href="/memory" aria-current="page">记忆</a>
-  <a href="/settings">设置</a>
-</nav>
 <main>
+  <span class="muted page-mode" id="mode">本机可编辑 · 加载中…</span>
   <div class="status" id="status"></div>
   <section class="supervisor">
     <div class="supervisor-head">

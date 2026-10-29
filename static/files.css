@@ -151,3 +151,42 @@ body.catalog-mode #readonlyBanner { display:block !important; }
 .col-actions{width:90px}
 .col-local-status{width:110px}
 .table-spaced{margin-top:8px}
+
+/* 单层顶栏与紧凑内容起点 */
+header.bar{
+  height:56px;padding:0 16px;gap:10px;flex-wrap:nowrap;
+  position:sticky;top:0;z-index:30;
+}
+.page-logo{
+  width:30px;height:30px;flex:0 0 30px;border-radius:9px;
+  display:grid;place-items:center;background:var(--logo-gradient);
+  color:var(--on-brand);font-size:11px;font-weight:700;
+}
+header.bar h1{flex:0 0 auto;font-size:16px;white-space:nowrap}
+header.bar .app-nav{
+  position:static;flex:1 1 auto;min-width:0;padding:0;
+  background:transparent;border:0;box-shadow:none;
+}
+header.bar .app-nav a{min-height:34px;padding:5px 10px}
+header.bar .grow{flex:0 1 8px;min-width:0}
+.wrap{padding-top:12px}
+.page-subbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;
+  padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);
+}
+.page-subbar .sub{color:var(--muted);font-size:12.5px}
+.page-subbar .grow{flex:1 1 auto}
+.page-subbar button{min-height:34px;padding:5px 10px}
+
+@media (max-width:620px){
+  header.bar{height:56px;padding:0 8px;gap:6px}
+  .page-logo{display:none}
+  header.bar h1{font-size:14px}
+  header.bar .app-nav a{min-height:36px;padding:6px 7px;font-size:12px}
+  header.bar .theme-btn{width:34px;height:34px;flex-basis:34px}
+  .wrap{padding:10px 8px 44px}
+  .page-subbar{padding:7px 8px;gap:6px}
+  .page-subbar .sub{flex:1 1 100%}
+  .page-subbar .grow{display:none}
+  .page-subbar button{flex:0 1 auto;min-height:38px}
+}

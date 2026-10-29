@@ -30,24 +30,27 @@
 </head>
 <body>
 <header class="bar">
+  <div class="page-logo" aria-hidden="true">RAG</div>
   <h1>文档目录</h1>
-  <span class="sub" id="subTitle">正在读取…</span>
+  <nav class="app-nav" aria-label="应用页面">
+    <a href="/web">对话</a>
+    <a href="/files" aria-current="page">文件</a>
+    <a href="/memory">记忆</a>
+    <a href="/settings">设置</a>
+  </nav>
   <span class="grow"></span>
-  <button type="button" id="refreshBtn">刷新</button>
-  <button type="button" id="scanBtn" hidden>立即扫描收件箱</button>
-  <button type="button" id="stopBtn" class="danger" hidden>停止全部服务</button>
-  <!-- 外观：自动 → 浅色 → 深色（theme.js 接管）。页面导航放在独立 nav 中。 -->
+  <!-- 外观：自动 → 浅色 → 深色（theme.js 接管）。 -->
   <button id="themeBtn" class="theme-btn" type="button" data-theme-toggle></button>
 </header>
 
-<nav class="app-nav" aria-label="应用页面">
-  <a href="/web">对话</a>
-  <a href="/files" aria-current="page">文件</a>
-  <a href="/memory">记忆</a>
-  <a href="/settings">设置</a>
-</nav>
-
 <div class="wrap">
+  <div class="page-subbar">
+    <span class="sub" id="subTitle">正在读取…</span>
+    <span class="grow"></span>
+    <button type="button" id="refreshBtn">刷新</button>
+    <button type="button" id="scanBtn" hidden>立即扫描收件箱</button>
+    <button type="button" id="stopBtn" class="danger" hidden>停止全部服务</button>
+  </div>
   <!-- 页内横幅只放「需要停留阅读」的内容：知识库不可用、读取失败、权限降级。
        瞬时的成功反馈（已提交删除 / 已打开文件夹 / 扫描完成）走 RAGKB.toast，
        会自动消失，不再永久占着这一条（见脚本 flash / setNotice 的说明）。 -->

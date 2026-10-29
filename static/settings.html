@@ -18,20 +18,27 @@
 <div class="header">
     <div class="logo">RAG</div>
     <h1>设置</h1>
+    <nav class="app-nav" aria-label="应用页面">
+        <a href="/web">对话</a>
+        <a href="/files">文件</a>
+        <a href="/memory">记忆</a>
+        <a href="/settings" aria-current="page">设置</a>
+    </nav>
     <span class="spacer"></span>
+    <button id="settingsDirBtn" class="header-action" type="button" aria-controls="settingsNav" aria-expanded="false">目录</button>
+    <button id="settingsActionsBtn" class="header-action" type="button" aria-controls="actionBar" aria-expanded="false">操作</button>
     <!-- 外观：自动 → 浅色 → 深色（theme.js 接管） -->
     <button id="themeBtn" class="theme-btn" type="button" data-theme-toggle></button>
 </div>
 
-<nav class="app-nav" aria-label="应用页面">
-    <a href="/web">对话</a>
-    <a href="/files">文件</a>
-    <a href="/memory">记忆</a>
-    <a href="/settings" aria-current="page">设置</a>
-</nav>
+<div class="settings-nav-backdrop" id="settingsNavBackdrop" hidden></div>
 
 <div class="layout">
-<nav class="nav">
+<nav class="nav" id="settingsNav" aria-label="设置分组">
+    <div class="nav-mobile-head">
+        <span>设置目录</span>
+        <button type="button" id="settingsNavClose">关闭</button>
+    </div>
     <div class="nav-title">设置分组（点击跳转 / 展开）</div>
     <div id="navlist"></div>
     <div class="nav-actions">
@@ -703,11 +710,19 @@
 </main>
 </div>
 
-<div class="bar">
+<div class="settings-quick-actions" id="settingsQuickActions" aria-label="设置页快速定位" hidden>
+    <button type="button" id="lastPositionBtn" title="返回上次查看的设置分组">回到上次</button>
+    <button type="button" id="topBtn" title="返回页面顶部">顶部</button>
+</div>
+
+<div class="bar" id="actionBar" hidden>
     <button class="btn-primary" id="saveBtn" onclick="save()">保存配置</button>
+    <div class="bar-secondary" id="barSecondary">
     <button class="btn-plain" id="testBtn" onclick="test()">测试全部服务</button>
     <button class="btn-plain" onclick="reload()">重新加载</button>
     <button class="btn-plain only-narrow" onclick="expandAll(true)">展开全部</button>
+    </div>
+    <button class="btn-plain bar-more-btn" id="barMoreBtn" type="button" aria-controls="barSecondary" aria-expanded="false">更多</button>
     <span id="status" class="status" role="status" aria-live="polite">提示：保存后需重启服务才生效（重启服务后生效）</span>
     <!-- 未保存改动计数：单独一个元素，否则被后面的操作文案覆盖掉就再也看不见了。
          刻意不给它 aria-live：每敲一个字都会播报一遍，读屏用户会被淹掉。 -->

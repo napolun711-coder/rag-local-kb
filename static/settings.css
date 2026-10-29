@@ -7,6 +7,7 @@
    11 = 角标、12 = 辅助说明、13 = 次级正文、14 = 正文/表单、15 = 卡片标题、16 = 页面标题。 */
 html{scroll-behavior:smooth}
 a{color:var(--brand)}
+:root{--settings-header-h:60px;--settings-appnav-h:49px;--settings-nav-clearance:0px;--settings-stack-offset:calc(var(--settings-header-h) + var(--settings-appnav-h))}
 .header{position:sticky;top:0;z-index:30;height:60px;background:var(--panel);color:var(--text);display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);box-shadow:var(--shadow-header)}
 .header .logo{width:32px;height:32px;border-radius:9px;background:var(--logo-gradient);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--on-brand)}
 /* 顶栏标题从 <b> 换成 <h1>（原来整页没有一级标题），重置成原来的视觉 */
@@ -14,8 +15,9 @@ a{color:var(--brand)}
 .header .spacer{flex:1}
 .header a{color:var(--brand);font-size:14px}
 .header a:hover{color:var(--brand-2)}
+.app-nav{position:sticky;top:var(--settings-header-h);z-index:29;box-shadow:0 1px 3px rgba(17,24,39,.05)}
 .layout{display:flex;align-items:flex-start;gap:18px;max-width:1180px;margin:18px auto 92px;padding:0 16px}
-.nav{position:sticky;top:78px;flex:0 0 188px;width:188px;max-height:calc(100vh - 156px);max-height:calc(100dvh - 156px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--side-line);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px 8px 8px}
+.nav{position:sticky;top:calc(var(--settings-stack-offset) + 12px);flex:0 0 188px;width:188px;max-height:calc(100vh - var(--settings-stack-offset) - 92px);max-height:calc(100dvh - var(--settings-stack-offset) - 92px);display:flex;flex-direction:column;overflow:hidden;background:var(--panel);border:1px solid var(--side-line);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px 8px 8px}
 .nav-title{font-size:12px;color:var(--side-text-dim);padding:2px 8px 8px}
 #navlist{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:2px}
 .nav-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;color:var(--side-text-dim);font-size:13px;cursor:pointer;border-left:3px solid transparent;transition:background .15s ease}
@@ -31,7 +33,7 @@ a{color:var(--brand)}
 .btn-mini:hover{background:var(--grey-hover)}
 .bar .only-narrow{display:none}
 .main{flex:1;min-width:0}
-.card{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;padding:0 18px 16px;overflow:hidden;scroll-margin-top:74px;transition:box-shadow .18s ease}
+.card{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:12px;padding:0 18px 16px;overflow:hidden;scroll-margin-top:calc(var(--settings-stack-offset) + var(--settings-nav-clearance) + 18px);transition:box-shadow .18s ease}
 .card:hover{box-shadow:var(--shadow-card)}
 .card.collapsed{padding-bottom:0}
 .card-head{display:flex;align-items:center;gap:10px;margin:0 -18px;padding:13px 18px;cursor:pointer;user-select:none}
@@ -109,6 +111,10 @@ td:first-child{width:190px;color:var(--grey-text)}
 .bar .status.bad{color:var(--bad-text)}
 /* 未保存改动计数：跟着底栏一起常驻，所以不能写进 #status 的文本里（那条会被下一次操作覆盖） */
 .bar .dirty{flex:0 0 auto;font-size:12px;color:var(--warn-text);background:var(--warn-soft);border:1px solid var(--warn-line);border-radius:999px;padding:2px 10px}
+.settings-quick-actions{position:fixed;right:18px;bottom:88px;z-index:35;display:flex;gap:6px;padding:5px;border:1px solid var(--line);border-radius:12px;background:var(--glass-strong);box-shadow:var(--shadow);backdrop-filter:blur(8px)}
+.settings-quick-actions button{min-height:34px;padding:5px 10px;border-radius:8px;background:var(--panel);color:var(--grey-text);font-size:12px;border:1px solid var(--line)}
+.settings-quick-actions button:hover{background:var(--grey-soft);color:var(--text)}
+.settings-quick-actions button:focus-visible{outline-offset:1px}
 /* 键盘焦点：卡片头是负边距的全宽元素，卡片又 overflow:hidden，外描边会被裁掉 */
 .card-head:focus-visible,.nav-item:focus-visible{outline-offset:-2px}
 /* 按钮的进行中状态（测试连接要跑好几秒），没有禁用样式的话用户看不出它已经点了 */
@@ -120,7 +126,7 @@ td:first-child{width:190px;color:var(--grey-text)}
 /* 顶部部署方案：当前只决定本页的配置视图，不改变已保存的服务端配置。 */
 .scheme-picker{
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--shadow);margin-bottom:12px;padding:16px 18px;scroll-margin-top:74px;
+  box-shadow:var(--shadow);margin-bottom:12px;padding:16px 18px;scroll-margin-top:calc(var(--settings-stack-offset) + var(--settings-nav-clearance) + 18px);
 }
 .scheme-heading{display:flex;align-items:flex-start;gap:18px;justify-content:space-between}
 .scheme-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-2);margin-bottom:3px}
@@ -195,7 +201,7 @@ td:first-child{width:190px;color:var(--grey-text)}
 .service-test-status.is-bad{color:var(--bad-text)}
 .service-test-status.is-pending{color:var(--warn-text)}
 /* 设置页的一级信息架构：卡片本身保持不变，只在上方增加纵向分组标题。 */
-.group-heading{display:flex;align-items:flex-start;gap:10px;margin:18px 2px 8px;scroll-margin-top:74px}
+.group-heading{display:flex;align-items:flex-start;gap:10px;margin:18px 2px 8px;scroll-margin-top:calc(var(--settings-stack-offset) + var(--settings-nav-clearance) + 18px)}
 .group-heading .group-index{
   flex:0 0 26px;width:26px;height:26px;border-radius:9px;display:grid;place-items:center;
   border:1px solid var(--brand-line);background:var(--brand-soft);color:var(--brand-2);
@@ -219,9 +225,11 @@ td:first-child{width:190px;color:var(--grey-text)}
   .group-heading{margin-top:14px}
 }
 @media (max-width:900px){/* 移动版布局：页内导航由竖排变横向条 */
+    :root{--settings-nav-clearance:64px}
+    .settings-quick-actions{bottom:calc(108px + env(safe-area-inset-bottom))}
     .layout{flex-direction:column;align-items:stretch;gap:12px}
     .main{width:100%}
-    .nav{position:static;width:100%;flex:1 1 auto;display:flex;flex-direction:row;flex-wrap:nowrap;max-height:none;overflow-x:auto;overflow-y:hidden;gap:6px;padding:8px}
+    .nav{position:sticky;top:calc(var(--settings-stack-offset) + 8px);z-index:28;width:100%;flex:1 1 auto;display:flex;flex-direction:row;flex-wrap:nowrap;max-height:none;overflow-x:auto;overflow-y:hidden;gap:6px;padding:8px;background:var(--glass-strong);box-shadow:var(--shadow);backdrop-filter:blur(8px)}
     .nav-title,.nav-group{display:none}
     #navlist{display:flex;flex:1 1 auto;min-width:0;min-height:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;overscroll-behavior-y:auto;gap:6px;padding-right:0;scrollbar-gutter:auto}
     .nav-actions{position:static;flex:0 0 auto;border-top:none;margin:0;padding:0 2px;background:transparent}
@@ -232,10 +240,13 @@ td:first-child{width:190px;color:var(--grey-text)}
 }
 /* 手机（≤620px）：单列排版、触控尺寸、表格自己横向滚动（不撑破页面） */
 @media (max-width:620px){
+    :root{--settings-header-h:56px;--settings-appnav-h:53px;--settings-nav-clearance:108px}
     .header{height:56px;padding:0 12px}
     .header h1{font-size:15px}
     .header a{display:inline-flex;align-items:center;min-height:40px;padding:8px 4px}
     .layout{gap:10px;margin:12px auto 160px;padding:0 10px}
+    .settings-quick-actions{right:10px;bottom:calc(156px + env(safe-area-inset-bottom))}
+    .settings-quick-actions button{min-height:40px;padding:7px 11px}
     /* 手机上的分组导航：一条可左右滑动的紧凑条（原来是 10 个条目竖着堆约 390px） */
     .nav{padding:8px;flex-direction:column;overflow:visible;gap:6px}
     #navlist{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;scrollbar-width:none}
@@ -270,4 +281,114 @@ td:first-child{width:190px;color:var(--grey-text)}
     .card-head{margin:0 -10px;padding:11px 10px}
     .card-head .sum{display:none}
     .card-head h2{font-size:14px}
+}
+
+/* ==========================================================================
+   紧凑操作空间布局（最终覆盖层）
+   目标：单层顶栏、桌面左目录、窄屏目录抽屉、未修改时隐藏底栏。
+   ========================================================================== */
+:root{
+  --settings-header-h:56px;
+  --settings-appnav-h:0px;
+  --settings-nav-clearance:0px;
+  --settings-stack-offset:56px;
+}
+.header{height:56px;gap:10px;padding:0 16px;flex-wrap:nowrap}
+.header h1{flex:0 0 auto;font-size:16px;white-space:nowrap}
+.header .app-nav{
+  position:static;z-index:auto;flex:1 1 auto;min-width:0;
+  padding:0;background:transparent;border:0;box-shadow:none;
+}
+.header .app-nav a{min-height:34px}
+.header .spacer{display:none}
+.header-action{
+  flex:0 0 auto;min-height:34px;padding:5px 10px;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel);color:var(--grey-text);font-size:12px;
+}
+.header-action:hover{background:var(--grey-soft);color:var(--text)}
+.header-action[aria-expanded="true"]{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-2)}
+#settingsDirBtn{display:none}
+.layout{margin:12px auto 84px}
+.nav{top:calc(var(--settings-header-h) + 12px);max-height:calc(100vh - var(--settings-header-h) - 36px);max-height:calc(100dvh - var(--settings-header-h) - 36px)}
+.nav-mobile-head,.settings-nav-backdrop{display:none}
+body.nav-open{overflow:hidden}
+.card,.scheme-picker,.group-heading{scroll-margin-top:calc(var(--settings-header-h) + 18px)}
+.card{margin-bottom:10px}
+.bar{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;min-height:56px;
+  padding:8px 16px calc(8px + env(safe-area-inset-bottom));
+  display:flex;align-items:center;gap:8px;flex-wrap:nowrap;
+}
+.bar .btn-primary,.bar .btn-plain{min-height:38px;padding:8px 14px}
+.bar-secondary{display:flex;align-items:center;gap:8px;min-width:0}
+.bar .status{
+  flex:1 1 140px;min-width:0;margin-left:6px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.bar-more-btn{display:none}
+.settings-quick-actions{bottom:18px}
+body.has-action-bar .settings-quick-actions{bottom:76px}
+
+@media (max-width:900px){
+  #settingsDirBtn{display:inline-flex;align-items:center;justify-content:center}
+  .settings-nav-backdrop{
+    display:block;position:fixed;inset:56px 0 0;z-index:45;
+    background:var(--overlay-weak);backdrop-filter:blur(2px);
+  }
+  .layout{display:block}
+  .nav{
+    position:fixed;top:64px;left:10px;right:10px;width:auto;z-index:46;
+    display:flex;flex-direction:column;flex-wrap:nowrap;gap:6px;
+    max-height:calc(100dvh - 80px);overflow:hidden;padding:10px;
+    background:var(--panel);border:1px solid var(--side-line);
+    border-radius:12px;box-shadow:var(--shadow-pop);
+    opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-8px);
+    transition:opacity .16s ease,transform .16s ease,visibility .16s ease;
+  }
+  .nav.is-open{opacity:1;visibility:visible;pointer-events:auto;transform:none}
+  .nav-mobile-head{display:flex;align-items:center;justify-content:space-between;padding:0 4px 4px;font-size:14px;font-weight:650}
+  .nav-mobile-head button{min-height:34px;padding:5px 10px;border-radius:8px;background:var(--grey-soft);color:var(--grey-text);font-size:12px}
+  .nav-title{display:block}
+  .nav-group{display:block}
+  #navlist{display:block;overflow-y:auto;overflow-x:hidden;padding-right:2px}
+  .nav-item{border-left:3px solid transparent;border-bottom:0;white-space:normal;padding:8px 9px}
+  .nav-item.active{border-left-color:var(--side-accent);border-bottom:0}
+  .nav-actions{display:flex;position:static;border-top:1px solid var(--line);margin-top:4px;padding-top:8px;background:transparent}
+  .nav-actions button{min-height:36px}
+  .bar-secondary{
+    display:none;position:absolute;right:12px;bottom:calc(100% + 8px);
+    min-width:180px;padding:8px;flex-direction:column;align-items:stretch;
+    border:1px solid var(--line);border-radius:12px;background:var(--panel);
+    box-shadow:var(--shadow-pop);
+  }
+  .bar-secondary.is-open{display:flex}
+  .bar-secondary .btn-plain{width:100%;text-align:left}
+  .bar-more-btn{display:inline-flex;align-items:center;justify-content:center}
+  body.has-action-bar .settings-quick-actions{bottom:76px}
+}
+
+@media (max-width:620px){
+  :root{--settings-header-h:56px;--settings-appnav-h:0px;--settings-nav-clearance:0px;--settings-stack-offset:56px}
+  .header{height:56px;padding:0 8px;gap:6px}
+  .header .logo{width:28px;height:28px;flex-basis:28px}
+  .header h1{font-size:14px}
+  .header .app-nav{gap:0}
+  .header .app-nav a{min-height:36px;padding:6px 8px;font-size:12px}
+  .header-action{min-width:38px;min-height:36px;padding:5px 7px}
+  .theme-btn{width:34px;height:34px;flex-basis:34px}
+  .layout{margin:10px auto 76px;padding:0 8px}
+  .card,.scheme-picker,.group-heading{scroll-margin-top:74px}
+  .bar{padding:7px 8px calc(7px + env(safe-area-inset-bottom));gap:6px}
+  .bar .btn-primary{flex:1 1 auto;min-height:42px}
+  .bar .btn-plain{min-height:42px}
+  .bar .status{display:none}
+  .bar .dirty{max-width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  body.has-action-bar .settings-quick-actions{bottom:64px}
+  .settings-quick-actions{right:8px;bottom:12px}
+}
+
+@media (max-width:420px){
+  .header .logo{display:none}
+  .header h1{font-size:13px}
+  .header .app-nav a{padding:6px}
 }
