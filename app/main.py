@@ -134,20 +134,40 @@ def create_app() -> FastAPI:
                 and path.endswith("/claim")
             )
         )
-        if public or access_service.is_request_authorized(request):
-            return await call_next(request)
-        if path.startswith("/api/"):
+        local = access_service.is_local_request(request)
+        authorized = access_service.is_request_authorized(request)
+        if public:
+            response = await call_next(request)
+            if authorized and not local and request.method in access_service.SAFE_METHODS:
+                access_service.ensure_csrf_cookie(response, request)
+            return response
+        if not authorized:
+            if path.startswith("/api/"):
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "detail": {
+                            "error": "device_auth_required",
+                            "message": "This device must be authorized by the local computer",
+                            "pair_url": "/pair",
+                        }
+                    },
+                )
+            return RedirectResponse("/pair", status_code=307)
+        if not local and not access_service.csrf_valid(request):
             return JSONResponse(
-                status_code=401,
+                status_code=403,
                 content={
                     "detail": {
-                        "error": "device_auth_required",
-                        "message": "This device must be authorized by the local computer",
-                        "pair_url": "/pair",
+                        "error": "csrf_required",
+                        "message": "Refresh the page and retry from the authorized device",
                     }
                 },
             )
-        return RedirectResponse("/pair", status_code=307)
+        response = await call_next(request)
+        if not local:
+            access_service.ensure_csrf_cookie(response, request)
+        return response
 
     application.mount(
         "/static",

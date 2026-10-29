@@ -56,6 +56,11 @@
   templates, `.gitattributes`, `.editorconfig`, and a code of conduct; remove
   local paths, the reference-application name, and the personal author email from
   Git history
+- LAN access: paired devices can use chat, upload/ingest, TTS, and read-only
+  document/topic/graph/memory/settings views; settings writes, deletion, memory
+  mutations, queue controls, and device management remain local-only. Add
+  double-submit CSRF protection, per-device upload quotas, and a read-only
+  settings UI for LAN devices
 
 ## 0.1.0
 

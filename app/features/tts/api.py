@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.features.tts import service
-from app.features.access.service import is_local_request
+from app.features.access.dependencies import require_authorized, require_local
 
 router = APIRouter(prefix="/api/tts", tags=["tts"])
 
@@ -17,22 +17,17 @@ class SpeechRequest(BaseModel):
     text: str = Field(default="", max_length=2000)
 
 
-def _require_local(request: Request) -> None:
-    if not is_local_request(request):
-        raise HTTPException(status_code=403, detail="This API is local-only")
-
-
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_authorized)])
 def tts_status() -> Dict[str, Any]:
     return service.status()
 
 
-@router.post("/test", dependencies=[Depends(_require_local)])
+@router.post("/test", dependencies=[Depends(require_local)])
 def test_tts() -> Dict[str, Any]:
     return service.test_connection()
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_authorized)])
 def speech(data: SpeechRequest) -> Response:
     try:
         audio = service.synthesize(data.text)

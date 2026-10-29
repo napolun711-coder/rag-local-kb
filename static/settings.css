@@ -392,3 +392,16 @@ body.has-action-bar .settings-quick-actions{bottom:76px}
   .header h1{font-size:13px}
   .header .app-nav a{padding:6px}
 }
+
+.lan-readonly-banner{
+  margin:0 0 14px;
+  padding:11px 14px;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--grey-soft);
+  color:var(--text);
+  font-size:13px;
+  line-height:1.55;
+}
+
+.lan-readonly-banner strong{color:var(--brand)}

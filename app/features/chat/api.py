@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
 from app.adapters.lightrag.errors import (
@@ -24,12 +24,7 @@ from app.features.chat.contracts import (
 )
 from app.features.chat.service import ChatService
 from app.features.memory import chat_bridge
-
-
-def _require_local(request: Request) -> None:
-    host = (request.client.host if request.client else "").strip()
-    if host not in {"127.0.0.1", "::1"}:
-        raise HTTPException(status_code=403, detail="This API is local-only")
+from app.features.access.dependencies import require_authorized
 
 
 def _knowledge_error(exc: Exception) -> HTTPException:
@@ -57,7 +52,7 @@ def _session_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail={"error": "session_failed", "message": type(exc).__name__})
 
 
-router = APIRouter(tags=["chat"], dependencies=[Depends(_require_local)])
+router = APIRouter(tags=["chat"], dependencies=[Depends(require_authorized)])
 
 
 def _line(event: Dict[str, Any]) -> str:

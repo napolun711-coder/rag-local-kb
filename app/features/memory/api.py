@@ -11,16 +11,11 @@ from app.features.memory import runtime, supervisor, worker as worker_module
 from app.features.memory.config import get_memory_settings
 from app.features.memory.db import resolve_db_path
 from app.features.memory.memories import MemoryConflict, MemoryNotFound
+from app.features.access.dependencies import require_authorized, require_local
 
 router = APIRouter(prefix="/api/memory/admin", tags=["memory-admin"])
 status_router = APIRouter(prefix="/api/memory", tags=["memory"])
 frontend_router = APIRouter(prefix="/api/memory", tags=["memory"])
-
-
-def require_local(request: Request) -> None:
-    host = (request.client.host if request.client else "").strip()
-    if host not in {"127.0.0.1", "::1"}:
-        raise HTTPException(status_code=403, detail="This API is local-only")
 
 
 def _store():
@@ -70,7 +65,7 @@ def _frontend_status() -> Dict[str, Any]:
     }
 
 
-@status_router.get("/status", dependencies=[Depends(require_local)])
+@status_router.get("/status", dependencies=[Depends(require_authorized)])
 def public_memory_status() -> Dict[str, Any]:
     return _frontend_status()
 
@@ -246,7 +241,7 @@ def item_events(memory_id: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@frontend_router.get("/items", dependencies=[Depends(require_local)])
+@frontend_router.get("/items", dependencies=[Depends(require_authorized)])
 def frontend_list_items(
     status: Optional[str] = Query(default=None),
     kind: Optional[str] = Query(default=None),
@@ -284,7 +279,7 @@ def frontend_list_items(
     }
 
 
-@frontend_router.get("/items/{memory_id}", dependencies=[Depends(require_local)])
+@frontend_router.get("/items/{memory_id}", dependencies=[Depends(require_authorized)])
 def frontend_get_item(
     memory_id: str,
     include_deleted: bool = Query(default=True),
@@ -370,12 +365,12 @@ def frontend_delete_item(
     return {"ok": True, "purged": purge}
 
 
-@frontend_router.get("/items/{memory_id}/sources", dependencies=[Depends(require_local)])
+@frontend_router.get("/items/{memory_id}/sources", dependencies=[Depends(require_authorized)])
 def frontend_item_sources(memory_id: str) -> Dict[str, Any]:
     return {"items": _store().memories.sources(memory_id)}
 
 
-@frontend_router.get("/items/{memory_id}/events", dependencies=[Depends(require_local)])
+@frontend_router.get("/items/{memory_id}/events", dependencies=[Depends(require_authorized)])
 def frontend_item_events(
     memory_id: str,
     limit: int = Query(default=100, ge=1, le=500),
@@ -383,7 +378,7 @@ def frontend_item_events(
     return {"items": _store().memories.events(memory_id, limit=limit)}
 
 
-@frontend_router.get("/export", dependencies=[Depends(require_local)])
+@frontend_router.get("/export", dependencies=[Depends(require_authorized)])
 def frontend_export() -> Dict[str, Any]:
     return _store().export_memories()
 
@@ -411,12 +406,12 @@ def frontend_clear(payload: ClearMemoryRequest) -> Dict[str, Any]:
     return {"ok": True, "counts": counts, "purge_backups": payload.purge_backups}
 
 
-@frontend_router.get("/supervisor/status", dependencies=[Depends(require_local)])
+@frontend_router.get("/supervisor/status", dependencies=[Depends(require_authorized)])
 def frontend_supervisor_status() -> Dict[str, Any]:
     return {**supervisor.status(), "advisory_only": True}
 
 
-@frontend_router.get("/supervisor/findings", dependencies=[Depends(require_local)])
+@frontend_router.get("/supervisor/findings", dependencies=[Depends(require_authorized)])
 def frontend_supervisor_findings(
     status: str = Query(default="open"),
     limit: int = Query(default=100, ge=1, le=500),

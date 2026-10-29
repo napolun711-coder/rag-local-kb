@@ -7,23 +7,18 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.features.settings import service
+from app.features.access.dependencies import require_authorized, require_local
 from app.platform.config import get_settings as get_platform_settings
 
 router = APIRouter(tags=["settings"])
 
 
-def _require_local(request: Request) -> None:
-    host = (request.client.host if request.client else "").strip()
-    if host not in {"127.0.0.1", "::1"}:
-        raise HTTPException(status_code=403, detail="This API is local-only")
-
-
-@router.get("/api/settings", dependencies=[Depends(_require_local)])
+@router.get("/api/settings", dependencies=[Depends(require_authorized)])
 def get_settings() -> Dict[str, Any]:
     return service.settings_payload()
 
 
-@router.post("/api/settings", dependencies=[Depends(_require_local)])
+@router.post("/api/settings", dependencies=[Depends(require_local)])
 async def save_settings(request: Request) -> Dict[str, Any]:
     try:
         payload = await request.json()
@@ -41,12 +36,12 @@ async def save_settings(request: Request) -> Dict[str, Any]:
         ) from exc
 
 
-@router.post("/api/settings/test", dependencies=[Depends(_require_local)])
+@router.post("/api/settings/test", dependencies=[Depends(require_local)])
 def test_settings() -> Dict[str, Any]:
     return service.test_connections()
 
 
-@router.get("/api/tts/options", dependencies=[Depends(_require_local)])
+@router.get("/api/tts/options", dependencies=[Depends(require_authorized)])
 def get_tts_options() -> Dict[str, Any]:
     return service.tts_options()
 
@@ -156,7 +151,7 @@ def _lan_ip_candidates() -> list[str]:
             candidates.append(ip)
     return candidates
 
-@router.get("/api/app/access/connect-info", dependencies=[Depends(_require_local)])
+@router.get("/api/app/access/connect-info", dependencies=[Depends(require_local)])
 def access_connect_info(request: Request) -> Dict[str, Any]:
     cfg = get_platform_settings()
     port = request.url.port or cfg.port

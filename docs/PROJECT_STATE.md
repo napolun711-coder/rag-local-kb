@@ -1465,3 +1465,49 @@ Remaining risks / next wave:
   GitHub metadata verification still require the actual repository.
 - The `pyproject.toml` wheel still packages only `app`; GitHub ZIP is the
   supported distribution unless static assets are added to the wheel.
+
+## LAN authorization, CSRF, and upload quotas (B1, 2026-10-30)
+
+Implemented the approved trusted-LAN policy without removing mobile core use:
+
+- Paired LAN devices may use chat/session APIs, upload and ingest, TTS
+  synthesis, and read-only document/topic/graph/memory/settings views.
+- Host-only operations remain settings writes/tests, document/topic changes,
+  deletion, memory mutations, ingest queue/session controls, device management,
+  index acceptance, and service stop/control.
+- Added shared `require_local` and `require_authorized` FastAPI dependencies and
+  applied them across chat, documents, memory, ingest, knowledge, settings, and
+  TTS routers.
+- Added a double-submit CSRF layer: an authorized LAN browser receives a
+  readable `ragkb_csrf` cookie; the page-level fetch wrapper sends
+  `X-RAGKB-CSRF`; unsafe LAN requests must match both. Loopback requests and
+  safe methods are exempt.
+- Added per-device LAN upload quotas in
+  `app/features/ingest/limits.py`, with defaults of 30 files, 500 MiB, and a
+  600-second window via `RAGKB_LAN_UPLOAD_*` settings. Loopback uploads are
+  exempt.
+- Added a settings-page read-only mode for paired LAN devices: a banner,
+  disabled controls, hidden device-management section, and no device polling.
+- Updated `README.md`, `SECURITY.md`, and `.env.example` with the supported
+  boundary, CSRF header, upload limits, and trusted-LAN/no-TLS warning.
+
+Verification:
+
+- Added `tests/test_access_boundary.py` with 12 tests covering unpaired/paired
+  access, local access, CSRF success/failure, CSRF cookie issuance, the
+  read-only/write matrix, document/topic reads, and upload quota enforcement.
+- Tests drive the real ASGI app with loopback and LAN client addresses using a
+  small in-process ASGI harness, so no `httpx`/TestClient dependency is needed.
+- Full suite: 127 tests passed.
+- JavaScript syntax, Python compilation, TOML/YAML parsing, PowerShell parsing,
+  and package scanning passed. The package contains the limits module and
+  boundary tests, with no data, `.env`, or local-path leakage.
+
+Remaining B2 work:
+
+- Files and memory pages still show host-only actions to LAN users; the backend
+  rejects them, but the mobile UI should hide/disable those actions.
+- A real browser LAN acceptance run (pairing, CSRF header, uploads, settings
+  read-only) is still needed.
+- CI and the tag-release test gate are not implemented yet.
+- LAN remains trusted-private-network HTTP only; no TLS or per-user accounts.

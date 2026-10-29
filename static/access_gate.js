@@ -6,6 +6,51 @@
   var timedOut = false;
   var timer = 0;
   var controller = null;
+  var CSRF_COOKIE = "ragkb_csrf";
+  var CSRF_HEADER = "X-RAGKB-CSRF";
+
+  function isSameOrigin(input) {
+    var raw = (typeof input === "string") ? input : ((input && input.url) || "");
+    if (!raw || typeof window.URL !== "function") { return true; }
+    try {
+      return new window.URL(raw, window.location.href).origin === window.location.origin;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function readCookie(name) {
+    var prefix = name + "=";
+    var parts = String(document.cookie || "").split(";");
+    for (var i = 0; i < parts.length; i += 1) {
+      var item = parts[i].replace(/^\s+/, "");
+      if (item.indexOf(prefix) === 0) {
+        try { return decodeURIComponent(item.slice(prefix.length)); } catch (err) { return ""; }
+      }
+    }
+    return "";
+  }
+
+  function installCsrfFetch() {
+    if (typeof window.fetch !== "function" || typeof window.Headers !== "function") { return; }
+    var original = window.fetch;
+    window.fetch = function (input, init) {
+      var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      if (isSameOrigin(input) && method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+        var token = readCookie(CSRF_COOKIE);
+        if (token) {
+          var options = init || {};
+          var headers = new window.Headers(options.headers || {});
+          if (!headers.has(CSRF_HEADER)) { headers.set(CSRF_HEADER, token); }
+          options.headers = headers;
+          return original.call(window, input, options);
+        }
+      }
+      return original.call(window, input, init);
+    };
+  }
+
+  installCsrfFetch();
 
   function isLoopbackHost() {
     var host = String(location.hostname || "").toLowerCase();

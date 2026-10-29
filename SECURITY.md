@@ -22,30 +22,32 @@ LAN. Remote deployment requires, at minimum:
 
 ## Same-LAN device access
 
-The host can opt in to a same-LAN pairing surface for personal devices.
-Pairing requests are approved on the host computer; approved devices receive an
-HttpOnly cookie and can be revoked from the host settings page. Device
-management and settings writes remain host-only.
+The host can opt in to a same-LAN pairing surface for personal devices. Pairing
+requests are approved on the host computer; approved devices receive an
+HttpOnly access cookie and a readable CSRF cookie, and can be revoked from the
+host settings page.
 
-LAN chat/upload support is a release target and is being hardened. Until that
-work is complete, do not treat the LAN surface as internet-grade authentication:
-there is no TLS termination, no per-user account model, and no public-network
-hardening. Use it only on a trusted private network.
+Paired LAN devices may use:
 
-The current implementation is intentionally conservative: chat, document,
-memory-admin, settings, and other sensitive routes still check for a loopback
-client, while the middleware may allow a paired device through to other routes.
-This boundary is under review and has dedicated tests tracked for the release
-gate.
+- chat and chat-session APIs
+- upload, review, and ingest APIs
+- TTS synthesis
+- read-only document, topic, graph, memory, and settings views
 
-Known release-gate gaps for the LAN surface:
+Host-only operations include settings writes and connection tests, document and
+topic changes, deletion, memory mutations, ingest queue/session controls, device
+approval/revocation, index-acceptance, and service stop/control.
 
-- consistent authorization across chat, document, ingest, memory, OCR, and TTS
-- CSRF/origin validation for paired state-changing requests
-- per-device upload rate and quota limits
-- automated pairing, revocation, and access-boundary tests
+LAN state-changing requests use a double-submit CSRF token: the browser reads
+the `ragkb_csrf` cookie and sends `X-RAGKB-CSRF`; the server requires both to
+match. Uploads are additionally limited per device by files/bytes within a
+moving time window. The limits are configured in `.env` and are process-local.
 
-Do not treat the current LAN surface as a supported internet-facing deployment.
+There is no TLS termination and no per-user account model. Use this only on a
+trusted private LAN. Do not expose the application directly to the public
+internet or an untrusted LAN. Internet-facing deployment requires per-user
+authentication, TLS, CSRF review, rate limiting, and a full data-permission
+review.
 
 ## Secrets and data
 

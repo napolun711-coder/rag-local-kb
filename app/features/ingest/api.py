@@ -5,13 +5,15 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
-from app.features.ingest import service, worker
+from app.features.access.dependencies import require_authorized, require_local
+from app.features.access.service import is_local_request, request_quota_key
+from app.features.ingest import limits, service, worker
 from app.features.ingest.config import get_ingest_settings
 
-router = APIRouter(tags=["ingest"])
+router = APIRouter(tags=["ingest"], dependencies=[Depends(require_authorized)])
 
 
 class IngestAction(BaseModel):
@@ -39,12 +41,31 @@ def _detail(exc: service.IngestError) -> Dict[str, Any]:
 
 @router.post("/upload", status_code=202)
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     batch_id: str = Form(default=""),
 ) -> Dict[str, Any]:
     settings = get_ingest_settings()
     filename = file.filename or "upload.bin"
     content = await file.read(settings.max_upload_size + 1)
+    if not is_local_request(request) and len(content) <= settings.max_upload_size:
+        allowed, retry_after = limits.reserve(
+            request_quota_key(request),
+            len(content),
+            max_files=settings.lan_upload_max_files,
+            max_bytes=settings.lan_upload_max_bytes,
+            window_seconds=settings.lan_upload_window_seconds,
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "upload_quota_exceeded",
+                    "message": "This device has reached its LAN upload quota",
+                    "retry_after": retry_after,
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
     try:
         result = await asyncio.to_thread(
             service.process_upload,
@@ -130,7 +151,7 @@ def ingest_queue_status() -> Dict[str, Any]:
     return {"ok": True, **worker.status()}
 
 
-@router.post("/ingest/queue")
+@router.post("/ingest/queue", dependencies=[Depends(require_local)])
 def ingest_queue_state(data: QueueState) -> Dict[str, Any]:
     return {"ok": True, **worker.set_paused(data.paused)}
 
@@ -160,7 +181,7 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
     return {"success": True, **outcome}
 
 
-@router.post("/ingest/session")
+@router.post("/ingest/session", dependencies=[Depends(require_local)])
 def ingest_session(data: IngestSession) -> Dict[str, Any]:
     return {"success": True, **service.set_session_allow_all(data.allow_all)}
 

@@ -328,6 +328,11 @@ Reviewed content is submitted only after an explicit user action. The returned
 track id is recorded, and indexing status is refreshed through the knowledge
 gateway. Uploads are not presented as indexed until the engine confirms success.
 
+Paired LAN uploads are limited per device with
+`RAGKB_LAN_UPLOAD_MAX_FILES`, `RAGKB_LAN_UPLOAD_MAX_BYTES`, and
+`RAGKB_LAN_UPLOAD_WINDOW_SECONDS`. Loopback uploads are not subject to the LAN
+quota.
+
 ## Inbox folder scanning
 
 Inbox scanning is opt-in and disabled by default. Configure
@@ -529,13 +534,16 @@ database or uploaded documents.
 The application binds to `127.0.0.1` by default. Loopback requests have full
 local access; settings and administrative writes are host-only.
 
-An optional same-LAN pairing surface is available for trusted personal devices.
-Pairing is approved on the host computer and uses an HttpOnly device cookie.
-Mobile chat/upload support is a release target and is still being hardened;
-until that work is complete, treat LAN access as trusted-network-only and do not
-expose it to the public internet or an untrusted LAN. Settings and permission
-management remain host-only. See [SECURITY.md](SECURITY.md) for the current
-boundary.
+An optional same-LAN pairing surface supports trusted personal devices. After
+the host approves a device, it can use chat, upload/ingest, TTS, and read
+documents, memory, graph, and settings. Settings are read-only on LAN devices;
+saving/testing settings, deleting documents, changing memory or topics, managing
+devices, pausing the ingest queue, and stopping services remain host-only.
+
+LAN state-changing requests require a CSRF token, and uploads use per-device
+rate/byte quotas. There is no TLS termination: use this only on a trusted
+private LAN, never expose it to the public internet. See
+[SECURITY.md](SECURITY.md) for the complete boundary.
 
 ## Current limitations
 

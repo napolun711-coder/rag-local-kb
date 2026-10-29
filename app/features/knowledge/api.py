@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.adapters.lightrag.client import LightRagHttpClient
@@ -17,19 +17,18 @@ from app.adapters.lightrag.errors import (
 )
 from app.features.knowledge import index_guard
 from app.platform.errors import AppError
+from app.features.access.dependencies import require_authorized, require_local
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
-graph_router = APIRouter(prefix="/api/graph", tags=["graph"])
+graph_router = APIRouter(
+    prefix="/api/graph",
+    tags=["graph"],
+    dependencies=[Depends(require_authorized)],
+)
 
 
 class IndexAcceptRequest(BaseModel):
     confirmation: str = Field(default="", max_length=32)
-
-
-def _require_local(request: Request) -> None:
-    host = (request.client.host if request.client else "").strip()
-    if host not in {"127.0.0.1", "::1"}:
-        raise HTTPException(status_code=403, detail="This API is local-only")
 
 
 def _graph_result(call: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
@@ -47,7 +46,7 @@ def _graph_result(call: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
         raise AppError(502, "graph_failed", str(exc)) from exc
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_authorized)])
 def knowledge_status() -> Dict[str, Any]:
     payload = LightRagHttpClient().health().to_dict()
     service = payload.get("service")
@@ -58,7 +57,7 @@ def knowledge_status() -> Dict[str, Any]:
 
 @router.get(
     "/index-compatibility",
-    dependencies=[Depends(_require_local)],
+    dependencies=[Depends(require_authorized)],
 )
 def index_compatibility() -> Dict[str, Any]:
     health = LightRagHttpClient().health()
@@ -67,7 +66,7 @@ def index_compatibility() -> Dict[str, Any]:
 
 @router.post(
     "/index-compatibility/accept",
-    dependencies=[Depends(_require_local)],
+    dependencies=[Depends(require_local)],
 )
 def accept_index_compatibility(data: IndexAcceptRequest) -> Dict[str, Any]:
     health = LightRagHttpClient().health()

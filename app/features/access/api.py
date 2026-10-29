@@ -88,6 +88,7 @@ async def claim_access_request(
         samesite="lax",
         path="/",
     )
+    service.set_csrf_cookie(response)
     return {"status": "approved", "redirect": "/web", "name": claimed["name"]}
 
 

@@ -1956,6 +1956,7 @@ function chatErrorText(data, status) {
 /* ---------- 局域网设备一键授权 ---------- */
 var ACCESS_POLL_TIMER = null;
 var ACCESS_AUTO_REVEALED = false;
+var LAN_READ_ONLY = false;
 
 function accessDeviceErrorText(data, status) {
     if (typeof chatErrorText === "function") { return chatErrorText(data, status); }
@@ -2165,6 +2166,7 @@ function refreshAccessOverview() {
 }
 
 function bindAccessDevices() {
+    if (LAN_READ_ONLY) { return; }
     var refresh = document.getElementById("accessDevicesRefresh");
     if (refresh) { refresh.addEventListener("click", refreshAccessOverview); }
     refreshAccessOverview();
@@ -2174,7 +2176,46 @@ function bindAccessDevices() {
     }, 2000);
 }
 
-bindAccessDevices();
+function applyLanReadOnly() {
+    LAN_READ_ONLY = true;
+    var main = document.querySelector("main.main");
+    if (main) {
+        var banner = document.createElement("div");
+        banner.className = "lan-readonly-banner";
+        banner.innerHTML = "<strong>局域网只读模式</strong> 聊天、上传、TTS、文档查看和记忆查看可用；"
+            + "设置保存、连接测试、删除和设备管理仅在电脑本机。";
+        main.insertBefore(banner, main.firstChild);
+        main.querySelectorAll("input, select, textarea, button").forEach(function (node) {
+            node.disabled = true;
+        });
+    }
+    ["saveBtn", "testBtn"].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) { node.disabled = true; }
+    });
+    document.querySelectorAll(".service-test-button, [data-clear-secret], #accessDevicesRefresh")
+        .forEach(function (node) { node.disabled = true; });
+    var accessSection = document.getElementById("sec-access");
+    if (accessSection) { accessSection.hidden = true; }
+    var actionBar = document.getElementById("actionBar");
+    if (actionBar) { actionBar.hidden = true; }
+    setStatus("局域网只读模式：设置保存和测试仅在电脑本机可用");
+}
+
+function initAccessMode() {
+    fetch("/api/app/access/status", { cache: "no-store" })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (data) {
+            if (data && data.local === false && data.authorized) {
+                applyLanReadOnly();
+                return;
+            }
+            bindAccessDevices();
+        })
+        .catch(function () { bindAccessDevices(); });
+}
+
+initAccessMode();
 
 function refreshMemoryStatus() {
     if (typeof window.fetch !== "function") { return; }

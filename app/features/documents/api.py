@@ -6,7 +6,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -16,16 +16,11 @@ from app.features.documents.deletion import DeleteValidationError, get_job, star
 from app.features.documents.service import DocumentCatalogService
 from app.features.documents import topics
 from app.features.inbox import service as inbox_service
+from app.features.access.dependencies import require_authorized, require_local
 
 
-def _require_local(request: Request) -> None:
-    host = (request.client.host if request.client else "").strip()
-    if host not in {"127.0.0.1", "::1"}:
-        raise HTTPException(status_code=403, detail="This API is local-only")
-
-
-router = APIRouter(prefix="/api/files", tags=["documents"], dependencies=[Depends(_require_local)])
-topics_router = APIRouter(prefix="/api/topics", tags=["topics"], dependencies=[Depends(_require_local)])
+router = APIRouter(prefix="/api/files", tags=["documents"], dependencies=[Depends(require_authorized)])
+topics_router = APIRouter(prefix="/api/topics", tags=["topics"], dependencies=[Depends(require_authorized)])
 
 
 class DeleteItem(BaseModel):
@@ -278,7 +273,7 @@ def list_topics() -> Dict[str, Any]:
     }
 
 
-@topics_router.post("")
+@topics_router.post("", dependencies=[Depends(require_local)])
 def create_topic(data: TopicCreateRequest) -> Dict[str, Any]:
     try:
         item = topics.create_topic(
@@ -293,7 +288,7 @@ def create_topic(data: TopicCreateRequest) -> Dict[str, Any]:
     return {"ok": True, "topic": item}
 
 
-@router.post("/topic")
+@router.post("/topic", dependencies=[Depends(require_local)])
 def set_document_topic(data: DocumentTopicRequest) -> Dict[str, Any]:
     try:
         item = topics.set_document_topic(
@@ -309,7 +304,7 @@ def set_document_topic(data: DocumentTopicRequest) -> Dict[str, Any]:
     return {"ok": True, "document_topic": item}
 
 
-@router.delete("/topic")
+@router.delete("/topic", dependencies=[Depends(require_local)])
 def clear_document_topic(file_path: str = Query(min_length=1)) -> Dict[str, Any]:
     try:
         cleared = topics.clear_document_topic(file_path)
@@ -318,7 +313,7 @@ def clear_document_topic(file_path: str = Query(min_length=1)) -> Dict[str, Any]
     return {"ok": True, "cleared": bool(cleared)}
 
 
-@router.post("/delete", status_code=202)
+@router.post("/delete", status_code=202, dependencies=[Depends(require_local)])
 def files_delete(data: DeleteRequest) -> Dict[str, Any]:
     if data.confirmation.strip().lower() != "yes":
         raise HTTPException(status_code=400, detail="Type Yes to confirm deletion")
@@ -334,7 +329,7 @@ def files_delete(data: DeleteRequest) -> Dict[str, Any]:
     return {"success": True, "job": job}
 
 
-@router.get("/delete/{job_id}")
+@router.get("/delete/{job_id}", dependencies=[Depends(require_local)])
 def files_delete_status(job_id: str) -> Dict[str, Any]:
     job = get_job(job_id)
     if job is None:

@@ -19,10 +19,13 @@ from fastapi import Request
 from app.platform.config import get_settings
 
 COOKIE_NAME = "ragkb_access"
+CSRF_COOKIE_NAME = "ragkb_csrf"
+CSRF_HEADER_NAME = "X-RAGKB-CSRF"
 COOKIE_MAX_AGE = 90 * 24 * 60 * 60
 REQUEST_TTL_SECONDS = 5 * 60
 MAX_PENDING_TOTAL = 64
 MAX_PENDING_PER_IP = 5
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 _LOCK = threading.RLock()
 _PENDING: Dict[str, Dict[str, Any]] = {}
@@ -262,6 +265,46 @@ def is_request_authorized(request: Request) -> bool:
         return True
     with _LOCK:
         return _device_from_request_locked(request) is not None
+
+
+def request_quota_key(request: Request) -> str:
+    """Stable quota key for a paired device, falling back to the client IP."""
+    raw = str(request.cookies.get(COOKIE_NAME) or "")
+    if "." in raw:
+        return "device:" + raw.split(".", 1)[0]
+    return "ip:" + _client_ip(request)
+
+
+def new_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def set_csrf_cookie(response: Any, token: str = "") -> None:
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        token or new_csrf_token(),
+        max_age=COOKIE_MAX_AGE,
+        httponly=False,
+        samesite="lax",
+        path="/",
+    )
+
+
+def ensure_csrf_cookie(response: Any, request: Request) -> None:
+    """Give an authorized LAN browser a readable double-submit token."""
+    if is_local_request(request):
+        return
+    if request.cookies.get(CSRF_COOKIE_NAME):
+        return
+    set_csrf_cookie(response)
+
+
+def csrf_valid(request: Request) -> bool:
+    if is_local_request(request) or request.method in SAFE_METHODS:
+        return True
+    cookie = str(request.cookies.get(CSRF_COOKIE_NAME) or "")
+    header = str(request.headers.get(CSRF_HEADER_NAME) or "")
+    return bool(cookie and header and hmac.compare_digest(cookie, header))
 
 
 def status_payload(request: Request) -> Dict[str, Any]:

@@ -97,6 +97,9 @@ def _path(name: str, file_values: dict[str, str], default: Path) -> Path:
 class IngestSettings:
     allowed_extensions: Tuple[str, ...]
     max_upload_size: int
+    lan_upload_max_files: int
+    lan_upload_max_bytes: int
+    lan_upload_window_seconds: int
     parse_max_chars: int
     parse_max_assets: int
     parse_max_asset_mb: int
@@ -125,6 +128,27 @@ def _build_settings() -> IngestSettings:
             100 * 1024 * 1024,
             1,
             2 * 1024 * 1024 * 1024,
+        ),
+        lan_upload_max_files=_int(
+            "RAGKB_LAN_UPLOAD_MAX_FILES",
+            values,
+            30,
+            1,
+            1000,
+        ),
+        lan_upload_max_bytes=_int(
+            "RAGKB_LAN_UPLOAD_MAX_BYTES",
+            values,
+            500 * 1024 * 1024,
+            1,
+            10 * 1024 * 1024 * 1024,
+        ),
+        lan_upload_window_seconds=_int(
+            "RAGKB_LAN_UPLOAD_WINDOW_SECONDS",
+            values,
+            600,
+            10,
+            86400,
         ),
         parse_max_chars=_int(
             "RAGKB_INGEST_PARSE_MAX_CHARS", values, 2_000_000, 1000, 20_000_000
