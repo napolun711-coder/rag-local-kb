@@ -631,3 +631,24 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Not yet verified in this wave: graph queries against real indexed data and
   browser-level interaction. This remains the release acceptance step after the
   engine virtual-environment permissions are repaired.
+
+## Engine environment recovery and graph acceptance (2026-10-29)
+
+- Rebuilt the isolated LightRAG engine virtual environment with Python 3.14.7.
+  The previous environment had mixed Python 3.12 metadata with a 3.14
+  interpreter and access-denied package files.
+- Installed all 138 packages from `requirements.lock` with uv copy mode. The
+  previous environment is retained at
+  `services/lightrag_engine/.venv.pre-rebuild-20261029` for rollback.
+- Verified `numpy`, `orjson`, FastAPI, LightRAG, uvicorn, and the
+  `lightrag-server` entry point from the rebuilt environment.
+- The isolated service group started successfully on fallback ports
+  `19163` (engine), `19164` (shell), and `19181` (app).
+- `/web` returned HTTP 200. A bounded read-only graph check returned 20 global
+  nodes and 7 edges with `is_truncated=true`, five popular entities, and a
+  one-hop subgraph with five nodes and four edges.
+- Browser acceptance confirmed the graph view, refresh control, type legend,
+  entity subgraph, source document entry, and relationship detail panel. The
+  relationship panel showed type, weight, source document, and both endpoints.
+- No graph mutation endpoint was called. No ingestion, configuration save,
+  deletion, or formal data-directory write was performed.
