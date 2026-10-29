@@ -118,6 +118,35 @@ function Resolve-Uv {
     return (Install-UvStandalone)
 }
 
+function Invoke-Uv([string]$Exe, [string[]]$Arguments) {
+    # Start-Process keeps uv's stderr out of PowerShell's error stream. Under
+    # Windows PowerShell 5.1, a successful uv command otherwise renders as a
+    # NativeCommandError and can terminate the setup under ErrorActionPreference=Stop.
+    $logDir = Join-Path $Tools 'logs'
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $stdout = Join-Path $logDir ('uv-' + $PID + '-stdout.log')
+    $stderr = Join-Path $logDir ('uv-' + $PID + '-stderr.log')
+    $quoted = @()
+    foreach ($argument in $Arguments) {
+        if ($argument -match '[\s"]') {
+            $quoted += ('"' + ($argument -replace '"', '\"') + '"')
+        } else {
+            $quoted += $argument
+        }
+    }
+    try {
+        $process = Start-Process -FilePath $Exe -ArgumentList ($quoted -join ' ') `
+            -WorkingDirectory ((Get-Location).Path) -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        if (Test-Path -LiteralPath $stdout) { Get-Content -LiteralPath $stdout -Encoding UTF8 | Out-Host }
+        if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Encoding UTF8 | Out-Host }
+        return [int]$process.ExitCode
+    } finally {
+        Remove-Item -LiteralPath $stdout -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stderr -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Read-EnvLines([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return @() }
     try { return @([IO.File]::ReadAllLines($Path)) } catch { return @() }
@@ -282,8 +311,8 @@ if (-not $SkipApp) {
     Write-OK ('uv: ' + $uvExe)
     Push-Location $root
     try {
-        & $uvExe sync --frozen --no-dev
-        if ($LASTEXITCODE -ne 0) { throw 'uv sync failed' }
+        $code = Invoke-Uv $uvExe @('sync', '--frozen', '--no-dev')
+        if ($code -ne 0) { throw 'uv sync failed' }
     } finally { Pop-Location }
     $appPython = Join-Path $root '.venv\Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $appPython)) { throw '.venv not created' }
@@ -314,8 +343,8 @@ if (-not $SkipEngine) {
     Write-Host 'Installing engine dependencies from requirements.lock (this may take several minutes)...'
     Push-Location $engineDir
     try {
-        & $uvExe pip install --python $enginePython -r $lockFile
-        if ($LASTEXITCODE -ne 0) { throw 'engine pip install failed' }
+        $code = Invoke-Uv $uvExe @('pip', 'install', '--python', $enginePython, '-r', $lockFile)
+        if ($code -ne 0) { throw 'engine pip install failed' }
     } finally { Pop-Location }
     Write-OK 'LightRAG engine dependencies installed'
 }

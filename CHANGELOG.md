@@ -46,6 +46,9 @@
   project-local runtime/code backups, code-only replacement, health checks, and
   rollback on failure; `package_release.ps1` and a tagged release workflow build
   code-only Windows ZIPs without user data, configuration, caches, or venvs
+- setup/upgrade: run `uv` through redirected child-process streams so its
+  progress output is no longer rendered as a PowerShell `NativeCommandError`
+  during dependency sync
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

@@ -1329,6 +1329,10 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   publishes it with the checksum; the workflow rejects a tag/version mismatch.
 - Added `config/update.example.json` and documented Git, Release, and offline
   upgrade paths in `README.md` and `部署阶段.md`.
+- `scripts/setup.ps1` now runs `uv` through `Start-Process` with redirected
+  stdout/stderr. This prevents successful `uv` progress from being rendered as
+  a terminating PowerShell 5.1 `NativeCommandError` during upgrade dependency
+  sync, while still using the real process exit code for failure handling.
 
 ### Verification
 
@@ -1356,11 +1360,36 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - All upgrade tests used `.integration-run/r2-*`; formal data and the external
   reference application were not touched.
 
+### Isolated upgrade/rollback drill (2026-10-30)
+
+- Created `.integration-run/r2-drill/base` from the code-only 0.1.0 ZIP with
+  copied app/engine virtual environments, independent data/logs, ports
+  19080/19261/19262, local Ollama models, and no formal data.
+- Started the real engine, shell, and app; all three were healthy, while the
+  formal 0.1.0 services stayed healthy and untouched.
+- Full archive upgrade to 0.1.1 without `-SkipSetup` or `-NoRestart`: stopped
+  the drill services, backed up runtime/code, replaced code, ran `uv sync` and
+  the engine dependency check, restarted all three services, and passed
+  `/health`. Version, code marker, data, config, and isolated `.env` were as
+  expected.
+- Injected a 0.1.2 archive whose `start.ps1` exits 1. The updater applied code
+  and synced dependencies, startup failed, and rollback restored the 0.1.1
+  code and runtime backup, then restarted all three services healthy. The bad
+  marker was gone and SQLite `PRAGMA integrity_check` returned `ok`.
+- Re-ran a full 0.1.3 upgrade containing the `uv` stream fix; dependency sync
+  produced no `NativeCommandError`, and all services passed health checks.
+- Stopped the drill services afterward; isolated ports are free and the formal
+  engine/shell/app remain running healthy at 0.1.0. Drill logs and backups remain
+  under `.integration-run/r2-drill` (ignored by Git).
+
 ### Remaining risks
 
 - A real GitHub Release download, GitHub Actions run, and upgrade of the running
-  formal three-service installation have not been executed. The release gate
-  still needs one isolated old-version -> upgrade -> health -> rollback drill.
+  formal three-service installation have not been executed. The isolated drill
+  covered archive apply, setup, service restart, health, and rollback; live
+  Release/GitHub paths still need a release-gate run.
+- The drill used copied virtual environments and local Ollama; it validated
+  health and upgrade mechanics but did not send a generation/chat request.
 - There is no database or index migration framework. A future release that
   changes persisted schemas needs an explicit migration step before code-only
   replacement is safe.
