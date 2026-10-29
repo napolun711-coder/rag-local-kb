@@ -1511,3 +1511,56 @@ Remaining B2 work:
   read-only) is still needed.
 - CI and the tag-release test gate are not implemented yet.
 - LAN remains trusted-private-network HTTP only; no TLS or per-user accounts.
+
+## Mobile UI and release gate (R1, 2026-10-30)
+
+Mobile UI changes:
+
+- Hidden the desktop collapsed icon rail at ≤900px. The phone now has one
+  left-side entry point: the hamburger drawer. It no longer overlaps the chat
+  top bar with duplicate upload/memory/settings icons.
+- Fixed the three-dot menu: menu items use `display:flex`, which was overriding
+  the native `hidden` attribute. `mm-item[hidden]` now hides stop/clear/speak
+  items when their real buttons are unavailable or irrelevant.
+- Reflowed the mobile graph: the graph bar scrolls horizontally, the global
+  graph button no longer collapses into vertical text, the rail is compact, and
+  the canvas receives the remaining viewport height. The mobile graph is now
+  graph-first rather than giving the upper half to controls.
+- Bumped `index.css`/`index.js` query versions so browsers do not keep the old
+  mobile layout from cache.
+
+Release gate changes:
+
+- Added `.github/workflows/ci.yml`: Windows, Python 3.12, unit tests, JS syntax,
+  PowerShell parse checks, release ZIP build, SHA256 verification, required-file
+  checks, forbidden-path checks, and privacy marker scanning.
+- Reworked `.github/workflows/release.yml`: a test job builds and validates the
+  package and uploads the exact artifact; the release job downloads that tested
+  artifact and publishes it. A tag/version mismatch fails the gate.
+
+Verification:
+
+- Full suite: 127 tests passed.
+- Fresh release ZIP extracted into an isolated empty root; no app/engine venv
+  was present before deployment. One-click deploy created both venvs, passed
+  doctor, started all three services on isolated ports, and served `/web`.
+- Local upload entered the parsing queue and reached `review`; no formal data
+  was used.
+- Current-code upgrade drill: clean 0.1.0 -> 0.1.1 with dependency sync,
+  service restart, and health checks. Data/config markers survived.
+- Injected 0.1.2 startup failure: code/status rollback restored 0.1.1, all
+  services healthy, markers preserved, SQLite integrity `ok`.
+- Mobile Chrome at 390x844: side rail `none`; three-dot menu shows only
+  auto-read/files/settings when appropriate; graph rail 68px and canvas
+  667px of the 844px viewport.
+- Final package scan found no `data/`, `.env`, venv, local path, reference-app
+  name, personal email, or placeholder path markers.
+
+Remaining:
+
+- GitHub remote, Actions execution, and the actual release download still need
+  the first repository push.
+- Files/memory pages still expose host-only actions to LAN UI; backend rejects
+  them. This remains a B2 UX item, not a release-blocking auth change.
+- The isolated clean services were stopped after verification. Formal services
+  remain on 0.1.0 until a deliberate restart.

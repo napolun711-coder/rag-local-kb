@@ -6,24 +6,142 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  test:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build release ZIP and checksum
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install uv
+        shell: powershell
+        run: python -m pip install --disable-pip-version-check "uv==0.11.29"
+
+      - name: Install application dependencies
+        shell: powershell
+        run: uv sync --frozen --no-dev
+
+      - name: Run unit tests
+        shell: powershell
+        run: uv run --frozen python -m unittest discover -s tests -v
+
+      - name: Check JavaScript syntax
         shell: powershell
         run: |
-          $match = [regex]::Match([IO.File]::ReadAllText('pyproject.toml'), '(?m)^\s*version\s*=\s*"([^"]+)"')
-          if (-not $match.Success) { throw 'Cannot read version from pyproject.toml' }
+          $failed = @()
+          Get-ChildItem static -Filter *.js | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { $failed += $_.Name }
+          }
+          if ($failed.Count) { throw ("JavaScript syntax failures: " + ($failed -join ", ")) }
+
+      - name: Parse PowerShell scripts
+        shell: powershell
+        run: |
+          $failed = @()
+          Get-ChildItem -Recurse -Filter *.ps1 -File |
+            Where-Object { $_.FullName -notmatch '\\(\.venv|\.tools|\.updates|\.integration-run)\\' } |
+            ForEach-Object {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                $_.FullName, [ref]$tokens, [ref]$errors
+              ) | Out-Null
+              if ($errors.Count) { $failed += ($_.FullName + ":" + $errors.Count) }
+            }
+          if ($failed.Count) { throw ("PowerShell parse failures: " + ($failed -join ", ")) }
+
+      - name: Build and validate release package
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $match = [regex]::Match(
+            [IO.File]::ReadAllText("pyproject.toml"),
+            '(?m)^\s*version\s*=\s*"([^"]+)"'
+          )
+          if (-not $match.Success) { throw "Cannot read version from pyproject.toml" }
           $version = $match.Groups[1].Value
-          if (('v' + $version) -ne $env:GITHUB_REF_NAME) {
-            throw "Tag $env:GITHUB_REF_NAME does not match pyproject version $version"
+          if (("v" + $version) -ne $env:GITHUB_REF_NAME) {
+            throw ("Tag " + $env:GITHUB_REF_NAME + " does not match pyproject version " + $version)
           }
           ./scripts/package_release.ps1 -Version $version
+
+          $zip = Get-ChildItem .updates\release\*.zip |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $zip) { throw "Release ZIP was not created" }
+          $sumFile = $zip.FullName + ".sha256"
+          if (-not (Test-Path -LiteralPath $sumFile)) { throw "Checksum file was not created" }
+          $expected = ((Get-Content -LiteralPath $sumFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "Release checksum mismatch" }
+
+          $dest = Join-Path $env:RUNNER_TEMP "ragkb-release-check"
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $dest -Force
+
+          $required = @(
+            "app\main.py",
+            "app\features\access\dependencies.py",
+            "app\features\ingest\limits.py",
+            "tests\test_access_boundary.py",
+            "scripts\update.ps1",
+            "README.md",
+            "SECURITY.md",
+            "CODE_OF_CONDUCT.md"
+          )
+          foreach ($relative in $required) {
+            if (-not (Test-Path -LiteralPath (Join-Path $dest $relative))) {
+              throw ("Release package is missing " + $relative)
+            }
+          }
+          foreach ($relative in @("data", "knowledge", "logs", ".env", ".venv", ".tools")) {
+            if (Test-Path -LiteralPath (Join-Path $dest $relative)) {
+              throw ("Release package contains forbidden path " + $relative)
+            }
+          }
+          $hits = @(
+            Get-ChildItem -LiteralPath $dest -Recurse -File |
+              Where-Object { $_.FullName -notmatch '\\.github\\' -and $_.Length -lt 2000000 } |
+              Select-String -Pattern 'C:\\Users|C:/Users|profile-ai|napolun711|<user-profile>|<project-root>' -ErrorAction SilentlyContinue
+          )
+          if ($hits.Count) { throw ("Release package contains local/private path markers: " + $hits.Count) }
+          Write-Output ("Validated release package: " + $zip.Name)
+
+      - name: Upload validated release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          if-no-files-found: error
+          path: |
+            .updates/release/*.zip
+            .updates/release/*.sha256
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download validated release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: .updates/release
+
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:

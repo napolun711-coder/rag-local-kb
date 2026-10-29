@@ -61,6 +61,11 @@
   mutations, queue controls, and device management remain local-only. Add
   double-submit CSRF protection, per-device upload quotas, and a read-only
   settings UI for LAN devices
+- mobile UI: hide the duplicate desktop icon rail on phones, keep the hamburger
+  drawer as the single entry point, fix hidden items still showing in the
+  three-dot menu, and give the knowledge graph canvas the full remaining height
+- release: add Windows CI and make tag releases depend on tests, JavaScript/
+  PowerShell checks, checksum verification, and release-package content scans
 
 ## 0.1.0
 
