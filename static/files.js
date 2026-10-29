@@ -47,7 +47,14 @@ const state = {
   deleteMode: false,
   deleteItems: [],
   deleteReturnFocus: null,
-  pollTimer: null
+  pollTimer: null,
+  ingestRefreshTimer: 0
+};
+
+// 本机表展示所有还需要用户关注或仍在处理的状态；已入库的归知识库文档表。
+const LOCAL_VISIBLE_STATES = {
+  review: 1, needs_ocr: 1, blocked: 1, failed: 1,
+  skipped: 1, ingesting: 1, processing: 1
 };
 
 function escapeHtml(text) {
@@ -263,7 +270,7 @@ async function loadList() {
     const data = await fetchJSON("/api/files/list?" + query);
     state.rows = data.documents || [];
     state.localRows = (data.local_only || []).filter(function (item) {
-      return String(item.state || "") === "skipped";
+      return Boolean(LOCAL_VISIBLE_STATES[String(item.state || "")]);
     });
     state.localTotal = state.localRows.length;
     state.upstreamOk = !(data.upstream && data.upstream.ok === false);
@@ -295,12 +302,12 @@ function applyUpstreamLabels() {
     knowledgeHint.textContent = ok ? "" : "知识服务不可用，当前无法显示知识库文档；下方仅显示应用内留档。";
   }
   if (localTitle) {
-    localTitle.textContent = "跳过的文件";
+    localTitle.textContent = "本机待处理与已跳过";
   }
   if (localHint) {
     localHint.textContent = ok
-      ? "用户已跳过的文件。可点击“继续入库”重新提交。"
-      : "知识服务不可用；以下为已跳过的文件，入库操作暂不可用。";
+      ? "这里显示本机解析记录：待确认、需修复、入库中与已跳过。待确认请在对话页处理；已跳过的可继续入库。"
+      : "知识服务不可用；以下为本机记录，入库操作暂不可用。";
   }
   const checkAll = $("checkAll");
   const checkAllLocal = $("checkAllLocal");
@@ -335,6 +342,8 @@ function renderOverview(data) {
     statCell("失败", upstreamOk ? (counts.failed || 0) : unknown) +
     statCell("应用内留档", local.jobs || 0, "已加入知识库 " + (local.in_knowledge_base || 0)) +
     statCell("等你确认", local.waiting_review || 0) +
+    statCell("入库中", local.ingesting || 0) +
+    statCell("已跳过", local.skipped || 0) +
     statCell("收件箱等待", inbox.waiting || 0);
 
   const chips = [];
@@ -560,31 +569,43 @@ function renderLocalRows() {
   if (!rows.length) {
     // 本机表只受搜索词影响（状态筛选不作用于它），所以只有 q 非空时才给「清空搜索」
     $("localRows").innerHTML = '<tr><td colspan="5" class="muted">' + (state.q || state.topicId
-      ? '没有匹配的跳过文件 <button type="button" class="open" data-clear-filters>清空筛选</button>'
-      : '暂无跳过的文件') + '</td></tr>';
+      ? '没有匹配的本机记录 <button type="button" class="open" data-clear-filters>清空筛选</button>'
+      : '暂无待处理或已跳过的文件') + '</td></tr>';
     wireEmptyCta($("localRows"));
     renderLocalPager();
     return;
   }
   $("localRows").innerHTML = rows.map(function (row, index) {
     const checked = state.selected[rowKey(row)] ? " checked" : "";
-    // 本机行这一格是「文件名 + 一句说明」；说明可能很长（"已跳过：…可点「仍要入库」"），
-    // 窄屏会被省略号截掉，所以完整内容放进 title
-    const detail = row.local_detail || "";
-    const resumeButton = '<button type="button" class="resume" data-resume-local="' +
-      (slice.start + index) + '"' + (state.busy || state.deleteMode ? ' disabled' : '') +
-      '>继续入库</button> ';
+    // 本机行这一格是「文件名 + 状态与原因」；原因可能很长，窄屏会被省略号截掉，
+    // 所以完整内容放进 title。状态和错误原因都来自服务端，不在前端猜。
+    const stateName = String(row.state || "");
+    const stateLabel = String(row.local_state_label || "");
+    const detail = String(row.local_detail || "");
+    const note = (detail && stateLabel && detail.indexOf(stateLabel) === 0)
+      ? detail
+      : [stateLabel, detail].filter(Boolean).join(" · ");
+    const resumeButton = stateName === "skipped"
+      ? '<button type="button" class="resume" data-resume-local="' + (slice.start + index) + '"'
+        + (state.busy || state.deleteMode ? ' disabled' : '') + '>继续入库</button> '
+      : '';
+    const handleButton = (stateName === "review" || stateName === "needs_ocr"
+        || stateName === "blocked" || stateName === "failed")
+      ? '<a class="open" href="/" title="回到对话页处理这份文件">去处理</a> '
+      : '';
+    const busyText = (stateName === "ingesting" || stateName === "processing")
+      ? '<span class="muted">入库中…</span> ' : '';
     return '<tr>' +
       // data-local 必须是**在 state.localRows 里的绝对下标**：切过页之后
       // 表内下标不再等于数组下标，直接用 index 会勾错行
       '<td class="select-cell"><input type="checkbox" data-local="' + (slice.start + index) + '"' + checked
         + (state.upstreamOk && state.deleteMode && !state.busy ? '' : ' disabled') + ' aria-label="选择"></td>' +
-      '<td class="name" title="' + escapeHtml(row.name + (detail ? " — " + detail : "")) + '">' +
+      '<td class="name" title="' + escapeHtml(row.name + (note ? " — " + note : "")) + '">' +
       escapeHtml(row.name) +
-      (detail ? '<span class="path">' + escapeHtml(detail) + '</span>' : "") + '</td>' +
+      (note ? '<span class="path">' + escapeHtml(note) + '</span>' : "") + '</td>' +
       '<td class="hide-md">' + topicCellHtml(row, "data-topic-local", slice.start + index) + '</td>' +
       '<td>' + escapeHtml(String(row.created_at || "").slice(0, 16)) + '</td>' +
-      '<td>' + resumeButton + originActionsHtml(row) +
+      '<td>' + busyText + handleButton + resumeButton + originActionsHtml(row) +
       '<button type="button" class="open" data-detail-local="' + (slice.start + index) + '">详情</button></td>' +
       '</tr>';
   }).join("");
@@ -686,6 +707,38 @@ function wireRowEvents(container) {
   });
 }
 
+// 继续入库后，本机行会停在 ingesting；定时向知识库查一次真实索引状态并刷新列表，
+// 避免用户只看到“已继续入库”然后这一行再也不动。
+function scheduleIngestRefresh(attempts) {
+  if (state.ingestRefreshTimer) {
+    clearTimeout(state.ingestRefreshTimer);
+    state.ingestRefreshTimer = 0;
+  }
+  if (attempts <= 0) { return; }
+  state.ingestRefreshTimer = setTimeout(async function () {
+    state.ingestRefreshTimer = 0;
+    const ingesting = state.localRows.filter(function (row) {
+      return (row.state === "ingesting" || row.state === "processing") && row.file_id;
+    });
+    if (!ingesting.length) {
+      await loadOverview().catch(function () {});
+      return;
+    }
+    await Promise.all(ingesting.map(function (row) {
+      return fetch("/ingest/knowledge-status/" + encodeURIComponent(row.file_id), {
+        method: "POST",
+        cache: "no-store"
+      }).catch(function () { return null; });
+    }));
+    await loadList().catch(function () {});
+    const still = state.localRows.some(function (row) {
+      return row.state === "ingesting" || row.state === "processing";
+    });
+    if (still) { scheduleIngestRefresh(attempts - 1); }
+    else { await loadOverview().catch(function () {}); }
+  }, 6000);
+}
+
 async function resumeLocal(row, button) {
   if (state.busy || state.deleteMode || !row.file_id) { return; }
   state.busy = true;
@@ -698,8 +751,9 @@ async function resumeLocal(row, button) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "resume" })
     });
-    flash("已继续入库", "ok");
+    flash("已继续入库，正在建立索引", "ok");
     await loadAll();
+    scheduleIngestRefresh(10);
   } catch (err) {
     setNotice("继续入库失败：" + err.message, "bad");
   } finally {

@@ -23,6 +23,8 @@ class LocalJobSummary:
     document_ids: Tuple[str, ...] = ()
     topic_id: str = ""
     topic_name: str = ""
+    detail: str = ""
+    knowledge_message: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -41,6 +43,8 @@ class LocalJobSummary:
             "document_ids": list(self.document_ids),
             "topic_id": self.topic_id,
             "topic_name": self.topic_name,
+            "detail": self.detail,
+            "knowledge_message": self.knowledge_message,
         }
 
 
@@ -127,6 +131,8 @@ class DocumentOverview:
     local_only_total: int
     upstream_ok: bool = True
     upstream_message: str = ""
+    local_skipped: int = 0
+    local_ingesting: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -139,6 +145,8 @@ class DocumentOverview:
             "local_only_total": self.local_only_total,
             "upstream_ok": self.upstream_ok,
             "upstream_message": self.upstream_message,
+            "local_skipped": self.local_skipped,
+            "local_ingesting": self.local_ingesting,
         }
 
 

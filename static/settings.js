@@ -782,7 +782,7 @@ function renderEffective(data) {
         ["入库确认", gate.mode === "always"
             ? "always（每个文件都停下来等确认）"
             : (gate.mode === "auto" ? "auto（建议入库的自动放行，其余停下问）" : "off（通过校验就直接入库）")],
-        ["待确认保留时长", (gateTtl ? (gateTtl + " 小时") : "不自动归档") + "；超时按「跳过」处理（原件与解析结果保留）"],
+        ["跳过记录恢复时长", (gateTtl ? (gateTtl + " 小时") : "不恢复") + "；待确认作业不会自动跳过，文件管理始终可继续入库"],
         ["质量校验", "恒定开启（没有总开关）"
             + (quality.switch_ignored ? "；.env 里的 QUALITY_ENABLED=false 已被忽略" : "")],
         ["严格程度预设", quality.profile || "—"],
@@ -1769,7 +1769,7 @@ function renderIngestHint(data) {
         ? 24 : gate.pending_review_ttl_hours;
     const waiting = [];
     if (saved && saved !== mode) { waiting.push("确认方式 → " + saved); }
-    if (savedTtl && savedTtl !== String(ttl)) { waiting.push("保留时长 → " + savedTtl + " 小时"); }
+    if (savedTtl && savedTtl !== String(ttl)) { waiting.push("跳过恢复时长 → " + savedTtl + " 小时"); }
     if (waiting.length) {
         box.className = "note-line warn";
         box.textContent = "已保存但还没生效：" + waiting.join("、") + "。当前进程仍按 " + mode + " 执行——"
@@ -1778,7 +1778,8 @@ function renderIngestHint(data) {
     }
     box.className = "note-line" + (mode === "off" ? " warn" : " ok");
     box.textContent = "现在生效：" + mode + " —— " + (INGEST_MODE_TEXT[mode] || "")
-        + "。停在确认门的文件保留 " + ttl + " 小时，超时按「跳过」处理：原件、解析结果与建议都会留着，随时可以再点「仍要入库」。"
+        + "。待确认作业会一直保留到处理；最近 " + ttl
+        + " 小时跳过的文件会在对话页恢复，更早的可在「文件管理」继续入库（原件、解析结果与建议都会保留）。"
         + (mode === "off" ? "注意：这时错内容也会进知识库，出错只能靠删数据。" : "");
 }
 

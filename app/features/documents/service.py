@@ -318,6 +318,12 @@ class DocumentCatalogService:
         local_done = sum(
             1 for result in local_results if str(result.get("state") or "") == "done"
         )
+        local_skipped = sum(
+            1 for result in local_results if str(result.get("state") or "") == "skipped"
+        )
+        local_ingesting = sum(
+            1 for result in local_results if str(result.get("state") or "") == "ingesting"
+        )
         return DocumentOverview(
             remote_total=first_page.total_count,
             remote_status_counts=first_page.status_counts,
@@ -328,6 +334,8 @@ class DocumentCatalogService:
             local_only_total=first_page.local_only_total,
             upstream_ok=first_page.upstream_ok,
             upstream_message=first_page.upstream_message,
+            local_skipped=local_skipped,
+            local_ingesting=local_ingesting,
         )
 
     def _allowed_roots(self) -> Tuple[Path, ...]:

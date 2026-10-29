@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.features.ingest import advice as advice_service
 from app.features.ingest import parse as parse_service
@@ -27,6 +28,14 @@ _LOCK = threading.RLock()
 _SESSION_ALLOW_ALL = False
 CONTENT_MAX_CHARS = 500_000
 REVIEW_STATES = ("review", "needs_ocr", "blocked")
+EDITABLE_STATES = REVIEW_STATES + ("skipped",)
+ACTIONABLE_STATES = ("blocked", "failed")
+ACTIVE_STATES = ("processing", "parsing", "checking", "ocr", "ingesting")
+PENDING_STATES = ("review", "needs_ocr")
+SKIPPED_RESTORE_HOURS = 24
+RESTORE_LIMIT = 20
+STALE_ACTIVE_MINUTES = 120
+CAPTION_MARKER = "\n\n<!-- ragkb:manual-caption -->\n"
 
 
 class IngestError(Exception):
@@ -134,11 +143,92 @@ def _apply_ocr(
     }
 
 
+def _is_image_job(result: Dict[str, Any]) -> bool:
+    parsed = result.get("parse") if isinstance(result.get("parse"), dict) else {}
+    return bool(result.get("is_image")) or str(parsed.get("route") or "") == "image"
+
+
+def _short_doc_id(file_id: str) -> str:
+    value = str(file_id or "")
+    if not storage.valid_file_id(value):
+        return ""
+    return value.rsplit("-", 1)[-1][:4]
+
+
+def _doc_name_stem(result: Dict[str, Any]) -> str:
+    raw = str(result.get("doc_name") or Path(str(result.get("filename") or "document")).stem or "document")
+    stem = raw.strip()
+    if stem.lower().endswith(".md"):
+        stem = stem[:-3]
+    suffix = "_" + _short_doc_id(str(result.get("file_id") or ""))
+    if _is_image_job(result) and suffix != "_" and stem.endswith(suffix):
+        stem = stem[: -len(suffix)]
+    stem = stem.replace("/", "_").replace("\\", "_").strip()
+    return (stem or "document")[:120]
+
+
+def _doc_id_for(result: Dict[str, Any]) -> str:
+    return _short_doc_id(str(result.get("file_id") or "")) if _is_image_job(result) else ""
+
+
+def _document_name(result: Dict[str, Any]) -> str:
+    stem = _doc_name_stem(result)
+    short_id = _doc_id_for(result)
+    return f"{stem}_{short_id}.md" if short_id else f"{stem}.md"
+
+
+def _extract_caption(content: str) -> str:
+    text = str(content or "")
+    index = text.find(CAPTION_MARKER)
+    return text[index + len(CAPTION_MARKER):].strip() if index >= 0 else ""
+
+
+def _compose_caption(content: str, caption: str) -> str:
+    base = str(content or "")
+    block = CAPTION_MARKER + str(caption or "").strip()
+    index = base.find(CAPTION_MARKER)
+    if index >= 0:
+        return base[:index].rstrip() + block
+    if base.strip():
+        return base.rstrip() + block
+    return str(caption or "").strip()
+
+
+def _cutoff(hours: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 1)))
+
+
+def _updated_after(value: Any, cutoff: datetime) -> bool:
+    try:
+        moment = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment >= cutoff
+
+
+def _restore_items(
+    states: Tuple[str, ...],
+    *,
+    limit: int = RESTORE_LIMIT,
+) -> List[Dict[str, Any]]:
+    settings = get_ingest_settings()
+    items = [
+        _public_status(item)
+        for item in storage.list_results(settings)
+        if str(item.get("state") or "") in states
+    ]
+    items.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+    return items[:limit]
+
+
 def _run_pipeline(
     settings: IngestSettings,
     result: Dict[str, Any],
     *,
     force_ocr: bool = False,
+    allow_session_auto: bool = True,
 ) -> Dict[str, Any]:
     source = storage.resolve_display_path(str(result.get("source_path") or ""))
     timeline = list(result.get("timeline") or [])
@@ -214,7 +304,9 @@ def _run_pipeline(
 
     if report.level == quality_service.LEVEL_PASS:
         result["state"] = "review"
-        result["detail"] = "Local quality gate passed; ready for explicit knowledge submission."
+        result["detail"] = "已通过本地质量校验，等待你确认入库"
+        if allow_session_auto and _SESSION_ALLOW_ALL:
+            result["detail"] = "已通过本地质量校验，按本次运行设置直接提交知识库"
     elif report.level == quality_service.LEVEL_NEEDS_OCR:
         result["state"] = "needs_ocr"
         result["detail"] = quality_service.describe(report)
@@ -226,10 +318,18 @@ def _run_pipeline(
         {"step": "quality", "state": result["state"], "at": result["updated_at"], "detail": result["detail"]}
     )
     storage.write_result(settings, result["file_id"], result)
+    if allow_session_auto and _SESSION_ALLOW_ALL and result["state"] == "review":
+        _submit_to_knowledge(settings, result)
     return result
 
 
-def process_upload(filename: str, content: bytes, content_type: str = "") -> Dict[str, Any]:
+def process_upload(
+    filename: str,
+    content: bytes,
+    content_type: str = "",
+    *,
+    allow_session_auto: bool = True,
+) -> Dict[str, Any]:
     settings = get_ingest_settings()
     _validate(filename, len(content), settings)
     with _LOCK:
@@ -245,7 +345,7 @@ def process_upload(filename: str, content: bytes, content_type: str = "") -> Dic
             "saved_path": storage.display_path(archived),
             "source_path": storage.display_path(source),
             "state": "processing",
-            "detail": "Upload accepted",
+            "detail": "已接收，正在本地解析",
             "created_at": created,
             "updated_at": created,
             "timeline": [{"step": "upload", "state": "done", "at": created, "detail": ""}],
@@ -254,7 +354,9 @@ def process_upload(filename: str, content: bytes, content_type: str = "") -> Dic
             "knowledge_gateway_ready": False,
         }
         storage.write_result(settings, file_id, result)
-        return _public_status(_run_pipeline(settings, result))
+        return _public_status(
+            _run_pipeline(settings, result, allow_session_auto=allow_session_auto)
+        )
 
 
 def _can(status: Dict[str, Any]) -> Dict[str, bool]:
@@ -262,10 +364,11 @@ def _can(status: Dict[str, Any]) -> Dict[str, bool]:
     knowledge = status.get("knowledge") if isinstance(status.get("knowledge"), dict) else {}
     knowledge_state = str(knowledge.get("state") or "not_submitted")
     track_id = str(knowledge.get("track_id") or (status.get("lightrag") or {}).get("track_id") or "")
-    editable = state in REVIEW_STATES
+    editable = state in EDITABLE_STATES
+    forceable = state in ("blocked", "needs_ocr") and knowledge_state not in ("submitted", "ingesting", "done")
     return {
         "ingest": state == "review" and knowledge_state not in ("submitted", "ingesting", "done"),
-        "force": False,
+        "force": forceable,
         "ocr": (
             state in ("needs_ocr", "blocked")
             and int(status.get("image_total") or 0) > 0
@@ -293,6 +396,13 @@ def _public_status(result: Dict[str, Any]) -> Dict[str, Any]:
     }
     payload["can"] = _can(payload)
     payload["knowledge"] = dict(knowledge)
+    lightrag = payload.get("lightrag") if isinstance(payload.get("lightrag"), dict) else {}
+    payload["knowledge_error"] = str(
+        knowledge.get("message")
+        or lightrag.get("error")
+        or (knowledge.get("last_status") or {}).get("message")
+        or ""
+    )
     payload["gateway_ready"] = str(knowledge.get("state") or "") in ("submitted", "ingesting", "done")
     return payload
 
@@ -303,29 +413,100 @@ def status(file_id: str) -> Optional[Dict[str, Any]]:
     return _public_status(result) if result else None
 
 
-def pending_reviews() -> list[Dict[str, Any]]:
+def pending_reviews() -> List[Dict[str, Any]]:
+    """Jobs waiting for an explicit ingest/skip decision."""
+    return _restore_items(PENDING_STATES)
+
+
+def actionable_jobs() -> List[Dict[str, Any]]:
+    """Jobs that need a retry or a content correction."""
+    return _restore_items(ACTIONABLE_STATES)
+
+
+def _recover_stale_active() -> None:
+    """A process crash during local parsing would otherwise leave a job at 'processing' forever."""
     settings = get_ingest_settings()
-    items = [
+    cutoff = _cutoff(max(1, STALE_ACTIVE_MINUTES // 60))
+    for item in storage.list_results(settings):
+        state = str(item.get("state") or "")
+        if state not in ("processing", "parsing", "checking", "ocr"):
+            continue
+        if _updated_after(item.get("updated_at"), cutoff):
+            continue
+        item["state"] = "failed"
+        item["detail"] = "处理中断，请重试"
+        item["knowledge"] = {"state": "not_submitted", "track_id": ""}
+        item["lightrag"] = {"state": "not_submitted", "track_id": ""}
+        item["updated_at"] = storage.utc_now()
+        item["timeline"] = list(item.get("timeline") or []) + [{
+            "step": "recover",
+            "state": "failed",
+            "at": item["updated_at"],
+            "detail": "Stale active job recovered after restart",
+        }]
+        storage.write_result(settings, item["file_id"], item)
+
+
+def active_jobs() -> List[Dict[str, Any]]:
+    """Jobs still being parsed or submitted to the knowledge service."""
+    _recover_stale_active()
+    return _restore_items(ACTIVE_STATES)
+
+
+def skipped_jobs(*, hours: int = SKIPPED_RESTORE_HOURS) -> Tuple[List[Dict[str, Any]], int]:
+    """Recently skipped jobs for chat restore, plus the total skipped count."""
+    settings = get_ingest_settings()
+    cutoff = _cutoff(hours)
+    all_items = [
         _public_status(item)
         for item in storage.list_results(settings)
-        if str(item.get("state") or "") in ("review", "needs_ocr")
+        if str(item.get("state") or "") == "skipped"
     ]
-    items.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
-    return items
-
-
-def active_jobs() -> list[Dict[str, Any]]:
-    return []
+    all_items.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+    recent = [
+        item for item in all_items
+        if _updated_after(item.get("updated_at"), cutoff)
+    ]
+    return recent[:RESTORE_LIMIT], len(all_items)
 
 
 def session_allow_all() -> bool:
     return _SESSION_ALLOW_ALL
 
 
+def _release_review_jobs() -> None:
+    settings = get_ingest_settings()
+    for item in storage.list_results(settings):
+        if str(item.get("state") or "") != "review":
+            continue
+        with _LOCK:
+            fresh = storage.read_result(settings, str(item.get("file_id") or ""))
+            if fresh is None or str(fresh.get("state") or "") != "review":
+                continue
+            _submit_to_knowledge(settings, fresh)
+
+
 def set_session_allow_all(value: bool) -> Dict[str, Any]:
     global _SESSION_ALLOW_ALL
     _SESSION_ALLOW_ALL = bool(value)
-    return {"session_allow_all": _SESSION_ALLOW_ALL}
+    released = 0
+    if _SESSION_ALLOW_ALL:
+        settings = get_ingest_settings()
+        released = sum(
+            1 for item in storage.list_results(settings)
+            if str(item.get("state") or "") == "review"
+        )
+        if released:
+            threading.Thread(
+                target=_release_review_jobs,
+                name="ingest-release-reviews",
+                daemon=True,
+            ).start()
+    return {
+        "session_allow_all": _SESSION_ALLOW_ALL,
+        "allow_all": _SESSION_ALLOW_ALL,
+        "released": released,
+    }
 
 
 def confirm_mode() -> str:
@@ -334,17 +515,33 @@ def confirm_mode() -> str:
 
 def content_for_edit(file_id: str) -> Optional[Dict[str, Any]]:
     settings = get_ingest_settings()
-    result = status(file_id)
-    if result is None:
+    raw = storage.read_result(settings, file_id)
+    if raw is None:
         return None
+    result = _public_status(raw)
     content = storage.read_content(settings, file_id)
-    editable = str(result.get("state") or "") in REVIEW_STATES
+    state = str(result.get("state") or "")
+    editable = state in EDITABLE_STATES
+    edit = result.get("edit") if isinstance(result.get("edit"), dict) else {}
     return {
+        "file_id": file_id,
+        "name": str(result.get("filename") or result.get("doc_name") or file_id),
+        "doc_name": str(result.get("doc_name") or ""),
+        "doc_name_stem": _doc_name_stem(result),
+        "doc_id": _doc_id_for(result),
         "content": content,
         "chars": len(content),
+        "body_chars": len(content),
+        "caption_text": str(result.get("caption_text") or _extract_caption(content)),
+        "manual_text": bool(result.get("manual_text")),
+        "is_image": _is_image_job(result),
         "editable": editable,
-        "reason": "" if editable else "This job is not in a reviewable state",
-        "edit": {"count": 0, "updated_at": ""},
+        "reason": "" if editable else "当前状态不能修改正文",
+        "edit": {
+            "count": int(edit.get("count") or 0),
+            "updated_at": str(edit.get("updated_at") or ""),
+            "backup": str(edit.get("backup") or ""),
+        },
         "max_chars": CONTENT_MAX_CHARS,
     }
 
@@ -362,7 +559,7 @@ def edit_content(
         result = storage.read_result(settings, file_id)
         if result is None:
             return {"ok": False, "http_status": 404, "message": "Ingestion job not found"}
-        if str(result.get("state") or "") not in REVIEW_STATES:
+        if str(result.get("state") or "") not in EDITABLE_STATES:
             return {"ok": False, "http_status": 409, "message": "This job cannot be edited"}
         text = str(content or "")
         if not text.strip():
@@ -370,11 +567,30 @@ def edit_content(
         if len(text) > CONTENT_MAX_CHARS:
             return {"ok": False, "http_status": 413, "message": "Content is too large"}
 
-        storage.write_content(settings, file_id, text)
+        previous = storage.read_content(settings, file_id)
+        if caption:
+            # 纯图片的第一段描述就是全文；再次保存描述时应整体替换，而不是把旧描述当正文再追加。
+            if (previous and CAPTION_MARKER not in previous
+                    and bool(result.get("manual_text")) and _is_image_job(result)):
+                composed = text
+            else:
+                composed = _compose_caption(previous, text)
+        else:
+            composed = text
+        if previous and previous != composed:
+            backup = storage.content_path(settings, file_id).with_name("content.before-edit.md")
+            backup.write_text(previous, encoding="utf-8")
+            edit = result.get("edit") if isinstance(result.get("edit"), dict) else {}
+            result["edit"] = {
+                "count": int(edit.get("count") or 0) + 1,
+                "updated_at": storage.utc_now(),
+                "backup": backup.name,
+            }
+        storage.write_content(settings, file_id, composed)
         route = str((result.get("parse") or {}).get("route") or "text")
         pages = int((result.get("parse") or {}).get("pages") or 1)
         report = quality_service.evaluate(
-            text,
+            composed,
             route=route,
             pages=pages,
             options=quality_service.options_from_settings(settings),
@@ -382,19 +598,23 @@ def edit_content(
         )
         result["quality"] = report.to_dict()
         result["content_chars"] = int(report.metrics.get("char_total") or 0)
-        result["manual_text"] = bool(caption)
+        result["manual_text"] = bool(caption) or CAPTION_MARKER in composed
+        result["caption_text"] = (
+            str(text).strip() if caption
+            else (_extract_caption(composed) if result["manual_text"] else "")
+        )
         if doc_name.strip():
             result["doc_name"] = doc_name.strip()[:120]
         parsed = parse_service.ParseResult(
             ok=True,
             route=route,
-            text=text,
+            text=composed,
             pages=pages,
             images=int(result.get("image_total") or 0),
         )
-        result["advice"] = _advice_for(text, parsed, report, settings)
+        result["advice"] = _advice_for(composed, parsed, report, settings)
         result["state"] = "review" if report.passed else ("needs_ocr" if report.needs_ocr else "blocked")
-        result["detail"] = "Saved and rechecked; ready for explicit knowledge submission."
+        result["detail"] = "已保存并重新质检，等待你确认入库"
         result["knowledge"] = {"state": "not_submitted", "track_id": ""}
         result["lightrag"] = {"state": "not_submitted", "track_id": ""}
         result["updated_at"] = storage.utc_now()
@@ -402,15 +622,35 @@ def edit_content(
             {"step": "edit", "state": result["state"], "at": result["updated_at"], "detail": ""}
         ]
         storage.write_result(settings, file_id, result)
+
+        ingested = False
+        ingest_error = ""
+        if result["state"] == "review" and ingest_now:
+            submitted = _submit_to_knowledge(settings, result)
+            ingested = bool(submitted.get("ok"))
+            if not ingested:
+                ingest_error = str(submitted.get("message") or "知识库提交失败")
+                result["detail"] = f"正文已保存，但入库失败：{ingest_error}"
+                result["updated_at"] = storage.utc_now()
+                storage.write_result(settings, file_id, result)
+        elif ingest_now:
+            ingest_error = "质量校验未通过，未提交知识库"
+
         return {
             "ok": True,
+            "saved": True,
             "state": result["state"],
             "message": result["detail"],
-            "chars": len(text),
+            "chars": len(composed),
             "edited": True,
-            "ingested": False,
+            "ingested": ingested,
+            "ingest_error": ingest_error,
             "status": _public_status(result),
-            "gateway_ready": False,
+            "gateway_ready": str((result.get("knowledge") or {}).get("state") or "") in (
+                "submitted",
+                "ingesting",
+                "done",
+            ),
         }
 
 
@@ -422,47 +662,125 @@ def activate(file_id: str, action: str) -> Dict[str, Any]:
         if result is None:
             return {"ok": False, "http_status": 404, "message": "Ingestion job not found"}
         state = str(result.get("state") or "")
+        knowledge = result.get("knowledge") if isinstance(result.get("knowledge"), dict) else {}
+        knowledge_state = str(knowledge.get("state") or "")
         if action == "skip":
             if state not in REVIEW_STATES:
-                return {"ok": False, "http_status": 409, "message": "This job cannot be skipped"}
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "只有待确认的文件可以跳过",
+                    "status": _public_status(result),
+                }
+            result["skipped_from"] = state
             result["state"] = "skipped"
-            result["detail"] = "Skipped by the user; local source and parsed text were retained."
+            result["detail"] = "已跳过：本机解析结果与原件保留，可稍后继续入库"
         elif action == "retry":
             if state not in ("failed", "blocked", "needs_ocr"):
-                return {"ok": False, "http_status": 409, "message": "This job does not need a retry"}
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "这份文件当前不需要重试",
+                    "status": _public_status(result),
+                }
             return _retry_result(settings, result)
         elif action == "resume":
             if state != "skipped":
-                return {"ok": False, "http_status": 409, "message": "This job is not skipped"}
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "只有已跳过的文件可以继续入库",
+                    "status": _public_status(result),
+                }
             if not storage.read_content(settings, file_id).strip():
-                return {"ok": False, "http_status": 409, "message": "Parsed content is empty"}
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "解析正文为空，不能入库",
+                    "status": _public_status(result),
+                }
             result["state"] = "review"
-            result["detail"] = "Resuming skipped content for knowledge submission"
+            result["detail"] = "正在重新提交跳过的内容"
             result["updated_at"] = storage.utc_now()
             result["timeline"] = list(result.get("timeline") or []) + [{
                 "step": "resume",
                 "state": "done",
                 "at": result["updated_at"],
-                "detail": "User resumed a skipped file",
+                "detail": "用户继续入库已跳过的文件",
             }]
             return _submit_to_knowledge(settings, result)
         elif action == "force":
-            return {"ok": False, "http_status": 409, "message": "Forced ingestion requires the knowledge gateway"}
+            if state not in ("blocked", "needs_ocr"):
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "只有未通过质检的内容才需要人工放行",
+                    "status": _public_status(result),
+                }
+            if knowledge_state in ("submitting", "submitted", "ingesting", "done"):
+                return {
+                    "ok": True,
+                    "state": state,
+                    "message": "入库已在进行中",
+                    "duplicate_submit": True,
+                    "status": _public_status(result),
+                }
+            if not storage.read_content(settings, file_id).strip():
+                return {
+                    "ok": False,
+                    "http_status": 409,
+                    "message": "解析正文为空，不能入库",
+                    "status": _public_status(result),
+                }
+            result["forced"] = True
+            result["state"] = "review"
+            result["detail"] = "已按你的选择人工放行，正在提交知识库"
+            result["updated_at"] = storage.utc_now()
+            result["timeline"] = list(result.get("timeline") or []) + [{
+                "step": "force",
+                "state": "done",
+                "at": result["updated_at"],
+                "detail": "用户确认跳过质量门结论，人工放行入库",
+            }]
+            return _submit_to_knowledge(settings, result)
         elif action == "ingest":
+            if state == "done" or knowledge_state == "done":
+                return {
+                    "ok": True,
+                    "state": state,
+                    "message": "这份资料已经入库",
+                    "duplicate_submit": True,
+                    "status": _public_status(result),
+                }
+            if state == "ingesting" or knowledge_state in ("submitting", "submitted", "ingesting"):
+                return {
+                    "ok": True,
+                    "state": state,
+                    "message": "入库已在进行中",
+                    "duplicate_submit": True,
+                    "status": _public_status(result),
+                }
             return _submit_to_knowledge(settings, result)
         elif action == "ocr":
             if state not in ("needs_ocr", "blocked"):
                 return {
                     "ok": False,
                     "http_status": 409,
-                    "message": "This job does not need OCR",
+                    "message": "这份文件当前不需要 OCR",
+                    "status": _public_status(result),
                 }
             return _ocr_result(settings, result)
         else:
             return {"ok": False, "http_status": 400, "message": "Unknown action"}
         result["updated_at"] = storage.utc_now()
         storage.write_result(settings, file_id, result)
-        return {"ok": True, "state": result["state"], "message": result["detail"], "duplicate_submit": False}
+        return {
+            "ok": True,
+            "state": result["state"],
+            "message": result["detail"],
+            "duplicate_submit": False,
+            "status": _public_status(result),
+        }
 
 
 def _knowledge_failure(
@@ -487,21 +805,35 @@ def _knowledge_failure(
         {"step": "knowledge", "state": "failed", "at": result["updated_at"], "detail": message}
     ]
     storage.write_result(settings, result["file_id"], result)
-    return {"ok": False, "http_status": http_status, "code": code, "message": message, "state": "review"}
+    return {
+        "ok": False,
+        "http_status": http_status,
+        "code": code,
+        "message": message,
+        "state": "review",
+        "status": _public_status(result),
+    }
 
 
 def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, Any]:
     if str(result.get("state") or "") != "review":
-        return {"ok": False, "http_status": 409, "message": "Only reviewed content can be submitted"}
+        return {
+            "ok": False,
+            "http_status": 409,
+            "message": "只有待确认的内容可以提交知识库",
+            "status": _public_status(result),
+        }
     content = storage.read_content(settings, result["file_id"])
     if not content.strip():
-        return {"ok": False, "http_status": 409, "message": "Parsed content is empty"}
-    base = str(result.get("doc_name") or Path(result.get("filename") or "document").stem).strip()
-    if not base.lower().endswith(".md"):
-        base += ".md"
-    document_name = base.replace("/", "_").replace("\\", "_")
+        return {
+            "ok": False,
+            "http_status": 409,
+            "message": "解析正文为空，不能入库",
+            "status": _public_status(result),
+        }
+    document_name = _document_name(result)
     result["state"] = "ingesting"
-    result["detail"] = "Submitting reviewed content to the knowledge service"
+    result["detail"] = "正在提交知识库"
     result["knowledge"] = {"state": "submitting", "document_name": document_name, "track_id": ""}
     result["lightrag"] = {"state": "submitting", "track_id": ""}
     result["updated_at"] = storage.utc_now()
@@ -519,13 +851,37 @@ def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Di
             http_status=409,
         )
     except KnowledgeEngineNotInstalled as exc:
-        return _knowledge_failure(settings, result, code="engine_not_installed", message=str(exc) or "The knowledge engine is not installed", http_status=503)
+        return _knowledge_failure(
+            settings,
+            result,
+            code="engine_not_installed",
+            message=str(exc) or "知识库引擎未安装或未启用",
+            http_status=503,
+        )
     except KnowledgeUnavailable as exc:
-        return _knowledge_failure(settings, result, code="knowledge_unavailable", message=f"Knowledge service unavailable: {type(exc).__name__}", http_status=503)
+        return _knowledge_failure(
+            settings,
+            result,
+            code="knowledge_unavailable",
+            message=f"知识库服务不可用（{type(exc).__name__}）",
+            http_status=503,
+        )
     except KnowledgeHTTPError as exc:
-        return _knowledge_failure(settings, result, code="knowledge_submit_failed", message=str(exc), http_status=502)
+        return _knowledge_failure(
+            settings,
+            result,
+            code="knowledge_submit_failed",
+            message=f"知识库提交失败：{exc}",
+            http_status=502,
+        )
     except Exception as exc:
-        return _knowledge_failure(settings, result, code="knowledge_submit_failed", message=f"Knowledge submission failed: {type(exc).__name__}", http_status=502)
+        return _knowledge_failure(
+            settings,
+            result,
+            code="knowledge_submit_failed",
+            message=f"知识库提交失败（{type(exc).__name__}）",
+            http_status=502,
+        )
 
     track_id = str(response.get("track_id") or response.get("id") or "")
     result["knowledge"] = {
@@ -536,13 +892,20 @@ def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Di
     }
     result["lightrag"] = {"state": "submitted", "track_id": track_id}
     result["state"] = "ingesting" if track_id else "done"
-    result["detail"] = "Submitted to the knowledge service; waiting for indexing" if track_id else "Knowledge service accepted the document"
+    result["detail"] = "已提交知识库，正在解析并建立索引" if track_id else "知识库已接收文档"
     result["updated_at"] = storage.utc_now()
     result["timeline"] = list(result.get("timeline") or []) + [
         {"step": "knowledge", "state": result["state"], "at": result["updated_at"], "detail": result["detail"]}
     ]
     storage.write_result(settings, result["file_id"], result)
-    return {"ok": True, "state": result["state"], "message": result["detail"], "knowledge": result["knowledge"], "duplicate_submit": False}
+    return {
+        "ok": True,
+        "state": result["state"],
+        "message": result["detail"],
+        "knowledge": result["knowledge"],
+        "duplicate_submit": False,
+        "status": _public_status(result),
+    }
 
 
 def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
@@ -554,15 +917,39 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
         knowledge = result.get("knowledge") if isinstance(result.get("knowledge"), dict) else {}
         track_id = str(knowledge.get("track_id") or (result.get("lightrag") or {}).get("track_id") or "")
         if not track_id:
-            return {"ok": False, "http_status": 409, "code": "no_track_id", "message": "This job has no knowledge track id"}
+            return {
+                "ok": False,
+                "http_status": 409,
+                "code": "no_track_id",
+                "message": "这份文件还没有知识库跟踪号",
+                "status": _public_status(result),
+            }
         try:
             response = get_knowledge_gateway().document_status(track_id)
         except KnowledgeEngineNotInstalled as exc:
-            return {"ok": False, "http_status": 503, "code": "engine_not_installed", "message": str(exc)}
+            return {
+                "ok": False,
+                "http_status": 503,
+                "code": "engine_not_installed",
+                "message": str(exc) or "知识库引擎未安装或未启用",
+                "status": _public_status(result),
+            }
         except KnowledgeUnavailable as exc:
-            return {"ok": False, "http_status": 503, "code": "knowledge_unavailable", "message": type(exc).__name__}
+            return {
+                "ok": False,
+                "http_status": 503,
+                "code": "knowledge_unavailable",
+                "message": f"知识库服务不可用（{type(exc).__name__}）",
+                "status": _public_status(result),
+            }
         except KnowledgeHTTPError as exc:
-            return {"ok": False, "http_status": 502, "code": "knowledge_status_failed", "message": str(exc)}
+            return {
+                "ok": False,
+                "http_status": 502,
+                "code": "knowledge_status_failed",
+                "message": f"知识库状态查询失败：{exc}",
+                "status": _public_status(result),
+            }
         documents = response.get("documents") if isinstance(response.get("documents"), list) else []
         states = [str(item.get("status") or "").strip().lower() for item in documents if isinstance(item, dict)]
         total = int(response.get("total_count") or len(documents) or 0)
@@ -583,18 +970,19 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
         }
         if remote_state == "done":
             result["state"] = "done"
-            result["detail"] = "Knowledge indexing completed"
+            result["detail"] = "知识库索引已完成"
             knowledge["state"] = "done"
+            knowledge.pop("message", None)
         elif remote_state == "failed":
             errors = [str(item.get("error_msg") or "") for item in documents if isinstance(item, dict) and str(item.get("status") or "").lower() in ("failed", "error")]
             result["state"] = "review"
-            result["detail"] = "Knowledge indexing failed; review before retrying"
+            result["detail"] = "知识库索引失败，请查看原因后重试"
             knowledge["state"] = "failed"
             if any(errors):
                 knowledge["message"] = errors[0][:500]
         else:
             result["state"] = "ingesting"
-            result["detail"] = "Knowledge service is processing the document"
+            result["detail"] = "知识库正在解析并建立索引"
             knowledge["state"] = "ingesting"
         knowledge["last_status"] = response
         knowledge["progress"] = progress
@@ -602,20 +990,27 @@ def refresh_knowledge_status(file_id: str) -> Dict[str, Any]:
         result["lightrag"] = {"state": knowledge["state"], "track_id": track_id}
         result["updated_at"] = storage.utc_now()
         storage.write_result(settings, result["file_id"], result)
-        return {"ok": True, "state": result["state"], "knowledge": knowledge, "response": response}
+        return {
+            "ok": True,
+            "state": result["state"],
+            "knowledge": knowledge,
+            "response": response,
+            "status": _public_status(result),
+        }
 
 
 def _retry_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, Any]:
     result["state"] = "processing"
-    result["detail"] = "Retrying local parsing"
+    result["detail"] = "正在重新解析"
     result["updated_at"] = storage.utc_now()
     storage.write_result(settings, result["file_id"], result)
     updated = _run_pipeline(settings, result)
     return {
         "ok": True,
         "state": updated.get("state"),
-        "message": updated.get("detail") or "Retry completed",
+        "message": updated.get("detail") or "重试完成",
         "duplicate_submit": False,
+        "status": _public_status(updated),
     }
 
 
@@ -626,9 +1021,10 @@ def _ocr_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, A
             "http_status": 409,
             "code": "ocr_unavailable",
             "message": "本机 OCR 未启用或当前不可用",
+            "status": _public_status(result),
         }
     result["state"] = "processing"
-    result["detail"] = "Running local OCR"
+    result["detail"] = "正在执行本地 OCR"
     result["updated_at"] = storage.utc_now()
     storage.write_result(settings, result["file_id"], result)
     updated = _run_pipeline(settings, result, force_ocr=True)
@@ -644,7 +1040,7 @@ def _ocr_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, A
     return {
         "ok": True,
         "state": updated.get("state"),
-        "message": updated.get("detail") or "Local OCR completed",
+        "message": updated.get("detail") or "本地 OCR 已完成",
         "ocr": ocr,
         "status": _public_status(updated),
         "duplicate_submit": False,
@@ -652,8 +1048,12 @@ def _ocr_result(settings: IngestSettings, result: Dict[str, Any]) -> Dict[str, A
 
 
 __all__ = [
+    "EDITABLE_STATES",
     "IngestError",
+    "RESTORE_LIMIT",
+    "SKIPPED_RESTORE_HOURS",
     "activate",
+    "actionable_jobs",
     "active_jobs",
     "confirm_mode",
     "content_for_edit",
@@ -662,6 +1062,7 @@ __all__ = [
     "process_upload",
     "session_allow_all",
     "set_session_allow_all",
+    "skipped_jobs",
     "status",
     "refresh_knowledge_status",
 ]

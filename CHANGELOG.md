@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- upload chain: `保存并入库` now submits, image caption/document naming works,
+  and edits keep a previous-content backup
+- upload chain: live knowledge-index status, duplicate-submit protection, and
+  explicit failure reasons on the card and companion
+- upload chain: restore pending, blocked, failed, skipped, and in-flight jobs
+  after a page refresh; recently skipped jobs can be resumed from chat
+- upload chain: the session allow-all switch and manual force submission now
+  perform the actions the UI describes
+- files page: show state, failure reason, and recovery actions for all
+  non-terminal local jobs, not only skipped files
+- settings: mark unimplemented confirmation modes and remove the false
+  automatic-skip claim
+
 ## 0.1.0
 
 Initial local MVP:

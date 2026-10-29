@@ -46,13 +46,18 @@ class FilesDeleteUiContractTests(unittest.TestCase):
         self.assertIn('$("deleteKnowledgeCopyLabel").hidden = !items.some', JS)
         self.assertIn("同时删除知识库上传副本", HTML)
 
-    def test_skipped_table_is_simplified_and_has_resume_action(self) -> None:
-        self.assertIn('<h2 id="localTitle">跳过的文件</h2>', HTML)
+    def test_local_table_shows_state_and_recovery_actions(self) -> None:
+        self.assertIn('<h2 id="localTitle">本机待处理与已跳过</h2>', HTML)
         self.assertNotIn("处理状态", HTML)
         self.assertNotIn("文件来源", HTML)
         self.assertIn("继续入库", JS)
         self.assertIn("data-resume-local", JS)
         self.assertIn('action: "resume"', JS)
+        self.assertIn("local_state_label", JS)
+        self.assertIn("local_detail", JS)
+        self.assertIn("入库中…", JS)
+        self.assertIn("去处理", JS)
+        self.assertIn("scheduleIngestRefresh", JS)
 
     def test_original_file_boundary_remains_explicit(self) -> None:
         self.assertIn("原始文件及其所在文件夹不会被修改或删除", HTML)

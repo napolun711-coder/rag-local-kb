@@ -377,6 +377,7 @@ def scan_once(
                     path.name,
                     content,
                     "application/octet-stream",
+                    allow_session_auto=False,
                 )
             except Exception as exc:
                 candidate.update(

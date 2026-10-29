@@ -757,3 +757,85 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   before these changes must be restarted to load the new API and page behavior.
   `继续入库` submits retained content directly and does not rerun parsing or the
   quality gate.
+
+## Upload and ingest chain stabilization (2026-10-29)
+
+- Checkpoint commit `df491b3` committed the earlier deletion and skipped-file UI
+  work before this wave.
+- `保存并入库` now honors the `ingest` flag. Editing content reruns the quality
+  gate, and a passing review is submitted through the existing knowledge gateway
+  in the same request. Submission failures return `saved=true` with a visible
+  `ingest_error` instead of silently returning an unchanged review card.
+- The ingestion status loop now queries `/ingest/knowledge-status/{file_id}`
+  while a job is `ingesting`. The card moves from `ingesting` to `done` or back
+  to `review` with the knowledge error, instead of staying at `ingesting` for ten
+  minutes. Manual `刷新状态` uses the same knowledge-status refresh.
+- `/ingest/pending` now separates `pending` (review/needs_ocr),
+  `actionable` (blocked/failed), recent `skipped`, and `active`
+  (processing/parsing/checking/ocr/ingesting) jobs. Page restore recreates the
+  real state for all four groups; skipped jobs from the last 24 hours are
+  restored in chat, while
+  older skipped jobs remain available on the files page.
+- Skipped jobs now expose `仍要入库` in chat as well as `继续入库` on the files
+  page. Editing is allowed for skipped jobs; editing returns the job to the
+  normal quality gate. Manual `force` submission is implemented for
+  blocked/needs_ocr jobs and records a `force` timeline entry.
+- Image jobs now return the edit contract the page expects (`is_image`,
+  `doc_name_stem`, `doc_id`, `body_chars`, `caption_text`). Caption saves append
+  a marked block to OCR text and replace the previous caption on repeat saves;
+  pure-image captions remain the whole body. Image submissions use
+  `<name>_<short-id>.md` to avoid filename collisions.
+- Edits keep one `content.before-edit.md` backup and expose the edit count.
+  Duplicate `ingest`/`resume` actions are idempotent while submission is active.
+- The session `本次运行内全部允许` switch now actually releases existing review
+  jobs and auto-submits new chat uploads for that process. Inbox scanning passes
+  `allow_session_auto=False` and still never submits automatically.
+- The files page local table now shows all non-terminal jobs, not only skipped
+  ones: state label, failure reason or knowledge error, `去处理` for actionable
+  jobs, `入库中…` for active jobs, and `继续入库` for skipped jobs. The page
+  refreshes ingesting rows from the knowledge service for a bounded period.
+- The companion task detail now includes the knowledge or quality failure reason.
+- Settings copy no longer claims an automatic 24-hour skip. The field is shown
+  as a fixed skipped-restore window; `auto` and `off` confirmation modes are
+  marked unimplemented. The unsupported-setting validation is unchanged.
+- Stale local `processing/parsing/checking/ocr` jobs older than 120 minutes are
+  marked failed on restore so a crashed parse can be retried.
+
+### Verification
+
+- Full suite: 85 tests passed in the project virtual environment.
+- Isolated app-only HTTP smoke on `127.0.0.1:19480` with temporary data,
+  upload, parsed, runtime, memory, knowledge, and log directories. Upload →
+  review → save → save-and-ingest failure → skip → restore → resume failure →
+  blocked → force audit all returned the expected contract. `/web`, `/files`,
+  `/settings`, and `/memory` returned HTTP 200.
+- The files list payload included `state`, `local_state_label`, `local_detail`,
+  `knowledge_message`, and the knowledge failure reason for the failed job.
+- Session allow-all released the existing review jobs through the knowledge
+  gateway path and reported the released count.
+- Success-path smoke used a local LightRAG-compatible fake shell on
+  `127.0.0.1:19999`: save-and-ingest returned `ingested=true`, the job entered
+  `ingesting`, the first knowledge-status refresh stayed `ingesting`, the second
+  moved it to `done` with progress `1/1`, pending groups cleared, and the
+  overview reported the job in the knowledge base.
+- Both isolated processes were stopped; artifacts remain under
+  `.integration-run/wave1-app` only.
+
+### Remaining risks
+
+- The success smoke used a compatible fake shell, not the real LightRAG engine.
+  Real engine indexing, chat retrieval, and the three-service cold-start gate
+  remain release-gate checks.
+- Local parsing and OCR still run inside the `/upload` request. Large files keep
+  one long request; the page switches to an explicit "server is parsing" state
+  after 1.5 seconds, and a refresh restores the active job, but full async upload
+  is deferred.
+- Knowledge-status polling runs every 6 seconds while a job is ingesting. If the
+  engine remains unavailable, the card keeps retrying until the ten-minute poll
+  cap and then shows an unknown state; the manual refresh still works.
+- `auto` and `off` ingest confirmation modes remain unimplemented and are now
+  marked as such in the settings UI.
+- A browser visual pass for the new card states, the files-page local table, and
+  the companion error detail was not run.
+- The default lifecycle service group was not restarted for this wave; it must
+  be restarted before manual acceptance so the running app loads the new code.

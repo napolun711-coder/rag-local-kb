@@ -110,12 +110,14 @@ def _document_payload(item: DocumentView) -> Dict[str, Any]:
 def _local_payload(job: LocalJobSummary) -> Dict[str, Any]:
     payload = job.to_dict()
     origin = _origin_for_local(job)
+    label = _LOCAL_STATE_LABELS.get(job.state, job.state or "—")
+    reason = job.knowledge_message or job.detail
     payload.update({
         "name": job.doc_name or job.filename,
         "file_path": job.source_path,
         "chunks_count": None,
-        "local_state_label": _LOCAL_STATE_LABELS.get(job.state, job.state or "—"),
-        "local_detail": f"质量门：{job.quality_level or '—'}" if job.quality_level else "",
+        "local_state_label": label,
+        "local_detail": reason,
         "created_at": job.updated_at,
         "origin": origin,
         "can_open": bool(origin.get("available")),
@@ -143,6 +145,8 @@ def _overview_payload(view: DocumentOverview) -> Dict[str, Any]:
             "jobs": view.local_total,
             "waiting_review": view.local_pending,
             "failed": view.local_failed,
+            "skipped": view.local_skipped,
+            "ingesting": view.local_ingesting,
             "in_knowledge_base": view.local_done,
             "knowledge_files": 0,
         },

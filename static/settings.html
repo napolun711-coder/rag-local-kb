@@ -351,19 +351,18 @@
         <span class="sum" id="sum-ingest"></span>
         <span class="chev">▾</span>
     </div>
-    <p class="hint">质量校验通过<b>不等于</b>直接入库：文件会停在「待确认」，由你点「入库」或「跳过」——中间那一步永远由你决定。<br>
-        <b>always</b> 每个文件都问你（默认，最稳）；<b>auto</b> 让建议说话——「建议直接入库」的自动放行，
-        提示「再看一眼 / 谨慎入库」的仍会停下问你；<b>off</b> 通过校验就直接入库（不推荐：错内容也会写进知识库）。<br>
-        留空表示沿用 .env / 内置默认值；改完需重启服务生效。上传卡片上还有「本次运行内全部允许」的临时开关（重启即失效）。</p>
+    <p class="hint">质量校验通过<b>不等于</b>直接入库：文件会停在「待确认」，由你点「入库 / 修改正文 / 跳过」——中间那一步由你决定。<br>
+        当前版本固定使用 <b>always</b>（每个文件都停下来确认）；<b>auto</b> 与 <b>off</b> 尚未实现，保存其他值会被拒绝。<br>
+        上传卡片上还有「本次运行内全部允许」的临时开关：只对本次运行的本机对话上传生效，重启即失效，文件夹轮询不会自动入库。</p>
     <p id="ingestState" class="note-line"></p>
     <div class="row"><label>入库确认方式</label>
         <select id="ingest_confirm">
             <option value="">（跟随 .env，默认 always）</option>
-            <option value="always">always：每个文件都停下来等我确认（推荐）</option>
-            <option value="auto">auto：建议入库的自动放行，其余停下来问我</option>
-            <option value="off">off：不再确认，通过校验就直接入库</option>
+            <option value="always">always：每个文件都停下来等我确认（当前版本支持）</option>
+            <option value="auto" disabled>auto：当前版本尚未实现</option>
+            <option value="off" disabled>off：当前版本尚未实现</option>
         </select></div>
-    <div class="row"><label>待确认保留时长</label><input type="number" id="ingest_ttl_hours" min="0" step="1" placeholder="小时，默认 24；超时按「跳过」处理（不删资料，可随时补确认）"></div>
+    <div class="row"><label>跳过记录恢复时长</label><input type="number" id="ingest_ttl_hours" min="0" step="1" readonly title="当前版本固定为 24 小时：最近 24 小时跳过的文件会在对话页恢复；更早的可在文件管理继续入库。待确认作业不会自动跳过。"></div>
 </section>
 
 <section class="card" id="sec-inbox">

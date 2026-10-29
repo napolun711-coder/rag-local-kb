@@ -100,13 +100,17 @@ def ingest_content_save(file_id: str, data: IngestContent) -> Dict[str, Any]:
 
 @router.get("/ingest/pending")
 def ingest_pending() -> Dict[str, Any]:
+    skipped, skipped_total = service.skipped_jobs()
     return {
         "pending": service.pending_reviews(),
+        "actionable": service.actionable_jobs(),
+        "skipped": skipped,
+        "skipped_total": skipped_total,
         "active": service.active_jobs(),
         "confirm": {
             "mode": service.confirm_mode(),
             "session_allow_all": service.session_allow_all(),
-            "ttl_hours": 24,
+            "restore_hours": service.SKIPPED_RESTORE_HOURS,
         },
     }
 

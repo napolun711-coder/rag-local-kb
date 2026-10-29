@@ -2401,10 +2401,13 @@ function setUploadState(card, state, detail, data) {
   sub.textContent = detail || item[2];
   updateUploadProgress(card, data || { state: state });
   if (card.__workId) {
+    const reason = data && (data.knowledge_error
+      || (data.lightrag && data.lightrag.error)
+      || (data.knowledge && data.knowledge.message));
     WorkCompanion.ingest(card.__workId, {
       state: state,
       name: card.__fileName || "",
-      detail: detail || item[2],
+      detail: reason || detail || item[2],
       progress: (data && data.progress) || {}
     }, {
       detailAction: function () {
@@ -2525,6 +2528,10 @@ function renderIngestActions(card, data) {
   if (can.skip) {
     definitions.push(["跳过", "skip", "ghost",
       "这次不入库，但本机解析结果与原件保留；之后可点「仍要入库」反悔"]);
+  }
+  if (can.resume) {
+    definitions.push(["仍要入库", "resume", "confirm",
+      "把这份已跳过的内容重新提交知识库；本机原件与解析结果不会变动"]);
   }
   // 「仍要入库」= 人工推翻质量校验的出口：质检会一直跑，只有它被拦下时这个按钮才出现。
   // 点了会在档案里留下 forced 记录（可事后复查这份是怎么进来的），所以把后果写在悬停提示里。
@@ -3112,7 +3119,9 @@ function openEditor(card, fileId, payload, mode) {
   const tag = document.createElement("span");
   tag.className = "lv";
   tag.textContent = captionMode ? "写描述" : "改正文";
-  const captionHasText = Number(payload.body_chars || 0) > 0;
+  const captionMarker = String(payload.content || "").indexOf("ragkb:manual-caption") >= 0;
+  const captionHasText = Number(payload.body_chars || 0) > 0
+    && (!payload.is_image || captionMarker || !payload.manual_text);
   const title = document.createElement("span");
   if (captionMode) {
     title.textContent = captionHasText
@@ -3202,14 +3211,18 @@ function openEditor(card, fileId, payload, mode) {
       ingestBtn.disabled = empty || over;
     }
   };
-  const setBusy = function (flag, label) {
+  const saveLabel = captionMode ? "保存描述" : "保存";
+  const ingestLabel = "保存并入库";
+  const setBusy = function (flag, label, activeButton) {
     busy = flag;
     saveBtn.disabled = flag;
     ingestBtn.disabled = flag;
     cancelBtn.disabled = flag;
-    saveBtn.textContent = flag
-      ? (label || "正在保存") + "…"
-      : (captionMode ? "保存描述" : "保存");
+    saveBtn.textContent = saveLabel;
+    ingestBtn.textContent = ingestLabel;
+    if (flag && activeButton) {
+      activeButton.textContent = (label || "正在保存") + "…";
+    }
   };
   area.addEventListener("input", refreshCount);
   cancelBtn.addEventListener("click", function () { closeEditor(card); });
@@ -3233,7 +3246,7 @@ function openEditor(card, fileId, payload, mode) {
       if (captionMode) { body.caption = true; }
       body.doc_name = nameInput ? nameInput.value : "";
     }
-    setBusy(true, ingestNow ? "正在保存并入库" : "正在保存");
+    setBusy(true, ingestNow ? "正在保存并入库" : "正在保存", ingestNow ? ingestBtn : saveBtn);
     try {
       const response = await fetch("/ingest/content/" + encodeURIComponent(fileId), {
         method: "POST",
@@ -3251,7 +3264,6 @@ function openEditor(card, fileId, payload, mode) {
         }
         return;
       }
-      setToast(data.message || "已保存", "ok");
       if (data.status) {
         renderIngest(card, data.status);            // 质检结论 / 建议 / 时间线一起刷新
         note.textContent = captionMode
@@ -3261,8 +3273,23 @@ function openEditor(card, fileId, payload, mode) {
         // 最终叫什么看上面那句「入库后的文档名：…」，输入框保留用户自己写的样子。
       }
       if (data.ingested) {
+        setToast("正文已保存并提交知识库，正在建立索引", "ok");
+        card.__busy = true;
+        card.__busyLabel = "正在提交";
+        card.__busyFrom = "review";
+        card.__knowledgeAt = 0;
+        card.__knowledgeFailures = 0;
         closeEditor(card);                          // 已经进知识库：没得再改了
-        pollIngestStatus(card, fileId, { fast: true });
+        renderIngestActions(card, { can: {}, state: "ingesting" });
+        pollIngestStatus(card, fileId, { fast: true, awaitAction: true, fromState: "review" });
+      } else if (data.ingest_error) {
+        setToast("正文已保存，但入库失败：" + data.ingest_error, "bad");
+        if (data.state === "review") {
+          closeEditor(card);
+          pollIngestStatus(card, fileId, { fast: true });
+        }
+      } else {
+        setToast(data.message || "已保存", "ok");
       }
     } catch (err) {
       setToast("保存失败：" + err.message, "bad");
@@ -3333,10 +3360,13 @@ async function runIngestAction(card, fileId, action, label) {
   card.__busyFrom = fromState;
   card.__busyAction = action;
   card.__actionSeen = false;
+  card.__knowledgeAt = 0;
+  card.__knowledgeFailures = 0;
   if (action === "ocr") { card.__ocrOutcomeNotified = false; }
   card.__busy = true;
-  card.__busyLabel = action === "skip" ? "正在跳过" : (action === "ingest" ? "正在提交" : "正在处理");
-  if (action === "ingest") {
+  card.__busyLabel = action === "skip" ? "正在跳过"
+    : ((action === "ingest" || action === "resume") ? "正在提交" : "正在处理");
+  if (action === "ingest" || action === "resume") {
     setUploadState(card, "ingesting", "已受理，正在提交知识库…（通常几秒内会有结果）");
   } else if (action === "skip") {
     setUploadState(card, "skipped", "已按你的选择跳过，正在登记…");
@@ -3358,9 +3388,12 @@ async function runIngestAction(card, fileId, action, label) {
       card.__busy = false;          // 失败：立刻把按钮还回来，让用户能重试
       setToast(errorText(data, response.status), "bad");
     } else if (data && data.duplicate_submit) {
-      setToast("这次点击已忽略：上一次同样的操作还在处理中", "ok");
+      card.__busy = false;
+      setToast(data.message || "这次点击已忽略：上一次同样的操作还在处理中", "ok");
+      if (data.status) { renderIngest(card, data.status); }
     } else {
       setToast("已受理：" + label, "ok");
+      if (data.status) { renderIngest(card, data.status); }
     }
   } catch (err) {
     card.__busy = false;
@@ -3399,6 +3432,39 @@ function notifyOcrOutcome(card, data) {
   setToast("OCR 已结束，当前状态：" + (data.state || "未知"), "info");
 }
 
+const KNOWLEDGE_POLL_MS = 6000;
+
+// 入库提交成功后，本地 result.json 只会一直写「ingesting」。
+// 真正的索引进度在知识库侧，必须主动查 /ingest/knowledge-status，轮询才会走到 done / failed。
+async function refreshKnowledgeStatus(card, fileId, data, force) {
+  const knowledge = (data && data.knowledge) || {};
+  const lightrag = (data && data.lightrag) || {};
+  const trackId = String(knowledge.track_id || lightrag.track_id || "");
+  const progress = (data && data.progress) || {};
+  const indexing = data && (data.state === "ingesting"
+    || (data.state === "done" && progress.state === "processing"));
+  if (!fileId || !trackId || !indexing) { return data; }
+  const now = Date.now();
+  if (!force && now - (card.__knowledgeAt || 0) < KNOWLEDGE_POLL_MS) { return data; }
+  card.__knowledgeAt = now;
+  try {
+    const response = await fetch("/ingest/knowledge-status/" + encodeURIComponent(fileId), {
+      method: "POST",
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      card.__knowledgeFailures = (card.__knowledgeFailures || 0) + 1;
+      return data;
+    }
+    card.__knowledgeFailures = 0;
+    const payload = await response.json();
+    return payload.status || data;
+  } catch (err) {
+    card.__knowledgeFailures = (card.__knowledgeFailures || 0) + 1;
+    return data;
+  }
+}
+
 async function pollIngestStatus(card, fileId, options) {
   // 已入库后若知识库仍在构建索引，继续每 2.5 秒刷新一次进度
   // options.fast：点完「入库 / 跳过」后的头几次用 0.8 秒间隔，反馈更快
@@ -3428,6 +3494,11 @@ async function pollIngestStatus(card, fileId, options) {
     } catch (err) { continue; }
     // 手动刷新 / 新动作可能在 fetch 途中替换轮询；旧响应不得再覆盖新状态。
     if (card.__pollSeq !== seq) { return; }
+    data = await refreshKnowledgeStatus(card, fileId, data, Boolean(awaitAction && attempt === 0));
+    if (card.__pollSeq !== seq) { return; }
+    if (card.__knowledgeFailures === 3) {
+      setToast("暂时查不到知识库索引状态，可稍后点「刷新状态」", "bad");
+    }
     // 本轮动作是否已经真正开始过（状态离开过动作前的值）。
     // 用来区分「还在队列里」与「跑完又回到同一个状态」（例如 OCR 没识别出文字）。
     if (awaitAction && data.state !== fromState) { card.__actionSeen = true; }
@@ -3519,8 +3590,17 @@ async function upload(file, policyId) {
   const form = new FormData();
   form.append("file", file);
   setToast("正在上传 " + file.name + " …");
+  // 上传接口会同步完成本地解析与质检；大文件期间不能让卡片一直写“上传中”。
+  let answered = false;
+  const parseHint = window.setTimeout(function () {
+    if (!answered) {
+      setUploadState(card, "parsing", "文件已送达，服务端正在本地解析与质检…（完成后会自动更新）");
+    }
+  }, 1500);
   try {
     const response = await fetch("/upload", { method: "POST", body: form });
+    answered = true;
+    window.clearTimeout(parseHint);
     let data = {};
     try { data = await response.json(); } catch (err) { data = {}; }
     if (response.ok && data.success) {
@@ -3540,6 +3620,8 @@ async function upload(file, policyId) {
       setToast("上传失败", "bad");
     }
   } catch (err) {
+    answered = true;
+    window.clearTimeout(parseHint);
     setUploadState(card, "error", "上传失败：" + err.message);
     setToast("上传失败", "bad");
   }
@@ -3673,7 +3755,8 @@ async function refreshIngestState() {
     "确认",
     SESSION_CONFIRM.allow_all ? "warn" : gateRow[1],
     "入库确认（" + (gate.mode || "always") + "）：" + gateRow[2]
-      + "；等你确认的作业保留 " + ttlHours + " 小时，超时按「跳过」处理（资料与解析结果不会删）。"
+      + "；待确认作业会一直保留到处理；最近 " + ttlHours
+      + " 小时跳过的文件会在对话页恢复，更早的可在「文件管理」继续入库（资料与解析结果不会删）。"
       + (SESSION_CONFIRM.allow_all ? " 本次运行已勾选「全部允许」：质检通过的文件不再逐个问。" : "")
   ));
   // ③ OCR：未启用时是灰点 —— 需要识别的文件只会被拦下，不会外发
@@ -5499,10 +5582,20 @@ async function setSessionAllowAll(enabled) {
       return;
     }
     SESSION_CONFIRM.allow_all = Boolean(data.allow_all);
-    setToast(data.message || (SESSION_CONFIRM.allow_all ? "已打开：后续文件直接入库" : "已关闭：继续逐个确认"), "ok");
+    const released = Number(data.released || 0);
+    setToast(data.message || (SESSION_CONFIRM.allow_all
+      ? (released ? ("已打开：正在放行 " + released + " 个待确认文件，后续文件直接入库") : "已打开：后续文件直接入库")
+      : "已关闭：继续逐个确认"), "ok");
     if (SESSION_CONFIRM.allow_all) {
       // 服务端会把已经停在确认门上的作业一起放行：让这些卡片继续轮询，别停在原地
       UPLOAD_CARDS.forEach(function (item) {
+        const panel = item.card && item.card.__review;
+        if (panel) {
+          const input = panel.querySelector(".review-session input");
+          const label = panel.querySelector(".review-session span");
+          if (input) { input.checked = true; }
+          if (label) { label.textContent = "已打开「本次运行内全部允许」"; }
+        }
         if (item.card && item.card.__state === "review") { pollIngestStatus(item.card, item.fileId); }
       });
       return;
@@ -5538,11 +5631,13 @@ async function fetchIngestStatus(card, fileId) {
 async function refreshIngestNow(card) {
   const fileId = card && card.__fileId;
   if (!fileId) { return; }
-  const data = await fetchIngestStatus(card, fileId);
+  let data = await fetchIngestStatus(card, fileId);
   if (!data) {
     setToast("暂时读不到这个文件的状态，请稍后再试", "bad");
     return;
   }
+  data = await refreshKnowledgeStatus(card, fileId, data, true);
+  renderIngest(card, data);
   // 手动刷新绕过动作轮询的解锁逻辑：状态已经离开动作前的值 → 立刻解除"正在提交"
   if (card.__busy && String(data.state || "") !== String(card.__busyFrom || "")) {
     card.__busy = false;
@@ -5554,8 +5649,8 @@ async function refreshIngestNow(card) {
 }
 
 async function restorePendingReviews() {
-  // 打开页面时把「还在等你确认」的文件卡片恢复出来：
-  // 用户可能昨天上传完就关了电脑，今天回来必须一眼看到，而不是卡片凭空消失。
+  // 打开页面时把服务端仍在等待、失败或进行中的文件卡片恢复出来：
+  // 用户可能昨天上传完就关了电脑，今天回来必须一眼看到真实状态，而不是卡片凭空消失。
   let data = null;
   try {
     const response = await fetch("/ingest/pending", { cache: "no-store" });
@@ -5563,47 +5658,61 @@ async function restorePendingReviews() {
   } catch (err) { data = null; }
   if (!data) { return; }
   const confirm = data.confirm || {};
+  const restoreHours = (confirm.restore_hours === undefined || confirm.restore_hours === null)
+    ? 24 : Number(confirm.restore_hours);
   SESSION_CONFIRM = {
     allow_all: Boolean(confirm.session_allow_all),
     mode: confirm.mode || "always",
-    ttl_hours: (confirm.ttl_hours === undefined || confirm.ttl_hours === null) ? 24 : confirm.ttl_hours
+    ttl_hours: restoreHours
   };
-  const pending = data.pending || [];
-  const active = data.active || [];
-  if (!pending.length && !active.length) { return; }
-  leaveIntro(true);           // 有待确认或仍在处理的文件：直接进对话区
+  const groups = [
+    { items: data.pending || [], fallback: "review" },
+    { items: data.actionable || [], fallback: "blocked" },
+    { items: data.skipped || [], fallback: "skipped" },
+    { items: data.active || [], fallback: "processing" }
+  ];
+  const total = groups.reduce(function (sum, group) { return sum + group.items.length; }, 0);
+  if (!total) { return; }
+  leaveIntro(true);           // 有待处理或仍在处理的文件：直接进对话区
+
   const seen = {};
-  pending.slice(0, 20).forEach(function (item) {
-    const fileId = String(item.file_id || "");
-    if (!fileId) { return; }
-    seen[fileId] = true;
-    const card = createUploadCard(item.name || fileId);
-    card.__fileId = fileId;
-    card.__policy = "unified";
-    card.__policyDone = true;   // 恢复出来的卡片不替用户做任何自动动作
-    trackCard(fileId, card);
-    setUploadState(card, "review", item.detail || "");
-    fetchIngestStatus(card, fileId);   // 补全建议面板
+  const counts = { pending: 0, actionable: 0, skipped: 0, active: 0 };
+  const buckets = ["pending", "actionable", "skipped", "active"];
+  groups.forEach(function (group, groupIndex) {
+    group.items.slice(0, 20).forEach(function (item) {
+      const fileId = String(item.file_id || "");
+      if (!fileId || seen[fileId]) { return; }
+      seen[fileId] = true;
+      const state = String(item.state || group.fallback);
+      const card = createUploadCard(item.name || item.filename || fileId);
+      card.__fileId = fileId;
+      card.__policy = "unified";
+      card.__policyDone = true;   // 恢复出来的卡片不替用户做任何自动动作
+      card.__state = state;
+      card.__data = item;
+      trackCard(fileId, card);
+      setUploadState(card, state, item.knowledge_error || item.detail || "", item);
+      counts[buckets[groupIndex]] += 1;
+      if (BUSY_STATES_UI[state] || state === "done") {
+        pollIngestStatus(card, fileId, { fast: true });
+      } else {
+        fetchIngestStatus(card, fileId);   // 补全建议面板 / 按钮 / 失败原因
+      }
+    });
   });
-  active.slice(0, 20).forEach(function (item) {
-    const fileId = String(item.file_id || "");
-    if (!fileId || seen[fileId]) { return; }
-    const card = createUploadCard(item.name || fileId);
-    card.__fileId = fileId;
-    card.__policy = "unified";
-    card.__policyDone = true;
-    trackCard(fileId, card);
-    setUploadState(card, item.state || "parsing", item.detail || "", item);
-    pollIngestStatus(card, fileId, { fast: true });
-  });
-  if (active.length && pending.length) {
-    setToast("正在处理 " + active.length + " 份资料；另有 "
-      + pending.length + " 份等你确认入库", "");
-  } else if (active.length) {
-    setToast("正在处理 " + active.length + " 份资料，进度已从服务端恢复", "");
-  } else if (pending.length) {
-    setToast("有 " + pending.length + " 个文件等你确认是否入库", "ok");
+
+  const parts = [];
+  if (counts.pending) { parts.push(counts.pending + " 个待确认入库"); }
+  if (counts.actionable) { parts.push(counts.actionable + " 个需要处理"); }
+  if (counts.skipped) { parts.push(counts.skipped + " 个最近跳过"); }
+  if (counts.active) { parts.push(counts.active + " 个正在处理"); }
+  let text = parts.length ? ("已恢复：" + parts.join(" · ")) : "";
+  const skippedTotal = Number(data.skipped_total || 0);
+  if (skippedTotal > counts.skipped) {
+    text += (text ? "；" : "") + "另有 " + (skippedTotal - counts.skipped)
+      + " 个更早跳过的文件，可在「文件管理」继续入库";
   }
+  if (text) { setToast(text, counts.pending ? "ok" : ""); }
 }
 
 // ---------- 知识图谱（只读浏览）----------

@@ -42,6 +42,7 @@ def _document_ids(result: Dict[str, Any]) -> Tuple[str, ...]:
 
 def _local_job(result: Dict[str, Any]) -> LocalJobSummary:
     knowledge = _knowledge(result)
+    lightrag = result.get("lightrag") if isinstance(result.get("lightrag"), dict) else {}
     quality = result.get("quality") if isinstance(result.get("quality"), dict) else {}
     source_path = str(result.get("source_path") or "")
     source_available = False
@@ -65,6 +66,8 @@ def _local_job(result: Dict[str, Any]) -> LocalJobSummary:
         updated_at=str(result.get("updated_at") or ""),
         source_available=source_available,
         document_ids=_document_ids(result),
+        detail=str(result.get("detail") or ""),
+        knowledge_message=str(knowledge.get("message") or lightrag.get("error") or ""),
     )
 
 
