@@ -95,13 +95,15 @@ function Invoke-ProjectSetup {
         return $false
     }
     Write-Step 'Repairing project-local dependencies'
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Setup
-    return ($LASTEXITCODE -eq 0)
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Setup | Out-Host
+    $exitCode = $LASTEXITCODE
+    return ($exitCode -eq 0)
 }
 
 function Invoke-LifecycleStart {
-    & $Python -B $Lifecycle start --reuse-running
-    return $LASTEXITCODE
+    & $Python -B $Lifecycle start --reuse-running | Out-Host
+    $exitCode = $LASTEXITCODE
+    return $exitCode
 }
 
 function Get-StatusPayload {
@@ -287,7 +289,6 @@ $createdNew = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\RagKbDesktopLauncher', [ref]$createdNew)
 if (-not $createdNew) {
     Write-Warn2 'Another desktop launcher is already running. It will not start a second service group.'
-    Pause-IfNeeded
     $mutex.Dispose()
     exit 0
 }

@@ -592,10 +592,10 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   PowerShell with the project launcher and working directory.
 - Launcher self-test passed dependency imports, lifecycle script discovery,
   setup script discovery, and lifecycle status invocation.
-- Not yet verified in this wave: a real launch of the default service group,
-  repair of deliberately broken dependencies, stale-port cleanup, and
-  model-missing recovery messaging. These require a separate bounded acceptance
-  run after confirming the default and isolated service-group state.
+- Real desktop-shortcut reuse, cold start, duplicate launch, and window-close
+  behavior were later verified in the desktop-launcher closure acceptance
+  below. Deliberately broken dependencies, stale-port cleanup, and model-missing
+  recovery remain separate bounded acceptance cases.
 
 ## Knowledge graph integration (2026-10-29)
 
@@ -652,6 +652,27 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   relationship panel showed type, weight, source document, and both endpoints.
 - No graph mutation endpoint was called. No ingestion, configuration save,
   deletion, or formal data-directory write was performed.
+
+## Desktop launcher closure acceptance (2026-10-29)
+
+- Fixed the launcher's lifecycle return-value capture. Command output from the
+  lifecycle was previously returned together with the exit code, so a healthy
+  `already running` result was misclassified as startup failure and left the
+  launcher window waiting.
+- Removed the pause from the duplicate-launch mutex path. A second shortcut
+  invocation now reports the existing launcher and exits without opening a
+  waiting window.
+- With all services running, the desktop shortcut exited automatically and left
+  the engine, shell, and app PIDs unchanged.
+- A cold start through the desktop shortcut reached all three healthy services
+  in 15.2 seconds; the launcher exited after 15.7 seconds.
+- A second shortcut launch exited automatically, reused the same three PIDs, and
+  services remained healthy after the launcher window closed.
+- No launcher windows remained after acceptance. The final default service group
+  is running on `10262`, `10261`, and `18080`.
+- The forced-failure path and unrelated-listener preservation remain
+  code-reviewed but were not runtime-simulated to avoid disrupting the running
+  service group.
 
 ## Dependency health summary and default deployment (2026-10-29)
 
