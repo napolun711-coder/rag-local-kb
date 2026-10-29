@@ -1185,3 +1185,34 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   test are still required before describing the system as web-grade.
 - `external-reference-app` remains read-only and was not used as a data/config source;
   no private reference data was read.
+
+## M1 real memory acceptance (2026-10-29)
+
+- Isolated three-service environment with a fresh temporary memory DB
+  (`m1-accept-20261029.db`), Balanced Local Memory settings, and no formal data.
+- Same-session three-turn test:
+  - turn 1 stored the marker `ORBIT-LANTERN-7421` and the preference
+    “先给结论”;
+  - turn 2 answered the marker correctly;
+  - turn 3 answered the preference correctly;
+  - context status was `ok` for all three turns.
+- After session A: 3 local memories (1 conflicted/pending), 1 session,
+  6 messages; extraction jobs were queued/done.
+- Cross-session test used a new session and asked for the project marker:
+  - context assembly injected the correct active memory
+    (`mem_694f...`, reason `relevant`) and 2–3 history-recalled messages
+    (291–331 tokens total);
+  - the model answered `星辰项目` / `SkyProject` and did **not** contain
+    `ORBIT-LANTERN-7421`.
+  - the memory prompt was strengthened to tell the model to answer personal
+    facts directly from memory and not invent project names; a retest still
+    produced `SkyProject`.
+- Verdict: persistence, fast memory, extraction, retrieval, and context
+  assembly work; cross-session product behavior fails on the installed
+  `qwen2.5:3b` model because it ignores the injected memory. Only
+  `qwen2.5:3b` is installed locally; no larger chat model is available.
+- Product-grade cross-session memory requires a larger/stronger generation
+  model, an upstream model with valid credentials, or a deterministic
+  memory-answer path for direct personal-fact questions.
+- Isolated services were stopped; formal memory status remains enabled with
+  0 memories and 6 sessions / 25 messages; no formal test chat was written.
