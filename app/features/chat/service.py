@@ -8,6 +8,7 @@ from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple
 
 from app.adapters.lightrag.errors import (
     KnowledgeEngineNotInstalled,
+    KnowledgeHTTPError,
     KnowledgeIndexMismatch,
     KnowledgeUnavailable,
 )
@@ -20,6 +21,44 @@ from app.features.memory.config import get_memory_settings
 from app.features.memory.context import ChatContext
 
 logger = logging.getLogger(__name__)
+
+
+def _query_error_event(exc: KnowledgeHTTPError) -> Dict[str, Any]:
+    message = str(exc) or "知识服务返回错误"
+    lowered = message.lower()
+    no_context_markers = (
+        "no relevant context",
+        "no relevant",
+        "no context",
+        "no document",
+        "not found",
+        "empty query",
+        "no data",
+    )
+    if any(marker in lowered for marker in no_context_markers):
+        return {
+            "type": "error",
+            "no_context": True,
+            "message": "知识库没有找到与这个问题相关的资料。可以先上传并入库相关资料，"
+                       "或选择继续对话（不查资料）。",
+        }
+    if any(marker in lowered for marker in ("insufficient", "balance", "quota", "401", "402", "403")):
+        return {
+            "type": "error",
+            "message": "模型服务拒绝了本次查询（可能是余额、配额或鉴权问题）："
+                       + message[:300] + "。请检查模型配置后重试，或继续对话（不查资料）。",
+        }
+    if exc.status_code in (400, 404, 422) or "http 4" in lowered:
+        return {
+            "type": "error",
+            "message": "知识库没有完成本次检索：" + message[:300]
+                       + "。可以先上传相关资料、换一种问法后重试，或继续对话（不查资料）。",
+        }
+    return {
+        "type": "error",
+        "message": "知识服务检索失败：" + message[:300]
+                   + "。请检查知识服务/引擎状态后重试，或继续对话（不查资料）。",
+    }
 
 
 class ChatService:
@@ -128,6 +167,10 @@ class ChatService:
                     "type": "error",
                     "message": "嵌入模型或向量索引身份已变化。请先重建索引，并在设置页确认兼容性。",
                 }
+                yield {"type": "done", "response_time": round(time.perf_counter() - started, 3)}
+                yield {"type": "end"}
+            except KnowledgeHTTPError as exc:
+                yield _query_error_event(exc)
                 yield {"type": "done", "response_time": round(time.perf_counter() - started, 3)}
                 yield {"type": "end"}
             except Exception as exc:  # noqa: BLE001 - streaming errors become protocol events

@@ -368,7 +368,7 @@ class DocumentCatalogService:
                 "kind_label": "",
                 "path": "",
                 "url": "",
-                "reason": "No local ingestion job matches this document",
+                "reason": "本机没有找到这份资料的上传记录（可能是外部导入或已删除）",
             }
         for kind, value in (("source", job.source_path), ("archive", job.saved_path)):
             candidate = self._safe_existing_path(value)
@@ -389,7 +389,7 @@ class DocumentCatalogService:
             "kind_label": "",
             "path": "",
             "url": "",
-            "reason": "Local file is missing or outside the allowed data directories",
+            "reason": "本机原件或上传留档已不存在",
             "match_reason": reason,
             "file_id": job.file_id,
         }

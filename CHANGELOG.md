@@ -26,6 +26,10 @@
 - ingest UX: labeled processing timeline, automatic knowledge-index status
   updates without manual refresh, compact success cards with next actions,
   actionable failure guidance, and a retry-safe atomic result writer
+- chat: reference chips resolve knowledge document names back to local
+  originals and support double-click/Enter opening; query failures preserve the
+  upstream reason and offer retry, no-database continuation, and upload actions;
+  image original links use the supported origin endpoint
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

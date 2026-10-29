@@ -1086,3 +1086,54 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   the engine is unreachable, the poll may wait for the engine connect timeout.
 - The default lifecycle group needs a restart to load the backend status and
   storage changes; static chat assets use the `20261029-status-ux` version.
+
+## Reference opening and query-error guidance (2026-10-29)
+
+- Local job summaries now retain the knowledge document name. The local
+  reference resolver indexes that name, so a chat reference such as
+  `document.md` resolves to the original/archive file even when the submitted
+  knowledge name differs from the uploaded filename.
+- Reference chips are keyboard-accessible; double-click or Enter opens the
+  original through `/api/files/origin/{file_id}`. Missing originals show a
+  localized reason instead of an English backend message.
+- Image reference opening now uses the existing origin endpoint instead of the
+  nonexistent `/api/files/raw` route.
+- The LightRAG shell now preserves upstream query error status and message
+  (`HTTP 422: ...`) instead of returning only a generic `KnowledgeHTTPError`.
+  The chat service maps no-context/4xx/balance/5xx failures to actionable
+  Chinese messages. The frontend adds `重试`, `继续对话（不查资料）`, and
+  `上传资料` actions to error and no-context states.
+- A model answer that clearly says no relevant material is treated as a
+  no-context answer, so the same retry/upload/bypass guidance is shown even if
+  the model cites an unrelated document.
+
+### Verification
+
+- Focused tests passed for document origin resolution and chat error mapping.
+- Isolated image upload: PNG reached `需要 OCR`, accepted a written
+  description, passed quality at 100, ingested to `已入库`, and produced
+  `knowledge.document_name = image-e2e_4089.md`.
+- `/api/files/resolve` resolved that knowledge document name to the original
+  PNG (`available=true`, kind `source`); the origin URL returned HTTP 200
+  `image/png`; a synthetic reference chip resolved and a simulated double-click
+  opened the same origin URL.
+- The isolated shell preserved a real upstream `HTTP 422` validation detail in
+  its 502 response.
+- The frontend error path was exercised with a failing knowledge endpoint: the
+  answer showed the specific failure message plus `重试 / 继续对话（不查资料） /
+  上传资料`.
+- A real isolated-engine no-info question returned a clear refusal answer and
+  the no-citation note. The final refusal-action condition was not re-run after
+  the last one-line frontend change.
+
+### Remaining risks
+
+- The engine currently emits text references for this deployment. The frontend
+  image gallery still points at `/api/images/asset`, which is not implemented;
+  embedded-image reference previews would not load. Original image files still
+  open through `/api/files/origin/{file_id}`.
+- Knowledge-document matching now works for jobs submitted after this change;
+  references to external documents not uploaded through this app remain
+  unmatched and show a localized reason.
+- The actual upstream error text is truncated to 300–800 characters for display;
+  full details remain in the service logs.

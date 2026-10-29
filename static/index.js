@@ -1266,6 +1266,13 @@ document.addEventListener("dblclick", function (event) {
   const node = event.target && event.target.closest ? event.target.closest(".refs .ref[data-ref]") : null;
   if (node) { event.preventDefault(); openReference(node); }
 });
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Enter" && event.key !== " ") { return; }
+  const node = event.target && event.target.closest ? event.target.closest(".refs .ref.ref-open[data-ref]") : null;
+  if (!node) { return; }
+  event.preventDefault();
+  openReference(node);
+});
 document.addEventListener("click", function (event) {
   const jump = event.target && event.target.closest ? event.target.closest(".refs .ref-jump") : null;
   if (jump) {
@@ -1432,7 +1439,7 @@ function imageAssetUrl(item) {
 }
 
 function imageOriginalUrl(item) {
-  return "/api/files/raw?file_id=" + encodeURIComponent(String(item.file_id || ""));
+  return "/api/files/origin/" + encodeURIComponent(String(item.file_id || ""));
 }
 
 function renderImageGallery(view, items) {
@@ -1594,6 +1601,12 @@ function isNoContextText(text) {
   return value === "No relevant context found for the query.";
 }
 
+function looksLikeNoInfoAnswer(text) {
+  const value = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!value) { return false; }
+  return /没有(找到|相关|提及|检索到|这方面的)|未(找到|提及)|no relevant|not found|no information|insufficient information/.test(value);
+}
+
 async function bypassContinue(view, button) {
   if (busy) { setToast("当前还在生成，请稍后再试", "bad"); return; }
   const question = String((view && view.__retryQuestion) || "").trim();
@@ -1614,20 +1627,54 @@ async function bypassContinue(view, button) {
   }
 }
 
+async function retryQuestion(view, button) {
+  if (busy) { setToast("当前还在生成，请稍后再试", "bad"); return; }
+  const question = String((view && view.__retryQuestion) || "").trim();
+  if (!question) { setToast("找不到原问题，请重新输入", "bad"); return; }
+  if (button) { button.disabled = true; button.textContent = "正在重试…"; }
+  const next = await streamAnswer(question, {
+    sessionId: (view && view.__sessionId) || "",
+    clientMessageId: (view && view.__clientMessageId) || "",
+  });
+  if (!button) { return; }
+  button.disabled = Boolean(next);
+  button.textContent = next ? "已重试" : "重试";
+}
+
+function actionButton(label, handler) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", handler);
+  return button;
+}
+
 function appendNoContextActions(view) {
   if (!view || !view.__noContext || view.__noContextEl) { return; }
   const box = document.createElement("div");
   box.className = "no-context-actions";
   const text = document.createElement("span");
-  text.textContent = "知识库本轮没有检索到内容。可以继续对话，但本轮回答不会使用资料库。";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = "继续对话（不查资料）";
-  button.addEventListener("click", function () { bypassContinue(view, button); });
+  text.textContent = "知识库本轮没有检索到内容。可以重试、继续对话（不查资料），或先上传资料再问。";
   box.appendChild(text);
-  box.appendChild(button);
+  box.appendChild(actionButton("重试", function () { retryQuestion(view, this); }));
+  box.appendChild(actionButton("继续对话（不查资料）", function () { bypassContinue(view, this); }));
+  box.appendChild(actionButton("上传资料", function () { pickFile("unified"); }));
   view.content.appendChild(box);
   view.__noContextEl = box;
+}
+
+function appendErrorActions(view) {
+  if (!view || !view.__workError || view.__noContext || view.__errorActionsEl) { return; }
+  const box = document.createElement("div");
+  box.className = "no-context-actions";
+  const text = document.createElement("span");
+  text.textContent = "本轮没有拿到可靠回答。可以重试、继续对话（不查资料），或先上传资料。";
+  box.appendChild(text);
+  box.appendChild(actionButton("重试", function () { retryQuestion(view, this); }));
+  box.appendChild(actionButton("继续对话（不查资料）", function () { bypassContinue(view, this); }));
+  box.appendChild(actionButton("上传资料", function () { pickFile("unified"); }));
+  view.content.appendChild(box);
+  view.__errorActionsEl = box;
 }
 
 function appendBypassNote(view) {
@@ -1671,7 +1718,11 @@ function finalizeAnswer(view, fullText, references, persist) {
   view.__answerText = shown;
   // 定稿才做一次完整渲染（把最后那个未闭合的块也升级成正式 Markdown），流式期间不再整体重绘
   finishPaint(view, shown || "（没有返回内容）");
-  if (isNoContextText(shown)) { view.__noContext = true; }
+  const picked = pickReferences(parts.answer, textRefs);
+  if (isNoContextText(shown)
+      || (!view.__bypass && looksLikeNoInfoAnswer(shown))) {
+    view.__noContext = true;
+  }
   if (view.__workStopped) {
     finishChatWork(view, {
       motion: "waiting",
@@ -1701,7 +1752,6 @@ function finalizeAnswer(view, fullText, references, persist) {
   }
   if (view.cursorEl) { view.cursorEl.hidden = true; }
   if (imageRefs.length) { renderImageGallery(view, imageRefs); }
-  const picked = pickReferences(parts.answer, textRefs);
   // 准确性优先：只有正文引用/点名，或模型自述清单命中时才展示；
   // 一条都没命中时不再把“检索排名前 N”当参考资料，只留一句如实说明。
   if (picked.items.length || picked.unknown.length || (picked.total && picked.mode === "none")) {
@@ -1723,7 +1773,8 @@ function finalizeAnswer(view, fullText, references, persist) {
           ? "<span class=\"ref-no\">" + item.ids.map(function (id) { return "[" + escapeHtml(id) + "]"; }).join("") + "</span> "
           : "";
         // 带上文件名，渲染完由 wireRefs() 问后端「本机有没有原件」，并支持双击打开
-        inner += "<span class=\"ref\" data-ref=\"" + escapeHtml(item.file_path) + "\">" + nums +
+        inner += "<span class=\"ref\" data-ref=\"" + escapeHtml(item.file_path) + "\""
+          + " role=\"button\" tabindex=\"0\" aria-label=\"参考资料：" + escapeHtml(item.file_path) + "\">" + nums +
           escapeHtml(item.file_path) +
           "<button type=\"button\" class=\"ref-jump\" title=\"打开原件（新标签）\" aria-label=\"打开原件\">↗</button></span>";
       });
@@ -1741,6 +1792,7 @@ function finalizeAnswer(view, fullText, references, persist) {
   }
   appendContextWarning(view);
   appendNoContextActions(view);
+  appendErrorActions(view);
   appendBypassNote(view);
   appendContentNote(view, view.__genMeta || null);
   appendUpstreamRetryNote(view);
@@ -2205,20 +2257,30 @@ async function streamAnswer(question, options) {
         if (event.type === "error") {
           // 后端只在「本机已输出后失败」时带 retry_upstream；
           // 这里只是把入口记到视图上，绝不自动重发。
-          if (event.retry_upstream === true) {
-            view.__retryUpstream = true;
-            view.__retryQuestion = text;
-          }
+          view.__retryQuestion = text;
+          if (event.retry_upstream === true) { view.__retryUpstream = true; }
           assembled += (assembled ? "\n\n" : "") + "⚠️ " + (event.message || "上游返回错误");
-          view.__workError = true;
-          WorkCompanion.update(workId, {
-            motion: "error",
-            label: "检索或生成失败，请查看原因",
-            detail: String(event.message || ""),
-            detailAction: function () { scrollWorkTarget(view.wrap); }
-          });
+          if (event.no_context) {
+            view.__noContext = true;
+            view.__workError = false;
+            WorkCompanion.update(workId, {
+              motion: "waiting",
+              label: "暂未检索到相关资料",
+              detail: String(event.message || ""),
+              detailAction: function () { scrollWorkTarget(view.wrap); }
+            });
+          } else {
+            view.__workError = true;
+            WorkCompanion.update(workId, {
+              motion: "error",
+              label: "检索或生成失败，请查看原因",
+              detail: String(event.message || ""),
+              detailAction: function () { scrollWorkTarget(view.wrap); }
+            });
+          }
           setStreamTarget(view, assembled);
-          setToast("查询出错", "bad");
+          setToast(event.no_context ? "知识库没有找到相关资料" : "查询出错",
+            event.no_context ? "" : "bad");
           continue;
         }
       }

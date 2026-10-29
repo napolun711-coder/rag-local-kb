@@ -69,6 +69,7 @@ def _local_job(result: Dict[str, Any]) -> LocalJobSummary:
         detail=str(result.get("detail") or ""),
         knowledge_message=str(knowledge.get("message") or lightrag.get("error") or ""),
         batch_id=str(result.get("batch_id") or ""),
+        document_name=str(knowledge.get("document_name") or ""),
     )
 
 
@@ -84,7 +85,10 @@ class LocalJobIndex:
             for document_id in job.document_ids:
                 if document_id and document_id not in self.by_document_id:
                     self.by_document_id[document_id] = job
-            for value in (job.doc_name, job.filename, job.saved_path, job.source_path):
+            names = [job.doc_name, job.document_name, job.filename, job.saved_path, job.source_path]
+            if job.doc_name and not job.document_name:
+                names.append(job.doc_name + ".md")
+            for value in names:
                 key = _name(value)
                 if key:
                     self.by_name.setdefault(key, []).append(job)

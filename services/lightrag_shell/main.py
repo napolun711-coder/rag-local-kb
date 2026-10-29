@@ -69,6 +69,30 @@ def _backend_error(exc: Exception) -> JSONResponse:
     )
 
 
+def _error_message(response: Any) -> str:
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message") or error.get("detail") or error.get("code")
+            if message:
+                return str(message)[:800]
+        if isinstance(error, str) and error:
+            return error[:800]
+        for key in ("message", "detail", "data"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:800]
+    try:
+        text = response.text.strip()
+    except Exception:
+        text = ""
+    return text[:800] if text else "engine request failed"
+
+
 def _request_json(method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
     if not _engine_configured():
         raise HTTPException(
@@ -82,12 +106,20 @@ def _request_json(method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
             timeout=settings.backend_timeout,
             **kwargs,
         )
-        response.raise_for_status()
     except requests.RequestException as exc:
         raise HTTPException(
             status_code=502,
             detail={"code": "engine_unreachable", "message": type(exc).__name__},
         ) from exc
+    if response.status_code >= 400:
+        message = _error_message(response)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "engine_request_failed",
+                "message": f"HTTP {response.status_code}: {message}",
+            },
+        )
     try:
         payload = response.json()
     except Exception:
@@ -171,8 +203,20 @@ async def query_stream(request: Request):
         stream=True,
     )
     if upstream.status_code >= 400:
+        message = _error_message(upstream)
+        status_code = upstream.status_code
         upstream.close()
-        return _not_installed() if upstream.status_code == 503 else _backend_error(RuntimeError("upstream"))
+        if status_code == 503:
+            return _not_installed()
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": {
+                    "code": "query_failed",
+                    "message": f"HTTP {status_code}: {message}",
+                }
+            },
+        )
     return StreamingResponse(upstream.iter_content(chunk_size=None), media_type="application/x-ndjson")
 
 
