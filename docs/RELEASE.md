@@ -3,22 +3,22 @@
 The supported user artifact is the Windows Release ZIP (`local-rag-kb-<version>-win64.zip`)
 plus its `.sha256` file. The Python wheel is not a standalone web-UI distribution.
 
-## 0. Repository metadata (first release)
+## 0. Repository metadata
 
-After creating the GitHub repository, replace the placeholder values:
+This repository is `napolun711-coder/rag-local-kb`. Confirm these values before
+a release:
 
-- Add `[project.urls]` to `pyproject.toml` with the real Homepage/Repository/
-  Issues URLs.
-- Update the security-advisory contact in `.github/ISSUE_TEMPLATE/config.yml`.
-- Use the real repository in `config/update.example.json` examples and
-  `docs/RELEASE.md` commands.
-- Set `origin` and push `main` before creating the release tag.
+- `pyproject.toml` `[project.urls]` Homepage/Repository/Issues.
+- Security-advisory and documentation links in
+  `.github/ISSUE_TEMPLATE/config.yml`.
+- Repository name in `config/update.example.json`.
+- `origin` points at the repository and `main` is pushed before the release tag.
 
 ```toml
 [project.urls]
-Homepage = "https://github.com/OWNER/REPOSITORY"
-Repository = "https://github.com/OWNER/REPOSITORY"
-Issues = "https://github.com/OWNER/REPOSITORY/issues"
+Homepage = "https://github.com/napolun711-coder/rag-local-kb"
+Repository = "https://github.com/napolun711-coder/rag-local-kb"
+Issues = "https://github.com/napolun711-coder/rag-local-kb/issues"
 ```
 
 ## 1. Freeze and version
@@ -61,7 +61,7 @@ Do not test with a real user database or upload directory.
 First-time repository setup:
 
 ```powershell
-git remote add origin https://github.com/OWNER/REPOSITORY.git
+git remote add origin https://github.com/napolun711-coder/rag-local-kb.git
 git push -u origin main
 ```
 

@@ -1,5 +1,7 @@
 # Local RAG Knowledge Base
 
+[![CI](https://github.com/napolun711-coder/rag-local-kb/actions/workflows/ci.yml/badge.svg)](https://github.com/napolun711-coder/rag-local-kb/actions/workflows/ci.yml)
+
 A modular monolith for a self-hosted retrieval-augmented knowledge base.
 
 **Status:** 0.1.0 beta, Windows first, local-first. Phone access is optional and
@@ -7,7 +9,9 @@ intended for a trusted private LAN.
 
 ## Quick start (Windows)
 
-For normal use, download the latest **Release ZIP**, not the source archive:
+For normal use, download the latest
+[**Release ZIP**](https://github.com/napolun711-coder/rag-local-kb/releases/latest),
+not the source archive:
 
 1. Install [Ollama](https://ollama.com/) and pull the local models:
    ```powershell
@@ -205,7 +209,7 @@ Choose the mode that matches the installation:
   branch. It fast-forwards only, shows incoming commits, and refuses to run when
   tracked local code changes exist.
 - **GitHub Releases:** copy `config/update.example.json` to
-  `config/update.json`, set `repo` to `OWNER/REPOSITORY`, then run
+  `config/update.json`; the example already points at this repository. Then run
   `update.cmd -Release`. The updater downloads the latest Windows ZIP and its
   SHA256 asset.
 - **Offline / local archive:** `update.cmd -ArchivePath <zip> -Checksum <sha256>`.

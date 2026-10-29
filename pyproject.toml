@@ -28,6 +28,11 @@ dependencies = [
     "requests>=2.32,<3.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/napolun711-coder/rag-local-kb"
+Repository = "https://github.com/napolun711-coder/rag-local-kb"
+Issues = "https://github.com/napolun711-coder/rag-local-kb/issues"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
