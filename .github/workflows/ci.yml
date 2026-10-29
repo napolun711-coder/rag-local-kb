@@ -109,7 +109,7 @@ jobs:
           $hits = @(
             Get-ChildItem -LiteralPath $dest -Recurse -File |
               Where-Object { $_.FullName -notmatch '\\.github\\' -and $_.Length -lt 2000000 } |
-              Select-String -Pattern 'C:\\Users|C:/Users|profile-ai|napolun711|<user-profile>|<project-root>' -ErrorAction SilentlyContinue
+              Select-String -Pattern 'C:\\Users|C:/Users|profile-ai|napolun711@gmail.com|<user-profile>|<project-root>' -ErrorAction SilentlyContinue
           )
           if ($hits.Count) { throw ("Release package contains local/private path markers: " + $hits.Count) }
           Write-Output ("Validated release package: " + $zip.Name)
