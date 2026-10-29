@@ -365,6 +365,25 @@ def _lightrag_effective(engine_values: Mapping[str, str]) -> Dict[str, str]:
     }
 
 
+def health_targets() -> Dict[str, str]:
+    """Return non-secret dependency targets for the public health summary."""
+    _, engine_values = _read_sources()
+    defaults = _engine_defaults()
+
+    def value(key: str) -> str:
+        return str(engine_values.get(key, defaults.get(key, "")) or "").strip()
+
+    return {
+        "embedding_binding": value("EMBEDDING_BINDING"),
+        "embedding_host": value("EMBEDDING_BINDING_HOST"),
+        "embedding_model": value("EMBEDDING_MODEL"),
+        "vector_storage": _vector_type_for_effective(
+            value("LIGHTRAG_VECTOR_STORAGE")
+        ),
+        "qdrant_url": value("QDRANT_URL"),
+    }
+
+
 def _quality_effective() -> Dict[str, Any]:
     settings = get_ingest_settings()
     return {
@@ -1124,6 +1143,7 @@ __all__ = [
     "SettingsError",
     "app_env_path",
     "engine_env_path",
+    "health_targets",
     "save_settings",
     "settings_payload",
     "test_connections",

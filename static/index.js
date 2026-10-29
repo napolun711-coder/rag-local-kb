@@ -3696,20 +3696,27 @@ async function refreshIngestState() {
   box.appendChild(chips);
 }
 
-function setStatus(key, ok) {
+function setStatus(key, status) {
   const dot = $("st" + key);
   const label = $("tx" + key);
-  if (dot) { dot.className = "dot " + (ok ? "ok" : "bad"); }
-  if (label) { label.textContent = ok ? "正常" : "未连接"; }
+  const detail = status && typeof status === "object" ? status : {};
+  const enabled = typeof status === "object" ? detail.enabled !== false : !!status;
+  const ok = typeof status === "object" ? !!detail.ok : !!status;
+  const text = !enabled ? "未启用" : (ok ? "正常" : "未连接");
+  if (dot) { dot.className = "dot " + (!enabled ? "gray" : (ok ? "ok" : "bad")); }
+  if (label) {
+    label.textContent = text;
+    label.title = detail.detail || "";
+  }
 }
 
 async function refreshStatus() {
   try {
     const response = await fetch("/health", { cache: "no-store" });
     const data = await response.json();
-    setStatus("Lightrag", !!(data.lightrag && data.lightrag.ok));
-    setStatus("Ollama", !!(data.ollama && data.ollama.ok));
-    setStatus("Qdrant", !!(data.qdrant && data.qdrant.ok));
+    setStatus("Lightrag", data.lightrag || false);
+    setStatus("Ollama", data.ollama || false);
+    setStatus("Qdrant", data.qdrant || false);
   } catch (err) { /* 状态查询失败时保持原样 */ }
 }
 
