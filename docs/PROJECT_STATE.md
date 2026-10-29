@@ -1257,3 +1257,52 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   extraction; existing 6 sessions / 25 messages were not backfilled.
 - Full web-grade memory still needs larger-model evaluation for non-direct
   questions, plus memory conflict/decay and broader acceptance tests.
+
+## One-click deploy and start (R1, 2026-10-30)
+
+- Added `deploy.cmd` and `scripts/deploy.ps1`: project-local dependency
+  preparation, local Ollama detection/configuration, doctor verification,
+  project-local launcher shortcut, and optional service start.
+- `start.cmd` now auto-runs deployment preparation once when the app or engine
+  virtual environment is missing, instead of stopping with a setup error.
+- `scripts/setup.ps1` is now project-local and boundary-safe:
+  - uv downloads go to `.tools/downloads`, uv/Python/tool caches to `.tools/`
+  - no winget/system install and no `%TEMP%` download
+  - `-CheckOnly` performs a no-write environment check
+  - `-ConfigureLocal` fills local Ollama host/model/embedding values only when
+    the engine config is new or still a placeholder
+- `.env.example` now reflects Balanced Local Memory; the engine example no
+  longer contains absolute project paths.
+- `scripts/doctor.ps1` now checks Python version, engine/model configuration,
+  Ollama reachability, embedding/chat models, data directories, lifecycle state,
+  ports, and disk space. It fixed the lifecycle state shape (`services` map).
+- `scripts/install_desktop_shortcut.ps1` defaults to a project-local shortcut;
+  writing to the desktop is an explicit `-Desktop` opt-in.
+- `.tools/`, `.updates/`, and project-local `.lnk` files are ignored by Git.
+- R1 does not implement upgrades. Natural user-confirmed upgrade remains R2.
+
+### Verification
+
+- PowerShell parser checks passed for setup, deploy, doctor, and shortcut
+  scripts.
+- `setup.ps1 -CheckOnly -ConfigureLocal` on the real project reported uv,
+  app/engine imports, existing env files, Ollama models, and the proposed local
+  model pair without writing files.
+- `deploy.ps1 -CheckOnly` ran setup check + doctor on the real project; doctor
+  reported all checks passed after the lifecycle-state fix.
+- A fresh temporary root under `.integration-run/r1-check` reported missing
+  venvs and env files as expected, proposed local Ollama configuration, and
+  created no `.tools` or `.env` files.
+- No services were started or data changed during these checks.
+- Full fresh-machine installation, actual model download, and R2 upgrade were
+  not run.
+
+### Remaining risks
+
+- A missing Ollama/model stops deployment with instructions; it is not
+  auto-downloaded.
+- Network failures during uv/Python provisioning are reported but not retried
+  beyond the existing download/uv behavior.
+- The updater and rollback flow are not implemented yet.
+- The project-local launcher shortcut is not placed on the desktop unless the
+  user explicitly opts in.

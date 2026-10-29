@@ -1,5 +1,8 @@
 .env
 .venv/
+.tools/
+.updates/
+/*.lnk
 .integration-run/
 __pycache__/
 *.py[cod]

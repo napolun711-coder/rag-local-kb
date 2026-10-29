@@ -37,6 +37,10 @@
 - memory: direct personal-fact questions are answered from high-confidence local
   memories without calling the generation model, with a UI note and protection
   against treating knowledge-base lookups as personal memory
+- deployment: one-click `deploy.cmd`, auto-preparing `start.cmd`, project-local
+  uv/Python/cache handling, local Ollama detection and configuration, a
+  no-write `-CheckOnly` mode, a stronger doctor, and a project-local launcher
+  shortcut; no system installs, desktop writes, or model downloads
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

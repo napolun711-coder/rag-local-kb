@@ -4,15 +4,25 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title Local RAG Knowledge Base
 
-if not exist ".venv\Scripts\python.exe" (
+if not exist ".venv\Scripts\python.exe" goto :prepare
+if not exist "services\lightrag_engine\.venv\Scripts\python.exe" goto :prepare
+goto :ready
+
+:prepare
+echo.
+echo [INFO] First run or missing local environment detected.
+echo        Preparing project-local dependencies; this may take several minutes.
+echo.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\deploy.ps1" -NoStart
+if errorlevel 1 (
     echo.
-    echo [ERROR] Python environment not found.
-    echo         Run setup.cmd once to prepare this project.
+    echo [ERROR] Automatic preparation failed. Review the messages above.
     echo.
     pause
     exit /b 3
 )
 
+:ready
 if not exist "scripts\lifecycle.py" (
     echo.
     echo [ERROR] Lifecycle launcher not found: scripts\lifecycle.py

@@ -18,14 +18,46 @@ A modular monolith for a self-hosted retrieval-augmented knowledge base.
 
 ## Requirements
 
-- Windows for the provided lifecycle scripts
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
+- Windows 10/11 for the provided lifecycle scripts
+- Python 3.12+ (a project-local Python can be provisioned by `uv`)
+- [uv](https://docs.astral.sh/uv/) (downloadable into `.tools/` by the deploy
+  script when missing)
 - Ollama with an embedding model such as `bge-m3:latest` when embeddings are used
-- An OpenAI-compatible chat-completions endpoint
+- An OpenAI-compatible chat-completions endpoint, or a local Ollama chat model
 - The isolated LightRAG engine environment under `services/lightrag_engine/`
 
-## Run locally
+## One-click deploy and start (Windows)
+
+First run or repair, then start:
+
+```text
+double-click deploy.cmd
+```
+
+`deploy.cmd` installs/repairs project-local dependencies, writes a usable local
+Ollama configuration when Ollama and models are present, runs the environment
+doctor, creates a project-local launcher shortcut, and starts the three
+services. If Ollama or a model is missing, it stops with the exact
+`ollama pull ...` commands instead of pretending the deployment is ready.
+
+After deployment, double-click `start.cmd` for daily use. If the environment is
+missing, `start.cmd` automatically runs the same project-local preparation once
+before starting. It starts the local services, waits for them to become healthy,
+and opens `/web`. If the services are already running, it opens the existing web
+UI instead of reporting an error.
+
+All setup writes stay inside this project: `.tools/` (uv, Python, caches),
+`.venv/`, `services/lightrag_engine/.venv/`, `.env` files when missing, and the
+project-local `RAG 本地知识库启动.lnk`. It does not install system packages,
+write to the desktop, or download models automatically.
+
+Check without writing anything:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\deploy.ps1" -CheckOnly
+```
+
+The lower-level manual path remains available:
 
 ```powershell
 Copy-Item .env.example .env
@@ -33,21 +65,17 @@ uv sync
 .\start.cmd
 ```
 
-On Windows, double-click `start.cmd` for normal daily use. It starts the local
-services, waits for them to become healthy, and opens `/web`. If the services
-are already running, it opens the existing web UI instead of reporting an error.
-Keep the command window open while startup is in progress; it closes after a
-successful start.
-
 ### Desktop launcher (Windows)
 
-Install or refresh the desktop shortcut with:
+The deploy script creates a project-local `RAG 本地知识库启动.lnk`. To also
+install it on the current user's desktop, explicitly opt in:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install_desktop_shortcut.ps1" -Force
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install_desktop_shortcut.ps1" -Desktop -Force
 ```
 
-The shortcut runs `RAG启动器.ps1` in the project root. The launcher reuses the
+Without `-Desktop`, the shortcut is written inside the project only. The
+shortcut runs `RAG启动器.ps1` in the project root. The launcher reuses the
 normal lifecycle, avoids starting a second service group, and performs at most
 one safe repair followed by one retry when startup fails. Repair is limited to
 project-local dependencies and verified project-owned listener processes. It
@@ -61,9 +89,9 @@ Check the launcher without starting services:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\RAG启动器.ps1" -SelfTest -NoPause
 ```
 
-The installer updates only `RAG 本地知识库启动.lnk` on the current user's
-desktop. It does not create an automatic startup item. Re-run it with `-Force`
-after moving the project.
+The optional desktop installer updates only `RAG 本地知识库启动.lnk`. It does
+not create an automatic startup item. Re-run it with `-Force` after moving the
+project.
 
 The lifecycle starts the LightRAG engine, the HTTP shell, and the application in
 dependency order. Open the URL printed by the launcher, normally:
@@ -118,6 +146,17 @@ Inspect or stop only the processes recorded as started by this lifecycle:
 Runtime PID state, selected ports, and process logs are stored under
 `logs/runtime/`. The lifecycle never stops an unrelated process merely because
 that process occupies a configured port.
+
+## Upgrades
+
+R1 does not yet implement an automatic updater. The planned R2 update flow is
+user-confirmed rather than silent: check GitHub Releases, stop project-owned
+services, back up the SQLite database and configuration inside the project,
+download and verify the release under `.updates/`, replace code only, run
+migrations, health-check, and roll back on failure. User data under `data/`,
+`knowledge/`, `logs/`, configuration files, and model files are not update
+targets. Until R2 lands, upgrade by replacing only code files while preserving
+those paths, then run `deploy.cmd`.
 
 ## Settings
 
