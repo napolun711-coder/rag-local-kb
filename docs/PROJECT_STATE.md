@@ -1609,7 +1609,9 @@ Remaining release work:
   asset source.
 - Validated the release ZIP tests under Python 3.12 in an isolated extraction:
   `uv sync --frozen --no-dev --python 3.12`, then 127/127 tests passed.
-- No GitHub CLI or remote is configured in this checkout. Repository creation,
-  URL replacement, push, tag creation, and Actions execution remain
-  environment-dependent and were not performed.
+- Release target created at `https://github.com/napolun711-coder/rag-local-kb`.
+  Real repository URLs were written to `pyproject.toml`, README, the issue
+  security link, the updater example, and release documentation.
+- `origin` is configured and `main` has been pushed. The first GitHub CI run is
+  pending/tracked; the local `v0.1.0` tag has not been created yet.
 - Formal services were not restarted and remain healthy on 0.1.0.
