@@ -19,21 +19,21 @@
   这一页只做三件事，且都能在界面上看到结论：
     1. 看：知识库里有哪几篇文档、本机留下了什么、原件在哪（能不能打开）；
     2. 开：双击/点↗ 打开原件；本机页面还能一键打开数据文件夹；
-    3. 删：三档范围 + 二次确认（默认只删知识库记录，**绝不动原件**）。
+    3. 删：点击“删除”后勾选文件，再输入 Yes 确认；已入库项可选同时清理知识库上传副本。
 
   不引入任何外部资源（离线可用）；权限判断全在后端：
     · 只读接口（list / overview / resolve / raw）手机也能看；
     · 会动数据的（打开文件夹 / 删除 / 立即扫描）需要本机 + 每次启动的随机令牌，
       手机页面直接不显示这些按钮，硬调也是 403。
 -->
-<link rel="stylesheet" href="/static/files.css">
+<link rel="stylesheet" href="/static/files.css?v=20261029-hierarchy">
 </head>
 <body>
 <header class="bar">
   <div class="page-logo" aria-hidden="true">RAG</div>
   <h1>文档目录</h1>
   <nav class="app-nav" aria-label="应用页面">
-    <a href="/web">对话</a>
+    <a href="/web" class="return-action" title="返回对话">← 返回对话</a>
     <a href="/files" aria-current="page">文件</a>
     <a href="/memory">记忆</a>
     <a href="/settings">设置</a>
@@ -45,9 +45,11 @@
 
 <div class="wrap">
   <div class="page-subbar">
-    <span class="sub" id="subTitle">正在读取…</span>
+    <span class="sub" id="subTitle">仅管理本应用中的留档、解析记录和知识库索引；原始文件及其所在文件夹不会被修改或删除</span>
     <span class="grow"></span>
     <button type="button" id="refreshBtn">刷新</button>
+    <button type="button" id="deleteModeBtn" class="compact-action">删除</button>
+    <button type="button" id="cancelDeleteModeBtn" hidden>取消删除</button>
     <button type="button" id="scanBtn" hidden>立即扫描收件箱</button>
     <button type="button" id="stopBtn" class="danger" hidden>停止全部服务</button>
   </div>
@@ -56,11 +58,11 @@
        会自动消失，不再永久占着这一条（见脚本 flash / setNotice 的说明）。 -->
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <div id="readonlyBanner" class="notice">
-    文档目录：可查看文档详情并执行受控删除。上传原件默认保留；删除知识库文档和本机解析记录必须二次确认。
+    文档目录：可查看文档详情并执行受控操作。本页面不会修改或删除原始文件及其所在文件夹。
   </div>
 
   <!-- 概览：知识库状态 / 计数 / 本机作业 / 收件箱 -->
-  <section class="card" id="overviewCard">
+  <section class="card overview-card" id="overviewCard">
     <h2>概览</h2>
     <div class="grid" id="stats"><div class="muted">正在加载…</div></div>
     <div class="chips" id="pipelineChips"></div>
@@ -73,11 +75,11 @@
     <div class="grid" id="inboxStats"><div class="muted">正在加载…</div></div>
     <div class="toolbar spaced-top">
       <button type="button" id="openInboxBtn" class="primary" hidden>打开收件箱文件夹</button>
-      <button type="button" id="openOriginalsBtn" hidden>打开原件留档</button>
+      <button type="button" id="openOriginalsBtn" hidden>打开应用内留档</button>
       <span class="hint" id="inboxHint"></span>
     </div>
     <h2 class="card-subhead">最近发生了什么</h2>
-    <ul class="events" id="inboxEvents"><li class="muted">还没有记录</li></ul>
+    <ul class="events" id="inboxEvents"><li class="muted">暂无处理动态</li></ul>
   </section>
 
   <!-- 文件夹 -->
@@ -89,7 +91,7 @@
   </section>
 
   <!-- 文档列表 -->
-  <section class="card">
+  <section class="card primary-card" id="knowledgeCard">
     <h2 id="knowledgeTitle">知识库文档</h2>
     <div class="hint" id="knowledgeTableHint" hidden></div>
     <div class="toolbar">
@@ -126,8 +128,8 @@
           <th class="hide-md col-topic">主题</th>
           <th class="col-status">状态</th>
           <th class="col-chunks">分块</th>
-          <th class="hide-md col-archive">本机留档</th>
-          <th class="hide-md col-original">原件</th>
+          <th class="hide-md col-archive">应用内留档</th>
+          <th class="hide-md col-original">原始文件</th>
           <th class="col-updated">更新时间</th>
           <th class="col-actions">操作</th>
         </tr>
@@ -142,19 +144,17 @@
     </div>
   </section>
 
-  <!-- 本机有记录、知识库里没有（等确认 / 已跳过 / 质检没过 / 已删除） -->
-  <section class="card" id="localCard">
-    <h2 id="localTitle">本机有记录、知识库中没有</h2>
-    <div class="hint" id="localHint">这些文件在本机留下了档案，但不在知识库里（等你确认 / 已跳过 / 未过质检 / 已删除）。</div>
-    <div class="tw">
+  <!-- 用户主动跳过的文件；可继续走原有入库流程。 -->
+  <section class="card secondary-card" id="localCard">
+    <h2 id="localTitle">跳过的文件</h2>
+    <div class="hint" id="localHint">用户已跳过的文件。可点击“继续入库”重新提交。</div>
+    <div class="tw skip-scroll">
     <table id="localTable" class="table-spaced">
       <thead>
         <tr>
           <th class="col-check"><input type="checkbox" id="checkAllLocal" aria-label="全选本页"></th>
           <th>文件</th>
           <th class="hide-md col-topic">主题</th>
-          <th class="col-local-status">本机状态</th>
-          <th class="hide-md col-archive">原件</th>
           <th class="col-updated">受理时间</th>
           <th class="col-actions">操作</th>
         </tr>
@@ -170,37 +170,26 @@
     </div>
   </section>
 
-  <!-- 删除：默认最保守（只删知识库记录） -->
-  <section class="delbar" id="delBar" hidden>
-    <div class="row">
-      <b id="delCount">已选 0 项</b>
-      <label><input type="radio" name="scope" value="kb" checked> 只删知识库记录（推荐）</label>
-      <label><input type="radio" name="scope" value="local"> 知识库 + 本机留档</label>
-      <label><input type="radio" name="scope" value="all"> 全部（知识库 + 本机解析记录）</label>
-      <label><input type="checkbox" id="removeOriginals"> 同时删除本地原件（不可恢复）</label>
-      <span class="grow"></span>
-      <button type="button" id="deleteBtn" class="danger">删除…</button>
-      <button type="button" id="clearSel">取消选择</button>
-    </div>
-    <!-- role=dialog：确认框是键盘 / 读屏用户真正在做决定的地方（焦点进出见脚本 showConfirm） -->
-    <div class="confirm" id="confirmBox" role="dialog" aria-modal="true"
-         aria-labelledby="confirmTitle" hidden>
-      <b id="confirmTitle">确认要删除吗？</b>
-      <div id="confirmWhat" class="muted"></div>
-      <ul>
-        <li>知识库记录会从 LightRAG 里移除（异步，页面稍后刷新即可看到消失）；</li>
-        <li id="confirmLocal">本机留档（knowledge\\ 与 data\\parsed\\）会一并删除；</li>
-        <li id="confirmOriginals">原件（data\\originals、data\\uploads）<b>默认保留</b>；</li>
-        <li>知识库管线忙时会被拒绝，等它空闲再点一次即可。</li>
-      </ul>
-      <div class="ask">
-        <label><input type="checkbox" id="confirmCheck"> 我确认上面的范围与后果</label>
-        <button type="button" id="confirmDelete" class="danger" disabled>确认删除</button>
-        <button type="button" id="cancelDelete">取消</button>
-      </div>
-    </div>
-  </section>
 </div>
+
+<div id="deleteDialogBackdrop" class="delete-dialog-backdrop" hidden></div>
+<section id="deleteDialog" class="delete-dialog" role="dialog" aria-modal="true"
+         aria-labelledby="deleteDialogTitle" hidden>
+  <h2 id="deleteDialogTitle">删除所选文件</h2>
+  <div id="deleteSelectionCount" class="delete-selection-count">已选择 0 个文件</div>
+  <label id="deleteKnowledgeCopyLabel" class="delete-option" hidden>
+    <input type="checkbox" id="deleteKnowledgeCopy">
+    <span>同时删除知识库上传副本</span>
+  </label>
+  <label class="delete-confirm-field" for="deleteConfirmation">
+    <span>请输入 Yes 确认</span>
+    <input id="deleteConfirmation" type="text" autocomplete="off" spellcheck="false">
+  </label>
+  <div class="delete-dialog-actions">
+    <button type="button" id="cancelDelete">取消</button>
+    <button type="button" id="confirmDelete" disabled>删除</button>
+  </div>
+</section>
 
 <div id="detailBackdrop" class="detail-backdrop" hidden></div>
 <aside id="detailPanel" class="detail-panel" hidden aria-labelledby="detailTitle">
@@ -231,7 +220,7 @@
   </div>
 </div>
 
-<script src="/static/files.js"></script>
+<script src="/static/files.js?v=20261029-hierarchy"></script>
 
 <!-- 心跳 / 权限 / 关窗口预约停止：三个页面（对话 / 设置 / 文件管理）必须都引这一份，
      少一个就会出现「在新页面操作、旧页面预约的停止到点生效」的事故。 -->

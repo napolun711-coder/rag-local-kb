@@ -272,6 +272,7 @@ def _can(status: Dict[str, Any]) -> Dict[str, bool]:
             and bool(ocr_service.status(get_ocr_settings()).get("enabled"))
         ),
         "retry": state in ("failed", "blocked", "needs_ocr"),
+        "resume": state == "skipped",
         "skip": state in REVIEW_STATES,
         "edit": editable,
         "refresh": bool(track_id) and state in ("ingesting", "done"),
@@ -430,6 +431,21 @@ def activate(file_id: str, action: str) -> Dict[str, Any]:
             if state not in ("failed", "blocked", "needs_ocr"):
                 return {"ok": False, "http_status": 409, "message": "This job does not need a retry"}
             return _retry_result(settings, result)
+        elif action == "resume":
+            if state != "skipped":
+                return {"ok": False, "http_status": 409, "message": "This job is not skipped"}
+            if not storage.read_content(settings, file_id).strip():
+                return {"ok": False, "http_status": 409, "message": "Parsed content is empty"}
+            result["state"] = "review"
+            result["detail"] = "Resuming skipped content for knowledge submission"
+            result["updated_at"] = storage.utc_now()
+            result["timeline"] = list(result.get("timeline") or []) + [{
+                "step": "resume",
+                "state": "done",
+                "at": result["updated_at"],
+                "detail": "User resumed a skipped file",
+            }]
+            return _submit_to_knowledge(settings, result)
         elif action == "force":
             return {"ok": False, "http_status": 409, "message": "Forced ingestion requires the knowledge gateway"}
         elif action == "ingest":

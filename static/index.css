@@ -231,6 +231,9 @@ a{color:inherit;text-decoration:none}
 @keyframes railIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.side-rail{animation:none}}
 .app.side-collapsed .side-rail{display:flex}
+body.graph-open .sidebar,
+body.graph-open .side-rail,
+body.graph-open #sideToggle{display:none !important}
 @media (min-width:900.1px) and (prefers-reduced-motion:reduce){ .side-rail{transition:none} }
 /* ---------- 方案 B：全息文字 + 数据流背景（克制版） ---------- */
 .topbar .title{
@@ -972,6 +975,7 @@ a{color:inherit;text-decoration:none}
   font-size:12px;color:var(--muted);min-width:0;max-width:44vw;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
+.graph-bar .graph-back{flex:0 0 auto;padding-left:10px;padding-right:10px}
 .graph-bar .g-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
 .graph-body{flex:1;min-height:0;display:flex}
 /* 左轨：搜索 + 热门实体 */

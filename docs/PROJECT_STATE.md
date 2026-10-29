@@ -722,3 +722,38 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - Final release sign-off remains pending manual acceptance and commit of the
   current uncommitted UI changes (`static/index.*`, `files.html`, `memory.html`,
   `settings.html`, `theme.css`). No backend or data issue remains from this gate.
+
+## File deletion and skipped files (2026-10-29)
+
+- The files page now has one `删除` entry. Normal browsing hides selection
+  checkboxes; clicking `删除` enters selection mode and selecting items enables
+  `删除所选 (N)`.
+- The delete interaction is a single dialog. It shows the selected count, offers
+  `同时删除知识库上传副本` only when a selected item belongs to the knowledge
+  base, and requires typing `Yes` before the delete button becomes active.
+- `/api/files/delete` now uses `confirmation` and
+  `delete_knowledge_upload_copy`. The server validates `confirmation` as `yes`
+  (case-insensitive) and rejects missing items or malformed ids before starting
+  a background job.
+- A selected app file removes its app archive and parsed job directory. A
+  selected knowledge document reuses LightRAG document deletion; the optional
+  checkbox maps to LightRAG `delete_file=True`, otherwise `delete_file=False`.
+  The user's original file and containing folder are never deletion targets.
+- The lower file-management section is now `跳过的文件`. It shows only jobs whose
+  state is `skipped`, no longer displays processing-status or file-source
+  columns, and provides a compact green `继续入库` action inside a vertically
+  scrollable area capped at 270px desktop and 220px mobile.
+- The overview card is now a compact status strip. Knowledge documents remain
+  the primary page content; the delete entry stays neutral and compact until
+  delete mode is activated.
+- `继续入库` calls the targeted `/api/ingest/action/{file_id}` action `resume`.
+  It reuses retained parsed content and the existing knowledge submission path,
+  records a `resume` timeline entry, rejects non-skipped jobs, and rejects empty
+  parsed content.
+- Focused validation passed: 14 deletion tests, 4 skipped-resume tests, and 6
+  files-page contract tests, plus JavaScript syntax, Python compilation,
+  HTML id-reference checks, and `git diff --check`.
+- Browser visual verification and live deletion were not run. A process started
+  before these changes must be restarted to load the new API and page behavior.
+  `继续入库` submits retained content directly and does not rerun parsing or the
+  quality gate.

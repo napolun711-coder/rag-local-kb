@@ -31,15 +31,13 @@ topics_router = APIRouter(prefix="/api/topics", tags=["topics"], dependencies=[D
 class DeleteItem(BaseModel):
     doc_id: str = ""
     file_id: str = ""
-    file_path: str = ""
     name: str = ""
 
 
 class DeleteRequest(BaseModel):
     items: List[DeleteItem] = Field(default_factory=list)
-    scope: Literal["kb", "local", "all"] = "kb"
-    remove_originals: bool = False
-    confirm: bool = False
+    delete_knowledge_upload_copy: bool = False
+    confirmation: str = ""
 
 
 class TopicCreateRequest(BaseModel):
@@ -313,17 +311,17 @@ def clear_document_topic(file_path: str = Query(min_length=1)) -> Dict[str, Any]
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"ok": True, "cleared": bool(cleared)}
 
+
 @router.post("/delete", status_code=202)
 def files_delete(data: DeleteRequest) -> Dict[str, Any]:
-    if not data.confirm:
-        raise HTTPException(status_code=400, detail="Explicit confirmation is required")
+    if data.confirmation.strip().lower() != "yes":
+        raise HTTPException(status_code=400, detail="Type Yes to confirm deletion")
     if not data.items:
         raise HTTPException(status_code=400, detail="At least one item is required")
     try:
         job = start_deletion(
             [item.model_dump() for item in data.items],
-            scope=data.scope,
-            remove_originals=data.remove_originals,
+            delete_knowledge_upload_copy=data.delete_knowledge_upload_copy,
         )
     except DeleteValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

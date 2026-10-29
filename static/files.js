@@ -42,8 +42,11 @@ const state = {
   rows: [],
   localRows: [],
   upstreamOk: true,
-  selected: {},          // key -> {doc_id, file_id, file_path, name}
+  selected: {},          // key -> {doc_id, file_id, name}
   busy: false,
+  deleteMode: false,
+  deleteItems: [],
+  deleteReturnFocus: null,
   pollTimer: null
 };
 
@@ -148,100 +151,25 @@ async function init() {
   $("openInboxBtn").hidden = true;
   $("openOriginalsBtn").hidden = true;
   $("stopBtn").hidden = true;
-  $("delBar").hidden = true;
+  $("deleteModeBtn").hidden = !state.local;
   $("subTitle").textContent = state.local
-    ? "本机 · 可删除文档与解析记录；上传原件默认保留"
-    : "只读 · 删除仅允许本机访问";
+    ? "仅管理本应用中的留档、解析记录和知识库索引；原始文件及其所在文件夹不会被修改或删除"
+    : "只读 · 数据操作仅在电脑端可用";
   $("checkAll").addEventListener("change", function () { toggleAll(this.checked, state.rows, $("rows")); });
   $("checkAllLocal").addEventListener("change", function () { toggleAll(this.checked, localPageSlice().rows, $("localRows")); });
-  $("clearSel").addEventListener("click", function () { clearSelection(); });
-  $("deleteBtn").addEventListener("click", function () { showConfirm(true); });
-  $("cancelDelete").addEventListener("click", function () { showConfirm(false); });
-  $("confirmCheck").addEventListener("change", function () {
-    $("confirmDelete").disabled = !this.checked;
-    if (this.checked) { focusQuiet($("confirmDelete")); }
+  $("deleteModeBtn").addEventListener("click", function () {
+    if (!state.deleteMode) { enterDeleteMode(); return; }
+    openDeleteDialog(this);
   });
+  $("cancelDeleteModeBtn").addEventListener("click", exitDeleteMode);
+  $("cancelDelete").addEventListener("click", function () { closeDeleteDialog(true); });
+  $("deleteDialogBackdrop").addEventListener("click", function () { closeDeleteDialog(true); });
+  $("deleteConfirmation").addEventListener("input", updateDeleteConfirmButton);
   $("confirmDelete").addEventListener("click", function () { doDelete(); });
-  document.querySelectorAll('input[name="scope"]').forEach(function (node) {
-    node.addEventListener("change", function () {
-      if (!$("confirmBox").hidden) { showConfirm(true); }
-    });
-  });
-  $("removeOriginals").addEventListener("change", function () {
-    if (!$("confirmBox").hidden) { showConfirm(true); }
-  });
+  $("deleteDialog").addEventListener("keydown", handleDeleteDialogKeydown);
   $("detailClose").addEventListener("click", closeDetail);
   $("detailBackdrop").addEventListener("click", closeDetail);
   await loadAll();
-  return;
-  $("checkAll").addEventListener("change", function () { toggleAll(this.checked, state.rows, $("rows")); });
-  // 本机表的分页是前端切片，所以「全选」必须显式只拿**当前页**这几行 ——
-  // 否则勾一次会把 3 页 50 条全选上，而用户只看得见 20 条（删除时容易多删）。
-  $("checkAllLocal").addEventListener("change", function () {
-    toggleAll(this.checked, localPageSlice().rows, $("localRows"));
-  });
-  $("clearSel").addEventListener("click", function () { clearSelection(); });
-  $("deleteBtn").addEventListener("click", function () { showConfirm(true); });
-  $("cancelDelete").addEventListener("click", function () { showConfirm(false); });
-  $("confirmCheck").addEventListener("change", function () {
-    $("confirmDelete").disabled = !this.checked;
-    // 勾上「我确认」= 用户已经决定要删：把焦点顺着送到确认键上（两步确认，不用再摸一次 Tab）。
-    // preventScroll：确认框就在底部 sticky 条里，别为了一次聚焦把页面滚走。
-    if (this.checked) { focusQuiet($("confirmDelete")); }
-  });
-  $("confirmDelete").addEventListener("click", function () { doDelete(); });
-  // 范围一变，确认框必须跟着重算。确认框里那段「将从 N 个文件里……」（showConfirm）
-  // 是**打开时算一次的快照**，而 doDelete() 执行时读的是**实时值** —— 中间改选范围
-  // （尤其勾上「同时删除本地原件」）就会出现"看到的是原件保留、点下去把原件删了"，
-  // 且不可恢复。showConfirm(true) 会顺带把「我确认」打回未勾选，逼用户对新后果再确认一次。
-  document.querySelectorAll('input[name="scope"]').forEach(function (node) {
-    node.addEventListener("change", function () {
-      if (!$("confirmBox").hidden) { showConfirm(true); }
-    });
-  });
-  $("removeOriginals").addEventListener("change", function () {
-    if (!$("confirmBox").hidden) { showConfirm(true); }
-  });
-  $("openInboxBtn").addEventListener("click", function () { openFolder("inbox"); });
-  $("openOriginalsBtn").addEventListener("click", function () { openFolder("originals"); });
-  $("scanBtn").addEventListener("click", function () { scanInbox(); });
-
-  // 这两次探测失败时**不能静默降级**。失败会把 state.local 打成 false（或 token 打成空），
-  // 页面随即显示成「手机 / 局域网 · 只能查看与下载」、藏掉删除条与扫描键 ——
-  // 用户看到的是一个**看起来正常、功能却凭空消失**的页面，无从分辨
-  // "这台机器确实只给看" 还是 "刚才那个请求挂了"。所以两种失败都留一句可见的说明。
-  let probeError = "";
-  try {
-    const session = await fetchJSON("/api/app/session");
-    state.local = session.mode === "local";
-  } catch (err) {
-    state.local = false;
-    probeError = "读取运行模式失败（" + err.message + "）：已按「手机 / 局域网」处理，" +
-      "删除与打开文件夹暂时不可用。刷新可重试。";
-  }
-  if (state.local) {
-    try {
-      const control = await fetchJSON("/api/app/control");
-      state.token = control.token || "";
-    } catch (err) {
-      state.token = "";
-      probeError = "已确认是本机模式，但读取控制口令失败（" + err.message + "）：" +
-        "删除、扫描收件箱与打开文件夹这次用不了。刷新可重试。";
-    }
-  }
-  state.canOpenFolder = state.local && navigator.userAgent.indexOf("Windows") >= 0;
-  $("scanBtn").hidden = !state.local;
-  // 手机 / 局域网：只给它看和下载（删除、打开文件夹一律不给）
-  $("delBar").hidden = true;
-  $("subTitle").textContent = state.local ? "本机 · 可以删除与打开文件夹" : "手机 / 局域网 · 只能查看与下载";
-  await loadAll();
-  // 放在 loadAll 之后、并且与它已经写下的提示**合并**：横幅只有一个位置，
-  // 直接覆盖会把「知识库暂时不可用 / 读取文件列表失败」这类更要紧的话冲掉。
-  if (probeError) {
-    const box = $("notice");
-    const shown = box.hidden ? "" : box.textContent;
-    setNotice(shown ? (shown + " 　另外：" + probeError) : probeError, "bad");
-  }
 }
 
 // ---------- 取数 ----------
@@ -319,7 +247,7 @@ async function loadOverview() {
     renderFolders(data.folders || []);
     if (!(data.upstream || {}).ok) {
       setNotice("知识库暂时不可用：" + ((data.upstream || {}).message || "") +
-        " 下面只显示本机处理过的文件，等它恢复后点「刷新」即可。", "bad");
+        " 下面只显示应用内留档，等它恢复后点「刷新」即可。", "bad");
     }
   } catch (err) {
     setNotice("读取概览失败：" + err.message, "bad");
@@ -334,10 +262,10 @@ async function loadList() {
       "&topic_id=" + encodeURIComponent(state.topicId || "");
     const data = await fetchJSON("/api/files/list?" + query);
     state.rows = data.documents || [];
-    state.localRows = data.local_only || [];
-    // 后端可能因上限少回了若干条（local_only_total > 实际返回）。缺省回落到
-    // 实际条数，这样老版本后端 / 字段缺失时行为与改造前一致。
-    state.localTotal = Number(data.local_only_total) || state.localRows.length;
+    state.localRows = (data.local_only || []).filter(function (item) {
+      return String(item.state || "") === "skipped";
+    });
+    state.localTotal = state.localRows.length;
     state.upstreamOk = !(data.upstream && data.upstream.ok === false);
     if (!state.upstreamOk) { state.selected = {}; }
     applyUpstreamLabels();
@@ -364,21 +292,25 @@ function applyUpstreamLabels() {
   }
   if (knowledgeHint) {
     knowledgeHint.hidden = ok;
-    knowledgeHint.textContent = ok ? "" : "知识服务不可用，当前无法显示知识库文档；下方仅列本机已有记录。";
+    knowledgeHint.textContent = ok ? "" : "知识服务不可用，当前无法显示知识库文档；下方仅显示应用内留档。";
   }
   if (localTitle) {
-    localTitle.textContent = ok ? "本机有记录、知识库中没有" : "本机记录（未与知识库核对）";
+    localTitle.textContent = "跳过的文件";
   }
   if (localHint) {
     localHint.textContent = ok
-      ? "这些文件在本机留下了档案，但不在知识库里（等你确认 / 已跳过 / 未过质检 / 已删除）。"
-      : "知识服务不可用，以下为本机已有档案；目前无法判断哪些仍存在于知识库中。";
+      ? "用户已跳过的文件。可点击“继续入库”重新提交。"
+      : "知识服务不可用；以下为已跳过的文件，入库操作暂不可用。";
   }
   const checkAll = $("checkAll");
   const checkAllLocal = $("checkAllLocal");
   if (checkAll) { checkAll.disabled = !ok; }
   if (checkAllLocal) { checkAllLocal.disabled = !ok; }
-  if (!ok) { $("delBar").hidden = true; }
+  if (!ok && state.deleteMode) {
+    state.deleteMode = false;
+    state.selected = {};
+    document.body.classList.remove("delete-mode");
+  }
 }
 
 function statCell(key, value, extra) {
@@ -401,7 +333,7 @@ function renderOverview(data) {
     statCell("处理中 / 排队", upstreamOk ? ((counts.processing || 0) + (counts.parsing || 0) +
       (counts.analyzing || 0) + (counts.pending || 0)) : unknown) +
     statCell("失败", upstreamOk ? (counts.failed || 0) : unknown) +
-    statCell("本机作业", local.jobs || 0, "已入库 " + (local.in_knowledge_base || 0)) +
+    statCell("应用内留档", local.jobs || 0, "已加入知识库 " + (local.in_knowledge_base || 0)) +
     statCell("等你确认", local.waiting_review || 0) +
     statCell("收件箱等待", inbox.waiting || 0);
 
@@ -416,14 +348,14 @@ function renderOverview(data) {
   chips.push('<span class="chip ' + ((data.upstream || {}).ok ? "ok" : "bad") + '">知识库连接：' +
     ((data.upstream || {}).ok ? "正常" : "不可用") + '</span>');
   if (inbox.enabled) {
-    chips.push('<span class="chip ' + (inbox.running ? "ok" : "warn") + '">文件夹轮询：' +
+    chips.push('<span class="chip ' + (inbox.running ? "ok" : "warn") + '">自动扫描来源文件夹：' +
       (inbox.running ? ("运行中（每 " + inbox.poll_seconds + " 秒）") : "已开启但线程没跑") + '</span>');
   } else {
-    chips.push('<span class="chip">文件夹轮询：未开启（设置页 ⑧ 可开）</span>');
+    chips.push('<span class="chip">自动扫描来源文件夹：未开启（设置页 ⑧ 可开）</span>');
   }
   $("pipelineChips").innerHTML = chips.join("");
   $("upstreamHint").textContent = (data.upstream || {}).ok
-    ? ("地址：" + ((data.upstream || {}).url || "") + "　·　知识库留档 " +
+    ? ("地址：" + ((data.upstream || {}).url || "") + "　·　知识库文档 " +
        (local.knowledge_files || 0) + " 份")
     : ((data.upstream || {}).message || "");
 }
@@ -434,7 +366,7 @@ function renderInbox(inbox) {
   $("inboxStats").innerHTML =
     statCell("等待处理", inbox.waiting || 0, rel("inbox")) +
     statCell("正在等长稳", inbox.settling || 0) +
-    statCell("已受理", inbox.accepted || 0, "进入本机复核") +
+    statCell("已受理", inbox.accepted || 0, "等待确认") +
     statCell("重复跳过", inbox.duplicate || 0, "内容指纹相同") +
     statCell("受理失败", inbox.failed || 0, "源文件保留") +
     statCell("源文件保留", inbox.source_files || 0, rel("inbox"));
@@ -450,14 +382,14 @@ function renderInbox(inbox) {
       label + '</span> ' + escapeHtml(item.name) + ' <span class="muted">' +
       escapeHtml(item.detail) + '</span></li>';
   });
-  $("inboxEvents").innerHTML = events.length ? events.join("") : '<li class="muted">还没有记录</li>';
+  $("inboxEvents").innerHTML = events.length ? events.join("") : '<li class="muted">暂无处理动态</li>';
 }
 
 function renderFolders(folders) {
   $("folders").innerHTML = folders.map(function (item) {
     const open = state.canOpenFolder
       ? '<button type="button" class="open" data-folder="' + escapeHtml(item.key) + '">打开</button>'
-      : '<span class="muted">（本机页面可打开）</span>';
+      : '<span class="muted">（当前页面可打开）</span>';
     return '<div class="folder-row"><span class="nm">' + escapeHtml(item.label) + '</span>' +
       '<span class="pt">' + escapeHtml(item.relative) + '</span>' +
       '<span>' + (item.files || 0) + ' 个文件 · ' + fmtSize(item.bytes) +
@@ -481,11 +413,12 @@ function statusClass(row) {
 // 「操作」列仍是唯一入口，功能不受影响。
 function originCell(row) {
   if (row.can_open && row.origin) {
-    const label = (row.origin.kind_label || "原件") + (row.origin.kind === "knowledge" ? "（解析文本）" : "");
+    const labels = { source: "原始文件", archive: "应用内留档", knowledge: "知识库文档" };
+    const label = labels[row.origin.kind] || "文件";
     return '<span class="badge info">' + escapeHtml(label) + '</span>';
   }
-  const why = (row.origin && row.origin.reason) || "本机没有原件";
-  return '<span class="muted" title="' + escapeHtml(why) + '">找不到原件</span>';
+  const why = (row.origin && row.origin.reason) || "未找到可用文件";
+  return '<span class="muted" title="' + escapeHtml(why) + '">未找到可用文件</span>';
 }
 
 function originActionsHtml(row) {
@@ -495,8 +428,8 @@ function originActionsHtml(row) {
     '<button type="button" class="open" data-download-url="' + escapeHtml(origin.download_url || (origin.url + "?download=true")) + '">下载</button> ';
 }
 
-// 每一行都带一对标识（doc_id + file_id）。删除时必须成对提交，
-// 否则服务端只能猜「这条知识库记录对应哪个本机作业」——猜错就等于删错东西。
+// 选择记录始终保留 doc_id + file_id；具体动作只提交该动作适用的标识，
+// 服务端不会根据文件名或客户端路径猜测删除对象。
 function rowKey(row) { return (row.doc_id || "") + "|" + (row.file_id || ""); }
 
 // 空态里的「清空筛选 / 清空搜索」按钮。表格每次重绘都会换掉整段 innerHTML，
@@ -580,12 +513,12 @@ function renderRows() {
     // 筛空了必须给出路：只写「没有符合条件的文档」，用户不知道是搜错了还是库空了
     const filtered = !!(state.status || state.q || state.topicId);
     $("rows").innerHTML = '<tr><td colspan="9" class="muted">' + (!state.upstreamOk
-      ? '知识服务暂不可用，当前不显示知识库文档；本机记录见下方'
+      ? '知识服务暂不可用，当前不显示知识库文档；应用内留档见下方'
       : (filtered
       ? '没有符合条件的文档 <button type="button" class="open" data-clear-filters>清空筛选</button>'
       : '知识库中还没有文档，可在对话页上传资料')) + '</td></tr>';
     wireEmptyCta($("rows"));
-    updateDelBar();
+    updateSelectionUi();
     return;
   }
   $("rows").innerHTML = rows.map(function (row, index) {
@@ -600,7 +533,8 @@ function renderRows() {
     const full = (row.name || "") + (path ? " — " + path : "");
     const chunks = (row.chunks_count === null || row.chunks_count === undefined) ? "—" : row.chunks_count;
     return '<tr>' +
-      '<td><input type="checkbox" data-row="' + index + '"' + checked + ' aria-label="选择"></td>' +
+      '<td class="select-cell"><input type="checkbox" data-row="' + index + '"' + checked +
+        (state.busy || !state.deleteMode ? ' disabled' : '') + ' aria-label="选择"></td>' +
       '<td class="name" title="' + escapeHtml(full) + '">' + name + extra + '</td>' +
       '<td class="hide-md">' + topicCellHtml(row, "data-topic-row", index) + '</td>' +
       '<td><span class="badge ' + statusClass(row) + '">' + escapeHtml(row.status_label || "—") + '</span>' +
@@ -615,7 +549,7 @@ function renderRows() {
   }).join("");
   wireRowEvents($("rows"));
   wireTopicSelectors($("rows"));
-  updateDelBar();
+  updateSelectionUi();
 }
 
 function renderLocalRows() {
@@ -625,42 +559,39 @@ function renderLocalRows() {
   $("checkAllLocal").disabled = !state.upstreamOk;
   if (!rows.length) {
     // 本机表只受搜索词影响（状态筛选不作用于它），所以只有 q 非空时才给「清空搜索」
-    $("localRows").innerHTML = '<tr><td colspan="7" class="muted">' + (state.q || state.topicId
-      ? '没有匹配的本机记录 <button type="button" class="open" data-clear-filters>清空筛选</button>'
-      : '本机没有待处理的记录') + '</td></tr>';
+    $("localRows").innerHTML = '<tr><td colspan="5" class="muted">' + (state.q || state.topicId
+      ? '没有匹配的跳过文件 <button type="button" class="open" data-clear-filters>清空筛选</button>'
+      : '暂无跳过的文件') + '</td></tr>';
     wireEmptyCta($("localRows"));
     renderLocalPager();
     return;
   }
   $("localRows").innerHTML = rows.map(function (row, index) {
     const checked = state.selected[rowKey(row)] ? " checked" : "";
-    // 与知识库表一致：「原件」列只显示徽标，打开动作留给「操作」列（避免每行两个按钮）
-    const originCellHtml = row.origin && row.origin.available
-      ? '<span class="badge info">' + escapeHtml(row.origin.kind_label || "原件") + '</span>'
-      : '<span class="muted" title="' + escapeHtml((row.origin || {}).reason || "") + '">找不到原件</span>';
     // 本机行这一格是「文件名 + 一句说明」；说明可能很长（"已跳过：…可点「仍要入库」"），
     // 窄屏会被省略号截掉，所以完整内容放进 title
     const detail = row.local_detail || "";
+    const resumeButton = '<button type="button" class="resume" data-resume-local="' +
+      (slice.start + index) + '"' + (state.busy || state.deleteMode ? ' disabled' : '') +
+      '>继续入库</button> ';
     return '<tr>' +
       // data-local 必须是**在 state.localRows 里的绝对下标**：切过页之后
       // 表内下标不再等于数组下标，直接用 index 会勾错行
-      '<td><input type="checkbox" data-local="' + (slice.start + index) + '"' + checked
-        + (state.upstreamOk ? '' : ' disabled') + ' aria-label="选择"></td>' +
+      '<td class="select-cell"><input type="checkbox" data-local="' + (slice.start + index) + '"' + checked
+        + (state.upstreamOk && state.deleteMode && !state.busy ? '' : ' disabled') + ' aria-label="选择"></td>' +
       '<td class="name" title="' + escapeHtml(row.name + (detail ? " — " + detail : "")) + '">' +
       escapeHtml(row.name) +
       (detail ? '<span class="path">' + escapeHtml(detail) + '</span>' : "") + '</td>' +
       '<td class="hide-md">' + topicCellHtml(row, "data-topic-local", slice.start + index) + '</td>' +
-      '<td><span class="badge info">' + escapeHtml(row.local_state_label || "—") + '</span></td>' +
-      '<td class="hide-md">' + originCellHtml + '</td>' +
       '<td>' + escapeHtml(String(row.created_at || "").slice(0, 16)) + '</td>' +
-      '<td>' + originActionsHtml(row) +
+      '<td>' + resumeButton + originActionsHtml(row) +
       '<button type="button" class="open" data-detail-local="' + (slice.start + index) + '">详情</button></td>' +
       '</tr>';
   }).join("");
   wireRowEvents($("localRows"));
   wireTopicSelectors($("localRows"));
   renderLocalPager();
-  updateDelBar();
+  updateSelectionUi();
 }
 
 // 当前页的本机行，以及它在 state.localRows 里的起始下标。
@@ -735,6 +666,12 @@ function wireRowEvents(container) {
       if (row) { openLocalDetail(row); }
     });
   });
+  Array.prototype.slice.call(container.querySelectorAll("[data-resume-local]")).forEach(function (node) {
+    node.addEventListener("click", function () {
+      const row = state.localRows[Number(node.getAttribute("data-resume-local"))];
+      if (row) { resumeLocal(row, node); }
+    });
+  });
   Array.prototype.slice.call(container.querySelectorAll("[data-row]")).forEach(function (node) {
     node.addEventListener("change", function () {
       const row = state.rows[Number(node.getAttribute("data-row"))];
@@ -749,20 +686,75 @@ function wireRowEvents(container) {
   });
 }
 
+async function resumeLocal(row, button) {
+  if (state.busy || state.deleteMode || !row.file_id) { return; }
+  state.busy = true;
+  button.disabled = true;
+  button.textContent = "正在入库…";
+  updateSelectionUi();
+  try {
+    await fetchJSON("/api/ingest/action/" + encodeURIComponent(row.file_id), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resume" })
+    });
+    flash("已继续入库", "ok");
+    await loadAll();
+  } catch (err) {
+    setNotice("继续入库失败：" + err.message, "bad");
+  } finally {
+    state.busy = false;
+    if (document.body.contains(button)) {
+      button.disabled = false;
+      button.textContent = "继续入库";
+    }
+    renderRows();
+    renderLocalRows();
+    updateSelectionUi();
+  }
+}
+
 // ---------- 选择 ----------
+function selectedItems() {
+  return Object.keys(state.selected).map(function (key) { return state.selected[key]; });
+}
+
+function enterDeleteMode() {
+  if (state.busy || !state.local || !state.upstreamOk) { return; }
+  state.deleteMode = true;
+  state.selected = {};
+  document.body.classList.add("delete-mode");
+  renderRows();
+  renderLocalRows();
+  updateSelectionUi();
+}
+
+function exitDeleteMode() {
+  if (state.busy) { return; }
+  state.deleteMode = false;
+  state.selected = {};
+  closeDeleteDialog(false);
+  document.body.classList.remove("delete-mode");
+  $("checkAll").checked = false;
+  $("checkAllLocal").checked = false;
+  renderRows();
+  renderLocalRows();
+  updateSelectionUi();
+}
+
 function toggleRow(row, checked) {
+  if (state.busy || !state.deleteMode) { return; }
   const key = rowKey(row);
   if (checked) {
     state.selected[key] = {
       doc_id: row.doc_id || "",
       file_id: row.file_id || "",
-      file_path: row.file_path || "",
       name: row.name || ""
     };
   } else {
     delete state.selected[key];
   }
-  updateDelBar();
+  updateSelectionUi();
 }
 
 // 表头「全选」：改 state 之外还要把表内复选框一起同步。
@@ -770,69 +762,103 @@ function toggleRow(row, checked) {
 // 而现在表头勾选还可能是被翻页重置过的，两边更容易对不上。
 // 这里刻意**不**整表重渲染：重渲染会立刻把用户刚点上的表头「全选」打回未勾选。
 function toggleAll(checked, rows, container) {
-  if (!state.upstreamOk) { return; }
+  if (!state.upstreamOk || state.busy || !state.deleteMode) { return; }
   rows.forEach(function (row) { toggleRow(row, checked); });
   if (!container) { return; }
   Array.prototype.slice.call(container.querySelectorAll('input[type="checkbox"]'))
     .forEach(function (node) { node.checked = checked; });
 }
 
-function clearSelection() {
-  state.selected = {};
-  showConfirm(false);
-  renderRows();
-  renderLocalRows();
-  $("checkAll").checked = false;
-  $("checkAllLocal").checked = false;
+function updateSelectionUi() {
+  const count = selectedItems().length;
+  $("deleteModeBtn").hidden = !state.local;
+  $("deleteModeBtn").disabled = state.busy || !state.upstreamOk ||
+    (state.deleteMode && count === 0);
+  $("deleteModeBtn").textContent = state.deleteMode
+    ? (count ? "删除所选（" + count + "）" : "删除所选")
+    : "删除";
+  $("deleteModeBtn").classList.toggle("danger", state.deleteMode);
+  $("cancelDeleteModeBtn").hidden = !state.deleteMode;
+  $("cancelDeleteModeBtn").disabled = state.busy;
+  $("checkAll").disabled = !state.deleteMode || !state.upstreamOk || state.busy;
+  $("checkAllLocal").disabled = !state.deleteMode || !state.upstreamOk || state.busy;
 }
 
-function selectedItems() {
-  return Object.keys(state.selected).map(function (key) { return state.selected[key]; });
+function openDeleteDialog(trigger) {
+  if (state.busy || !state.deleteMode) { return; }
+  const items = selectedItems().map(function (item) {
+    return {
+      doc_id: item.doc_id || "",
+      file_id: item.file_id || "",
+      name: item.name || ""
+    };
+  });
+  if (!items.length) { return; }
+  state.deleteItems = items;
+  state.deleteReturnFocus = trigger || null;
+  $("deleteSelectionCount").textContent = "已选择 " + items.length + " 个文件";
+  $("deleteKnowledgeCopyLabel").hidden = !items.some(function (item) {
+    return !!item.doc_id;
+  });
+  $("deleteKnowledgeCopy").checked = false;
+  $("deleteConfirmation").value = "";
+  updateDeleteConfirmButton();
+  $("deleteDialogBackdrop").hidden = false;
+  $("deleteDialog").hidden = false;
+  focusQuiet($("deleteConfirmation"));
 }
 
-function updateDelBar() {
-  const count = Object.keys(state.selected).length;
-  // 手机 / 局域网页面（拿不到令牌）永远不显示删除区
-  $("delBar").hidden = !(state.local && state.token) || !state.upstreamOk || count === 0;
-  $("delCount").textContent = "已选 " + count + " 项";
-  if (!count) { showConfirm(false); }
+function updateDeleteConfirmButton() {
+  const ready = !state.busy &&
+    $("deleteConfirmation").value.trim().toLowerCase() === "yes";
+  $("confirmDelete").disabled = !ready;
+  $("confirmDelete").classList.toggle("ready", ready);
 }
 
-function currentScope() {
-  const nodes = document.querySelectorAll('input[name="scope"]');
-  for (let i = 0; i < nodes.length; i += 1) {
-    if (nodes[i].checked) { return nodes[i].value; }
-  }
-  return "kb";
-}
-
-// 打开/刷新确认框。注意：它同时是"重新确认"的入口 —— 范围或"删除原件"改变后会被再调一次，
-// 把「我确认上面的范围与后果」打回未勾选，所以文案与最终执行的后果始终是同一份。
-// 焦点进出只发生在**打开 / 关闭那一次**（wasHidden）：改选范围也会重跑这里，
-// 每次都抢焦点的话，用方向键选范围的用户会被反复弹回「我确认」。
-function showConfirm(visible) {
-  const wasHidden = $("confirmBox").hidden;
-  $("confirmBox").hidden = !visible;
-  $("confirmCheck").checked = false;
+function closeDeleteDialog(restoreFocus) {
+  const wasOpen = !$("deleteDialog").hidden;
+  $("deleteDialog").hidden = true;
+  $("deleteDialogBackdrop").hidden = true;
+  $("deleteConfirmation").value = "";
+  $("deleteKnowledgeCopy").checked = false;
+  $("deleteKnowledgeCopyLabel").hidden = true;
   $("confirmDelete").disabled = true;
-  if (!visible) {
-    // 关闭后焦点还给「删除…」（只在它还在屏幕上时给，否则 focus() 会静默失败）
-    if (!wasHidden && !$("delBar").hidden) { focusQuiet($("deleteBtn")); }
+  $("confirmDelete").classList.remove("ready");
+  state.deleteItems = [];
+  const trigger = state.deleteReturnFocus;
+  state.deleteReturnFocus = null;
+  if (wasOpen && restoreFocus && trigger && document.body.contains(trigger)) {
+    focusQuiet(trigger);
+  }
+}
+
+function deleteDialogFocusables() {
+  return Array.prototype.slice.call(
+    $("deleteDialog").querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])')
+  ).filter(function (node) {
+    return !node.disabled && !node.hidden && !node.closest("[hidden]");
+  });
+}
+
+function handleDeleteDialogKeydown(event) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeDeleteDialog(true);
     return;
   }
-  const scope = currentScope();
-  const removeOriginals = $("removeOriginals").checked;
-  $("confirmWhat").textContent = "将从 " + selectedItems().length + " 个文件里：" +
-    (scope === "kb" ? "只移除知识库记录" :
-      (scope === "local" ? "移除知识库记录 + 本机留档" : "移除知识库记录 + 本机留档 + 知识库里的 md 拷贝")) +
-    (removeOriginals ? "，并删除本地原件" : "") + "。";
-  // 颜色不再从 JS 里写死（原来是内联 style.color 的 #6b7280/#b45309/#dc2626/#059669）：
-  // 改成切类，取值统一来自 theme.css 的令牌
-  $("confirmLocal").classList.toggle("warn", scope !== "kb");
-  $("confirmOriginals").classList.toggle("danger", removeOriginals);
-  // 打开即把焦点送进对话框：此时「确认删除」还是禁用态（要先勾「我确认」），
-  // 聚焦禁用元素等于没聚焦，所以先落在唯一可操作的「我确认」上（勾上后自动转到确认键）。
-  if (wasHidden) { focusQuiet($("confirmCheck")); }
+  if (event.key !== "Tab") { return; }
+  const nodes = deleteDialogFocusables();
+  if (!nodes.length) { return; }
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    focusQuiet(last);
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    focusQuiet(first);
+  }
 }
 
 // ---------- 详情 ----------
@@ -843,6 +869,9 @@ function detailRow(key, value) {
 function renderDetail(doc) {
   const local = doc.local_job || {};
   const origin = doc.origin || {};
+  const originLabel = origin.kind === "archive"
+    ? "应用内留档"
+    : (origin.kind === "source" ? "原始文件" : "文件");
   const parts = [];
   parts.push('<div class="detail-grid">');
   parts.push(detailRow("名称", doc.name || doc.file_path || ""));
@@ -851,17 +880,17 @@ function renderDetail(doc) {
   parts.push(detailRow("分块", doc.chunks_count));
   parts.push(detailRow("track_id", doc.track_id || local.track_id || ""));
   parts.push(detailRow("更新时间", doc.updated_at || doc.created_at || ""));
-  parts.push(detailRow("本机作业", local.file_id || doc.file_id || ""));
-  parts.push(detailRow("本机状态", local.state || doc.local_state_label || ""));
+  parts.push(detailRow("应用内留档 ID", local.file_id || doc.file_id || ""));
+  parts.push(detailRow("处理状态", local.state || doc.local_state_label || ""));
   parts.push(detailRow("质量门", local.quality_level || doc.quality_level || ""));
   parts.push(detailRow("质量分", local.quality_score || doc.quality_score || ""));
-  parts.push(detailRow("原件", origin.path || local.source_path || ""));
-  parts.push(detailRow("原件说明", origin.reason || ""));
+  parts.push(detailRow(originLabel, origin.path || local.source_path || ""));
+  parts.push(detailRow("文件说明", origin.reason || ""));
   parts.push('</div>');
   if (doc.can_open && origin.url) {
     parts.push('<div class="detail-actions">' +
-      '<a href="' + escapeHtml(origin.url) + '" target="_blank" rel="noopener">打开原件</a>' +
-      '<a href="' + escapeHtml(origin.download_url || (origin.url + "?download=true")) + '" download>下载原件</a>' +
+      '<a href="' + escapeHtml(origin.url) + '" target="_blank" rel="noopener">打开' + escapeHtml(originLabel) + '</a>' +
+      '<a href="' + escapeHtml(origin.download_url || (origin.url + "?download=true")) + '" download>下载' + escapeHtml(originLabel) + '</a>' +
       '</div>');
   }
   if (doc.content_summary) {
@@ -896,46 +925,85 @@ function openLocalDetail(row) {
 }
 
 // ---------- 删除 ----------
+function deletionResultText(job) {
+  const succeeded = Number(job.succeeded || 0);
+  const failed = Number(job.failed || 0);
+  const pending = Number(job.pending || 0);
+  if (failed) {
+    return "操作完成：成功 " + succeeded + " 项，失败 " + failed + " 项。" +
+      (pending ? "另有 " + pending + " 项知识库移除仍在处理中。" : "") +
+      "请查看结果后重试失败项。";
+  }
+  return pending
+    ? ("已删除 " + succeeded + " 项；知识库移除仍在处理中。")
+    : ("已删除 " + succeeded + " 项。");
+}
+
 async function doDelete() {
-  const items = selectedItems();
+  if (state.busy || $("confirmDelete").disabled) { return; }
+  const items = state.deleteItems.map(function (item) {
+    return {
+      doc_id: item.doc_id || "",
+      file_id: item.file_id || "",
+      name: item.name || ""
+    };
+  });
   if (!items.length) { return; }
-  const scope = currentScope();
-  const removeOriginals = $("removeOriginals").checked;
+  const deleteKnowledgeUploadCopy = $("deleteKnowledgeCopy").checked &&
+    !$("deleteKnowledgeCopyLabel").hidden;
+  state.busy = true;
+  updateSelectionUi();
   $("confirmDelete").disabled = true;
   $("confirmDelete").textContent = "正在提交…";
   try {
     const data = await fetchJSON("/api/files/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope: scope, confirm: true, remove_originals: removeOriginals, items: items })
+      body: JSON.stringify({
+        confirmation: "Yes",
+        delete_knowledge_upload_copy: deleteKnowledgeUploadCopy,
+        items: items
+      })
     });
     const jobId = data.job && data.job.id;
     if (!jobId) { throw new Error("删除任务未返回任务编号"); }
-    $("delBar").hidden = false;
+    closeDeleteDialog(false);
+    state.selected = {};
+    state.deleteMode = false;
+    document.body.classList.remove("delete-mode");
     setNotice("删除任务已开始…", "");
-    clearSelection();
+    renderRows();
+    renderLocalRows();
     let job = data.job;
     for (let i = 0; i < 120; i += 1) {
       await new Promise(function (resolve) { setTimeout(resolve, 1000); });
       const status = await fetchJSON("/api/files/delete/" + encodeURIComponent(jobId));
       job = status.job || job;
       setNotice("删除进度 " + (job.completed || 0) + " / " + (job.total || 0) +
-        "，成功 " + (job.succeeded || 0) + "，失败 " + (job.failed || 0), job.failed ? "bad" : "");
+        "，成功 " + (job.succeeded || 0) + "，失败 " + (job.failed || 0) +
+        (job.pending ? "，待确认 " + job.pending : ""), job.failed ? "bad" : "");
       if (job.status === "completed") { break; }
     }
     if (job.status !== "completed") {
-      throw new Error("删除任务超时，请刷新后检查结果");
+      setNotice("任务仍在处理中，请稍后刷新查看结果。", "");
+      scheduleRefresh();
+      return;
     }
-    setNotice(job.failed
-      ? ("删除完成：成功 " + (job.succeeded || 0) + "，失败 " + (job.failed || 0))
-      : ("删除完成：成功 " + (job.succeeded || 0) + " 项"), job.failed ? "bad" : "ok");
+    setNotice(
+      deletionResultText(job),
+      job.failed ? "bad" : (job.pending ? "" : "ok")
+    );
     await loadAll();
     scheduleRefresh();
   } catch (err) {
     setNotice("删除失败：" + err.message, "bad");
   } finally {
-    $("confirmDelete").textContent = "确认删除";
-    $("confirmDelete").disabled = false;
+    state.busy = false;
+    $("confirmDelete").textContent = "删除";
+    updateDeleteConfirmButton();
+    renderRows();
+    renderLocalRows();
+    updateSelectionUi();
   }
 }
 

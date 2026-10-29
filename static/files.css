@@ -60,18 +60,28 @@
   .pager{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
   .pager button{flex:0 0 auto;white-space:nowrap}
   .pager #pageInfo,.pager #localPageInfo{flex:1 1 auto;min-width:0}
-  .delbar{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--line);
-    border-radius:12px;padding:12px 14px;margin-top:12px;box-shadow:var(--shadow-bar)}
-  .delbar .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-  .delbar label{display:flex;gap:6px;align-items:center;font-size:13px}
-  .confirm{background:var(--warn-soft);border:1px solid var(--warn-line);border-radius:10px;padding:12px;margin-top:10px;font-size:13px}
-  .confirm ul{margin:6px 0 0 18px;padding:0}
-  /* 确认框里"哪一条会真的被删"的着色：默认态 = 不会动它，加了类才是"会删" */
-  #confirmLocal{color:var(--muted)}
-  #confirmOriginals{color:var(--ok-text)}
-  #confirmLocal.warn{color:var(--warn-text)}
-  #confirmOriginals.danger{color:var(--bad-text)}
-  .confirm .ask{margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  body:not(.delete-mode) th.col-check,
+  body:not(.delete-mode) td.select-cell{display:none}
+  button.resume{border-color:var(--ok-line);background:var(--ok-soft);color:var(--ok-text);
+    min-height:26px;padding:2px 8px;font-size:12px;font-weight:600;line-height:1.2;border-radius:7px}
+  button.resume:hover{background:var(--ok-soft);filter:brightness(.97)}
+  .delete-dialog-backdrop{position:fixed;inset:0;z-index:80;background:var(--overlay)}
+  .delete-dialog{position:fixed;z-index:81;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:min(440px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:20px;box-shadow:var(--shadow-modal)}
+  .delete-dialog h2{font-size:16px;margin:0 0 8px;color:var(--text)}
+  .delete-selection-count{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .delete-option{display:flex;gap:8px;align-items:center;padding:10px 11px;margin-bottom:14px;
+    border:1px solid var(--line);border-radius:9px;font-size:13px;color:var(--grey-text)}
+  .delete-option input{accent-color:var(--brand)}
+  .delete-confirm-field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--grey-text)}
+  .delete-confirm-field input{border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    font:inherit;background:var(--surface-input);color:var(--text)}
+  .delete-confirm-field input:focus{outline:2px solid var(--brand-line-focus);outline-offset:1px}
+  .delete-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .delete-dialog-actions button{min-width:96px}
+  #confirmDelete{background:var(--grey-soft);color:var(--muted);border-color:var(--line)}
+  #confirmDelete.ready{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad-text);font-weight:600}
   .events{list-style:none;margin:8px 0 0;padding:0;max-height:190px;overflow:auto;font-size:12.5px}
   .events li{border-top:1px dashed var(--line);padding:5px 0;color:var(--grey-text)}
   .events .t{color:var(--muted);margin-right:6px}
@@ -79,6 +89,11 @@
   .folder-row:last-child{border-bottom:0}
   .folder-row .nm{min-width:180px}
   .folder-row .pt{color:var(--muted);font-size:12px}
+  @media(max-width:620px){
+    .delete-dialog{padding:18px 16px}
+    .delete-dialog-actions button{flex:1 1 auto}
+    .skip-scroll{max-height:220px}
+  }
   /* 「正在停止 / 服务已停止」遮罩（与对话页同一套样式，用户在哪一页看到的提示都一样） */
   .stopping{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
     padding:24px;background:var(--overlay)}
@@ -99,11 +114,12 @@
   /* ≤900px 起就收起冗余列：这一档放不下全部列，行高会飙到 390px
      （实测 621px 处整页 14405px —— 比 500px 的 6418px 还高一倍多）。
      .hide-sm 要到 ≤620px 才生效，中间这一段反而是最差的。
-     因此两张表都用 .hide-md：本机表的「原件」、知识库表的「本机留档 / 原件」
+     因此两张表都用 .hide-md：知识库表的「应用内留档 / 原始文件」
      在 ≤900px 一并收起；原件仍可从「操作」列的「打开原件」进入。 */
   @media (max-width:900px){
     th.hide-md,td.hide-md{display:none}
     button{min-height:38px}
+    button.resume{min-height:32px;padding:3px 9px}
     /* 文件名 / 路径不再逐字换行（word-break:break-all）：一行长路径能把一张表顶到上万像素高。
        621~800px 尤其明显 —— 收起两列后文件名列仍只有约 100px，长名字会把行高撑到 135px。
        所以单行省略跟着列收起一起放到 ≤900px；完整内容在 title 里。
@@ -177,6 +193,22 @@ header.bar .grow{flex:0 1 8px;min-width:0}
 .page-subbar .sub{color:var(--muted);font-size:12.5px}
 .page-subbar .grow{flex:1 1 auto}
 .page-subbar button{min-height:34px;padding:5px 10px}
+.page-subbar .compact-action{min-width:68px;padding:5px 10px;font-size:13px}
+
+/* 知识库文档是主内容；概览和跳过区只做辅助信息。 */
+.overview-card{padding:10px 12px;margin-bottom:10px}
+.overview-card h2{font-size:13px;margin-bottom:6px}
+.overview-card .grid{grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:6px}
+.overview-card .stat{padding:7px 9px;border-radius:8px}
+.overview-card .stat .k{font-size:11px}
+.overview-card .stat .v{font-size:16px;line-height:1.25}
+.overview-card .chips{gap:5px;margin-top:4px}
+.overview-card .chip{font-size:11.5px;padding:2px 8px}
+.primary-card h2{font-size:17px}
+.secondary-card{margin-top:10px}
+.secondary-card h2{font-size:14px}
+.skip-scroll{max-height:270px;overflow:auto}
+.skip-scroll thead th{position:sticky;top:0;z-index:1;background:var(--panel)}
 
 @media (max-width:620px){
   header.bar{height:56px;padding:0 8px;gap:6px}

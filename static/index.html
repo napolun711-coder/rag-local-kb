@@ -33,7 +33,7 @@
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       <span>新建对话</span>
     </button>
-    
+
 
     <div class="side-history">
       <div class="side-title">历史会话</div>
@@ -67,31 +67,31 @@
         <span class="ico">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg>
         </span>
-        <span class="txt">历史检索<small>只读 · 跨会话找原话</small></span>
+        <span class="txt">历史检索</span>
       </button>
       <a id="memoryBtn" class="side-item" href="/memory" target="_blank" rel="noopener" title="记忆管理：查看/确认/拒绝/编辑/删除记忆与来源（写操作仅限本机）">
         <span class="ico">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9"/><path d="M4 8h9M4 12h9M4 16h7"/><path d="M7 4v16"/></svg>
         </span>
-        <span class="txt">记忆管理<small>待确认 · 来源 · 删除</small></span>
+        <span class="txt">记忆管理</span>
       </a>
       <a id="sideFiles" class="side-item" href="/files" title="文件管理：知识库文档、原件、本机留档与删除">
         <span class="ico">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8h8.4A1.5 1.5 0 0 1 20 9.3v8.2A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5Z"/></svg>
         </span>
-        <span class="txt">文件管理<small>原件 · 留档 · 删除</small></span>
+        <span class="txt">文件管理</span>
       </a>
       <button id="graphBtn" class="side-item" title="浏览知识图谱（实体与关系，只读）">
         <span class="ico">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="13" r="2.5"/><path d="M7.9 15.9 10.4 14.5M13.6 11.4 16.4 8.3"/></svg>
         </span>
-        <span class="txt">知识图谱<small>实体与关系浏览</small></span>
+        <span class="txt">知识图谱</span>
       </button>
       <a id="sideSettings" class="side-item only-desktop" href="/settings" title="设置：解析 · OCR · 入库确认 · 文件夹轮询 · 朗读">
         <span class="ico">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.3"/><path d="M2 3.4v2.1M12 18.5v2.1M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M3.4 12h2.1M18.5 12h2.1M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/></svg>
         </span>
-        <span class="txt">设置<small>解析 · OCR · 入库 · 轮询</small></span>
+        <span class="txt">设置</span>
       </a>
     </div>
 
@@ -103,7 +103,8 @@
     </div>
 
           <div class="side-version" id="appVersion">v0.1.0</div>
-</aside>
+
+</aside>
 
   <!-- 手机端侧栏抽屉的遮罩：只在 ≤900px 显示，点它收起侧栏 -->
   <div class="side-mask" id="sideMask" hidden></div>
@@ -151,7 +152,7 @@
                 aria-label="更多" aria-expanded="false" aria-controls="moreMenu">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
         </button>
-        
+
       </div>
 
       <!-- 手机端溢出菜单。菜单项都是"委托"：点它们等于点顶栏上那批被 CSS 隐藏的按钮，
@@ -228,6 +229,7 @@
          刻意不提供任何会改动知识库的操作（上传/删除/清空/重建/删实体）。 -->
     <section class="graph-view" id="graphView" hidden>
       <div class="graph-bar">
+        <button type="button" id="graphClose" class="mini graph-back return-action">← 返回对话</button>
         <!-- 标题交给顶栏（setTopbarTitle("知识图谱", "实体与关系浏览（只读）")）——
              这里原来又写了一遍「知识图谱 / 实体与关系浏览」，同一句话在同一屏出现两次。
              这一行只留"现在看的是哪张图"，也就是作用域信息。 -->
@@ -240,7 +242,6 @@
           <button type="button" id="graphBackGlobal" class="mini">返回全局</button>
           <button type="button" id="graphRefresh" class="mini">刷新</button>
           <button type="button" id="graphRelayout" class="mini">复位视角</button>
-          <button type="button" id="graphClose" class="mini">返回对话</button>
         </span>
       </div>
       <div class="graph-3d-hint" id="graph3dHint" hidden>

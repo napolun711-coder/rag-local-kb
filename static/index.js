@@ -5440,6 +5440,7 @@ function graphBindCanvas() {
 // 打开图谱视图：收起对话区与输入区，把屏幕让给图谱
 function showGraphView() {
   leaveIntro(true);            // 开场块与图谱不能同屏
+  document.body.classList.add("graph-open");
   $("graphView").hidden = false;
   chatArea.hidden = true;
   $("composer").hidden = true;
@@ -5477,6 +5478,7 @@ function closeGraph() {
   $("composer").hidden = false;
   const pane = document.querySelector(".main");
   if (pane) { pane.classList.remove("graph"); }
+  document.body.classList.remove("graph-open");
   setTopbarTitle("智能问答", "基于你的个人资料库，支持上传文档并自动构建");
   if (!sessionHasMessages()) { enterIntro(); }   // 回到一个还空着的会话：把开场态放回来
   input.focus();
