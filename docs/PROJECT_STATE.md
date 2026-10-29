@@ -572,3 +572,62 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - The isolated service group was restarted without overrides and the mock process
   was stopped; port `19300` is no longer listening. No formal configuration was
   written.
+
+## Desktop launcher (2026-10-29)
+
+- Replaced `RAG启动器.ps1` with a Windows 5.1-compatible desktop launcher that
+  delegates startup to the existing lifecycle with `--reuse-running`.
+- Added a mutex so concurrent launches do not start duplicate service groups.
+- Startup repair is bounded to one dependency/setup attempt and one lifecycle
+  retry. Only verified project-owned listeners are stopped; unrelated port
+  owners are never terminated.
+- The launcher never deletes knowledge, uploads, memory, indexes, or
+  configuration, and it never downloads models. Missing Ollama models are
+  reported with a manual `ollama pull` suggestion.
+- Added `scripts/install_desktop_shortcut.ps1`. It writes only
+  `RAG 本地知识库启动.lnk` on the current user's desktop and does not create an
+  automatic startup item.
+- The actual shortcut was written and verified at
+  `<user-profile>\Desktop\RAG 本地知识库启动.lnk`, targeting Windows
+  PowerShell with the project launcher and working directory.
+- Launcher self-test passed dependency imports, lifecycle script discovery,
+  setup script discovery, and lifecycle status invocation.
+- Not yet verified in this wave: a real launch of the default service group,
+  repair of deliberately broken dependencies, stale-port cleanup, and
+  model-missing recovery messaging. These require a separate bounded acceptance
+  run after confirming the default and isolated service-group state.
+
+## Knowledge graph integration (2026-10-29)
+
+- Added a read-only graph bridge through the existing architecture:
+  `features/knowledge -> LightRagHttpClient -> lightrag_shell -> LightRAG`.
+- Exposed only `GET /api/graph/global`, `/subgraph`, `/popular`, and `/search`.
+  LightRAG entity/relation create, edit, merge, and delete routes remain
+  unreachable from the application and Shell.
+- Mapped the frontend's `depth` and `max` values to the official
+  `max_depth` and `max_nodes` parameters. Global graphs default to 400 nodes;
+  subgraphs are limited to depth 3 and 200 nodes.
+- Normalized the official label endpoints from bare arrays to `{items: [...]}`.
+- The existing graph UI now keeps edge type, description, keywords, weight, and
+  source files. Users can click an edge or a related entity to inspect the
+  relationship, click the type legend to filter visible node types, and refresh
+  the current graph without leaving the view.
+- Frontend errors now preserve the backend message instead of showing only an
+  HTTP status, and subgraph requests use `max_nodes` consistently.
+- Added eight focused graph contract tests. Adapter mapping, Shell parameter
+  normalization, app error mapping, label trimming, and the read-only route
+  allowlist all passed. `node --check` and targeted Python compilation also
+  passed.
+- An isolated restart from `.integration-run/20261028-234918-full` first failed
+  because `orjson` reported an access-denied DLL load. Reinstalling only
+  `orjson==3.13.0` with `uv --link-mode=copy` repaired that import.
+- The next isolated restart reached a second engine import failure:
+  `PermissionError` reading `numpy/__init__.py` in the engine virtual
+  environment. This indicates a broader ACL problem in that environment, not a
+  graph-code defect. The lifecycle reported the service group stopped.
+- Port `19180` briefly returned an old HTTP 404 from an unrecorded listener.
+  A later targeted check found ports `19180`, `19161`, and `19162` no longer
+  listening; no process was terminated.
+- Not yet verified in this wave: graph queries against real indexed data and
+  browser-level interaction. This remains the release acceptance step after the
+  engine virtual-environment permissions are repaired.
