@@ -697,3 +697,28 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - The previous engine environment remains retained at
   `services/lightrag_engine/.venv.pre-rebuild-20261029` pending a later cleanup
   approval.
+
+## LAN access boundary and release gate (2026-10-29)
+
+- LAN boundary acceptance ran against an isolated app bound to
+  `0.0.0.0:19180`; engine and shell remained on loopback ports.
+- An unpaired client connecting through the host LAN adapter was redirected
+  from `/web` with HTTP 307 and received HTTP 401 from
+  `/api/graph/global`.
+- `/health` remained public with HTTP 200 and contained no API key, token,
+  secret, authorization header, or service URL.
+- The isolated client created a pairing request, the local computer approved
+  it, and the claim returned HTTP 200 with an HttpOnly cookie.
+- After authorization, `/web` and the graph API returned HTTP 200. The access
+  status reported `local=false` and `authorized=true`.
+- Revoking the device restored HTTP 307 for `/web` and HTTP 401 for the graph
+  API. The isolated test device was removed, and no LAN-gate test devices
+  remain in the formal application data.
+- The isolated group was stopped and the default group restored on
+  `10262`/`10261`/`18080`.
+- Final technical release gate passed: 50 tests, JavaScript syntax checks,
+  default health, `/web` HTTP 200, graph global/popular/subgraph reads, and all
+  three services healthy with no duplicates.
+- Final release sign-off remains pending manual acceptance and commit of the
+  current uncommitted UI changes (`static/index.*`, `files.html`, `memory.html`,
+  `settings.html`, `theme.css`). No backend or data issue remains from this gate.
