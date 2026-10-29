@@ -1599,3 +1599,17 @@ Remaining release work:
   the README first-run checklist from that download.
 - No further feature, authentication, or performance work is planned for this
   release.
+
+## GitHub release preparation (R3, 2026-10-30)
+
+- Added repository-metadata instructions to `docs/RELEASE.md`: real
+  `[project.urls]`, issue security-advisory URL, `origin`, and first push.
+- Release publishing now generates GitHub release notes and fails if the ZIP or
+  checksum asset does not match; the tested artifact remains the only published
+  asset source.
+- Validated the release ZIP tests under Python 3.12 in an isolated extraction:
+  `uv sync --frozen --no-dev --python 3.12`, then 127/127 tests passed.
+- No GitHub CLI or remote is configured in this checkout. Repository creation,
+  URL replacement, push, tag creation, and Actions execution remain
+  environment-dependent and were not performed.
+- Formal services were not restarted and remain healthy on 0.1.0.

@@ -3,6 +3,24 @@
 The supported user artifact is the Windows Release ZIP (`local-rag-kb-<version>-win64.zip`)
 plus its `.sha256` file. The Python wheel is not a standalone web-UI distribution.
 
+## 0. Repository metadata (first release)
+
+After creating the GitHub repository, replace the placeholder values:
+
+- Add `[project.urls]` to `pyproject.toml` with the real Homepage/Repository/
+  Issues URLs.
+- Update the security-advisory contact in `.github/ISSUE_TEMPLATE/config.yml`.
+- Use the real repository in `config/update.example.json` examples and
+  `docs/RELEASE.md` commands.
+- Set `origin` and push `main` before creating the release tag.
+
+```toml
+[project.urls]
+Homepage = "https://github.com/OWNER/REPOSITORY"
+Repository = "https://github.com/OWNER/REPOSITORY"
+Issues = "https://github.com/OWNER/REPOSITORY/issues"
+```
+
 ## 1. Freeze and version
 
 - Finish the release notes in `CHANGELOG.md`.
