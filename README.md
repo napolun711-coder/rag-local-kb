@@ -39,6 +39,32 @@ are already running, it opens the existing web UI instead of reporting an error.
 Keep the command window open while startup is in progress; it closes after a
 successful start.
 
+### Desktop launcher (Windows)
+
+Install or refresh the desktop shortcut with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install_desktop_shortcut.ps1" -Force
+```
+
+The shortcut runs `RAG启动器.ps1` in the project root. The launcher reuses the
+normal lifecycle, avoids starting a second service group, and performs at most
+one safe repair followed by one retry when startup fails. Repair is limited to
+project-local dependencies and verified project-owned listener processes. It
+does not delete data or indexes, terminate unrelated processes, or download
+models automatically. A missing Ollama model is reported with a suggested
+`ollama pull` command for the user to run.
+
+Check the launcher without starting services:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\RAG启动器.ps1" -SelfTest -NoPause
+```
+
+The installer updates only `RAG 本地知识库启动.lnk` on the current user's
+desktop. It does not create an automatic startup item. Re-run it with `-Force`
+after moving the project.
+
 The lifecycle starts the LightRAG engine, the HTTP shell, and the application in
 dependency order. Open the URL printed by the launcher, normally:
 
