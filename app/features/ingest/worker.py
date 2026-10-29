@@ -237,6 +237,7 @@ def stop() -> None:
             thread.join(timeout=2)
     with _LOCK:
         _THREADS.clear()
+        _IN_FLIGHT.clear()
         _STARTED = False
 
 
