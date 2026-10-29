@@ -652,3 +652,27 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   relationship panel showed type, weight, source document, and both endpoints.
 - No graph mutation endpoint was called. No ingestion, configuration save,
   deletion, or formal data-directory write was performed.
+
+## Dependency health summary and default deployment (2026-10-29)
+
+- Extended `/health` without breaking the existing `status` and `version`
+  fields. It now reports LightRAG reachability, Ollama model availability, and
+  the active vector-storage state without returning service URLs or secrets.
+- The chat sidebar now distinguishes `ready`, `unavailable`, and
+  `not_in_use`. A local vector store is shown as `未启用` rather than a false
+  connection failure.
+- Added four offline health-summary tests. The combined health and graph suite
+  passed 13/13; JavaScript syntax and Python compilation also passed.
+- Stopped the isolated group, then cold-started the default service group on
+  `10262` (engine), `10261` (shell), and `18080` (app).
+- Default `/health` reported LightRAG `ready`, Ollama `ready`, and Qdrant
+  `not_in_use` with `NanoVectorDBStorage`. `/web` returned HTTP 200.
+- A bounded read-only default check returned 5 global nodes and 4 edges without
+  truncation, five popular entities, and a one-hop subgraph with four nodes and
+  three edges.
+- Browser acceptance confirmed the default page and corrected dependency
+  status labels. No ingestion, configuration save, deletion, or graph mutation
+  was performed.
+- The previous engine environment remains retained at
+  `services/lightrag_engine/.venv.pre-rebuild-20261029` pending a later cleanup
+  approval.
