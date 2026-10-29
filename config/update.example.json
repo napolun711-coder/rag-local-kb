@@ -1,0 +1,5 @@
+{
+  "repo": "OWNER/REPOSITORY",
+  "branch": "main",
+  "asset_pattern": "win64.zip"
+}

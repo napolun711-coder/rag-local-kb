@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build release ZIP and checksum
+        shell: powershell
+        run: |
+          $match = [regex]::Match([IO.File]::ReadAllText('pyproject.toml'), '(?m)^\s*version\s*=\s*"([^"]+)"')
+          if (-not $match.Success) { throw 'Cannot read version from pyproject.toml' }
+          $version = $match.Groups[1].Value
+          if (('v' + $version) -ne $env:GITHUB_REF_NAME) {
+            throw "Tag $env:GITHUB_REF_NAME does not match pyproject version $version"
+          }
+          ./scripts/package_release.ps1 -Version $version
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .updates/release/*.zip
+            .updates/release/*.sha256

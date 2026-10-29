@@ -149,14 +149,47 @@ that process occupies a configured port.
 
 ## Upgrades
 
-R1 does not yet implement an automatic updater. The planned R2 update flow is
-user-confirmed rather than silent: check GitHub Releases, stop project-owned
-services, back up the SQLite database and configuration inside the project,
-download and verify the release under `.updates/`, replace code only, run
-migrations, health-check, and roll back on failure. User data under `data/`,
-`knowledge/`, `logs/`, configuration files, and model files are not update
-targets. Until R2 lands, upgrade by replacing only code files while preserving
-those paths, then run `deploy.cmd`.
+Updates are user-confirmed, never silent. `update.cmd` stops only services owned
+by this project, backs up the SQLite memory database and configuration under
+`.updates/backups/`, replaces code only, restores dependencies, starts the
+services, and checks `/health`. If any step fails, it restores the previous code
+and runtime backup.
+
+Choose the mode that matches the installation:
+
+- **Git clone (recommended):** `update.cmd` uses `origin` and the configured
+  branch. It fast-forwards only, shows incoming commits, and refuses to run when
+  tracked local code changes exist.
+- **GitHub Releases:** copy `config/update.example.json` to
+  `config/update.json`, set `repo` to `OWNER/REPOSITORY`, then run
+  `update.cmd -Release`. The updater downloads the latest Windows ZIP and its
+  SHA256 asset.
+- **Offline / local archive:** `update.cmd -ArchivePath <zip> -Checksum <sha256>`.
+  A checksum is required before anything is changed.
+
+Check without changing anything:
+
+```powershell
+update.cmd -CheckOnly
+```
+
+The updater prompts for `UPGRADE` before applying. Use `-Yes` only for
+unattended runs. User data under `data/`, `knowledge/`, and `logs/`, `.env`,
+`config/`, virtual environments, `.tools/`, and model files are never update
+targets. Local-only APIs remain local; the updater does not expose a remote
+service.
+
+### Publishing a release
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\package_release.ps1"
+```
+
+This writes `local-rag-kb-<version>-win64.zip` and `.sha256` under
+`.updates/release/`, excluding runtime data, user configuration, caches, and
+virtual environments. Pushing a matching `v*` tag runs the GitHub Actions
+workflow, which builds the same assets and publishes them to the release. Keep
+the tag and `pyproject.toml` version in sync; the workflow rejects a mismatch.
 
 ## Settings
 

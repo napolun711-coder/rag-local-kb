@@ -41,6 +41,11 @@
   uv/Python/cache handling, local Ollama detection and configuration, a
   no-write `-CheckOnly` mode, a stronger doctor, and a project-local launcher
   shortcut; no system installs, desktop writes, or model downloads
+- upgrades: user-confirmed `update.cmd` with Git fast-forward, GitHub Release,
+  and offline-archive modes; SHA256 verification, unsafe-path rejection,
+  project-local runtime/code backups, code-only replacement, health checks, and
+  rollback on failure; `package_release.ps1` and a tagged release workflow build
+  code-only Windows ZIPs without user data, configuration, caches, or venvs
 - settings: mark unimplemented confirmation modes and remove the false
   automatic-skip claim
 

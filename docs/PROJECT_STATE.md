@@ -1279,7 +1279,7 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
 - `scripts/install_desktop_shortcut.ps1` defaults to a project-local shortcut;
   writing to the desktop is an explicit `-Desktop` opt-in.
 - `.tools/`, `.updates/`, and project-local `.lnk` files are ignored by Git.
-- R1 does not implement upgrades. Natural user-confirmed upgrade remains R2.
+- R1 did not implement upgrades; R2 below adds the user-confirmed updater.
 
 ### Verification
 
@@ -1303,6 +1303,76 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   auto-downloaded.
 - Network failures during uv/Python provisioning are reported but not retried
   beyond the existing download/uv behavior.
-- The updater and rollback flow are not implemented yet.
+- At R1 time the updater and rollback flow were not implemented; see R2 below.
 - The project-local launcher shortcut is not placed on the desktop unless the
   user explicitly opts in.
+
+## Natural upgrade (R2, 2026-10-30)
+
+- Added `update.cmd` and `scripts/update.ps1` with three user-confirmed modes:
+  Git fast-forward, GitHub Releases asset download, and offline local archive.
+- Before changing code, the updater stops lifecycle-owned services and backs up
+  `data/memory`, `data/index-compatibility.json`, `.env`, `config/app.env`,
+  `config/engine.env`, and `services/lightrag_engine/.env` under
+  `.updates/backups/<timestamp>/runtime`. Release/archive mode also backs up
+  the code entries for rollback. Git mode rolls back with `git reset --hard`.
+- Code replacement is limited to declared code entries. It never replaces
+  `data/`, `knowledge/`, `logs/`, `config/`, virtual environments, `.tools/`, or
+  model storage.
+- The updater verifies local/archive SHA256, rejects unsafe archive paths before
+  extraction, refuses dirty tracked Git worktrees, and requires an explicit
+  `UPGRADE` confirmation unless `-Yes` is supplied.
+- Added `scripts/package_release.ps1`: builds a code-only Windows ZIP and SHA256
+  under `.updates/release/`, excluding runtime data, user configuration, caches,
+  `__pycache__`, virtual environments, and integration-test roots.
+- Added `.github/workflows/release.yml`: a matching `v*` tag builds the ZIP and
+  publishes it with the checksum; the workflow rejects a tag/version mismatch.
+- Added `config/update.example.json` and documented Git, Release, and offline
+  upgrade paths in `README.md` and `部署阶段.md`.
+
+### Verification
+
+- PowerShell parser checks passed for `update.ps1` and `package_release.ps1`;
+  both retain UTF-8 BOM for Windows PowerShell 5.1.
+- `package_release.ps1` produced a 179-entry ZIP and checksum with no
+  `data/`, `knowledge/`, `logs/`, `.env`, user `config/`, `.venv/`, `.tools/`,
+  `.updates/`, `.integration-run/`, or `__pycache__` entries; `Expand-Archive`
+  recovered `app/main.py` and `scripts/update.ps1`, and applying the ZIP to a
+  fake root installed the root launcher and deployment document.
+- Local archive apply in an isolated fake root changed code from 0.1.0 to
+  0.2.0, preserved the SQLite DB and `.env`/config files, removed stale code,
+  and created a code backup.
+- A wrong SHA256 exited 1 before any backup or code change. `-CheckOnly`
+  against the built package exited 0 without creating `.updates` or changing
+  code/data. A failed dependency sync after apply rolled back code and runtime
+  data to 0.1.0 with data intact.
+- Git mode against a local bare remote fast-forwarded 0.1.0 to 0.2.0, preserved
+  untracked data/config, and created a runtime backup. A dirty tracked worktree
+  was refused before fetching/applying.
+- Self-update replacing the running `update.cmd` and `scripts/update.ps1`
+  completed successfully in a fake root.
+- An archive containing `../evil.txt` was rejected before backup/apply; no file
+  was written outside the extract directory.
+- All upgrade tests used `.integration-run/r2-*`; formal data and the external
+  reference application were not touched.
+
+### Remaining risks
+
+- A real GitHub Release download, GitHub Actions run, and upgrade of the running
+  formal three-service installation have not been executed. The release gate
+  still needs one isolated old-version -> upgrade -> health -> rollback drill.
+- There is no database or index migration framework. A future release that
+  changes persisted schemas needs an explicit migration step before code-only
+  replacement is safe.
+- Rollback restores code and runtime data, but if dependency sync or service
+  startup also fails, the installation may still be down; the updater reports
+  this separately.
+- GitHub API checks are unauthenticated and can hit rate limits; offline archive
+  updates require the user to supply a SHA256.
+- Updates are Windows-only, without delta packages, code signing, or
+  stable/beta channels. Backups under `.updates/backups` currently have no
+  automatic retention policy.
+- The updater replaces a declared code-entry list. New top-level code paths
+  must be added to that list in a release that is applied before the path is
+  required; code added under existing entries (`app/`, `static/`, `scripts/`,
+  etc.) is handled automatically.
