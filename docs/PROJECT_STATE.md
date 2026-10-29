@@ -831,6 +831,12 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   and moved to `review` with `track_not_found`. No file, content, or knowledge
   record was deleted. The formal overview then reported `ingesting: 0` and
   `waiting_review: 4`.
+- Headless Chrome rendered the live `/web` page from the committed source:
+  review cards, restored skipped cards, `仍要入库`, `去确认`, and the companion
+  action were present in the DOM. It also rendered `/files` with eight local
+  rows, state labels, `继续入库`/`去处理` actions, and the surfaced
+  `APIConnectionError` and `track_not_found` reasons. No upload or action was
+  clicked during the browser render.
 
 ### Remaining risks
 
@@ -846,7 +852,9 @@ Scope: all HTML pages and page-level CSS/JS under `static/`.
   cap and then shows an unknown state; the manual refresh still works.
 - `auto` and `off` ingest confirmation modes remain unimplemented and are now
   marked as such in the settings UI.
-- A browser visual pass for the new card states, the files-page local table, and
-  the companion error detail was not run.
+- Headless DOM rendering passed for the new card states, the files-page local
+  table, and the companion error detail. Interactive click-through (upload,
+  save-and-ingest, resume) and visual layout checks at desktop/mobile breakpoints
+  were not run in a real browser session.
 - The default lifecycle service group was not restarted for this wave; it must
   be restarted before manual acceptance so the running app loads the new code.
