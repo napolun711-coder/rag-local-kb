@@ -69,6 +69,7 @@ $CodeEntries = @(
     '部署阶段.md',
     'pyproject.toml',
     'uv.lock',
+    '.python-version',
     '.env.example',
     'config\.gitkeep',
     'config\memory-supervisor.example.json',

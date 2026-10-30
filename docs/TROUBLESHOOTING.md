@@ -24,6 +24,11 @@ Re-run `deploy.cmd`. You can use another OpenAI-compatible endpoint by editing
 
 ## Deployment fails while installing dependencies
 
+The supported deployment runtime is Python 3.12. `deploy.cmd` pins 3.12 and
+provisions a managed Python under `.tools/`; do not force Python 3.15 or another
+newer interpreter. PyYAML and other native dependencies are installed from
+prebuilt wheels for 3.12, so Visual C++ Build Tools should not be required.
+
 Check that the machine can reach the package sources, then re-run `deploy.cmd`.
 All uv/Python/cache downloads stay inside `.tools/`; no system package install
 is attempted. If a partial install remains, re-running the same command is the

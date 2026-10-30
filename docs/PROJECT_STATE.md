@@ -1625,3 +1625,41 @@ Remaining release work:
   - SHA256 `6a8fb7a40d3206684f3c86048d8d75d88e2a572751f1abada819400ecec68e2a`
 - Formal services were not restarted and remain healthy on 0.1.0. Clean test
   services were stopped.
+
+## Windows fresh-install Python 3.12 fix (0.1.1, 2026-10-30)
+
+Root cause:
+
+- The project had no `.python-version`.
+- `scripts/setup.ps1` ran `uv sync --frozen --no-dev` without a Python selector.
+- uv could select Python 3.15; `uv.lock` has PyYAML 6.0.3 cp312/cp313/cp314
+  Windows wheels but no cp315 wheel, so a fresh machine fell back to the
+  PyYAML source distribution and required Visual C++ Build Tools.
+
+Fix:
+
+- Added `.python-version` with `3.12`.
+- `setup.ps1` sets `UV_PYTHON_PREFERENCE=only-managed` and runs
+  `uv sync --frozen --no-dev --python 3.12`.
+- Setup fails clearly if the app environment is not Python 3.12.
+- Engine venv creation now goes through the same redirected uv wrapper.
+- `.python-version` is included in release and upgrade code-entry lists.
+- CI and release workflows explicitly install Python 3.12, sync with
+  `--python 3.12`, assert the runtime, and validate `.python-version` in the
+  package.
+- Version bumped to `0.1.1`; `uv.lock` project version updated.
+
+Verification:
+
+- 131 tests passed, including four new Python-runtime regression tests.
+- `uv lock --check` passed.
+- Fresh isolated 0.1.1 deployment from the Release ZIP: no app/engine venv
+  existed; deploy created both with managed Python 3.12; PyYAML 6.0.3 imported
+  from the wheel; engine, shell, and app all healthy.
+- `uv sync --no-build --no-install-project` passed for the dependency set,
+  confirming no source build was required.
+- A no-uv/no-Python simulation attempted to download uv, but GitHub release
+  downloads timed out in this environment; the failure was network-only, not a
+  Python/PyYAML build failure. Managed Python 3.12 was still downloaded and used
+  in the separate clean deployment.
+- Formal data/services were not modified; isolated test services were stopped.

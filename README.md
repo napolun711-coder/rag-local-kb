@@ -4,7 +4,7 @@
 
 A modular monolith for a self-hosted retrieval-augmented knowledge base.
 
-**Status:** 0.1.0 beta, Windows first, local-first. Phone access is optional and
+**Status:** 0.1.1 beta, Windows first, local-first. Phone access is optional and
 intended for a trusted private LAN.
 
 ## Quick start (Windows)
@@ -64,7 +64,8 @@ Release/recovery procedures are in [docs/RELEASE.md](docs/RELEASE.md).
 ## Requirements
 
 - Windows 10/11 for the provided lifecycle scripts
-- Python 3.12+ (a project-local Python can be provisioned by `uv`)
+- Python 3.12 for the supported deployment (the deploy script pins 3.12; a
+  project-local Python is provisioned by `uv`, so no system Python is required)
 - [uv](https://docs.astral.sh/uv/) (downloadable into `.tools/` by the deploy
   script when missing)
 - Ollama with an embedding model such as `bge-m3:latest` when embeddings are used

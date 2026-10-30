@@ -32,7 +32,12 @@ jobs:
 
       - name: Install application dependencies
         shell: powershell
-        run: uv sync --frozen --no-dev
+        run: uv sync --frozen --no-dev --python 3.12
+
+      - name: Verify deployment Python
+        shell: powershell
+        run: |
+          .\.venv\Scripts\python.exe -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version; print(sys.version)"
 
       - name: Run unit tests
         shell: powershell
@@ -99,6 +104,7 @@ jobs:
             "app\features\ingest\limits.py",
             "tests\test_access_boundary.py",
             "scripts\update.ps1",
+            ".python-version",
             "README.md",
             "SECURITY.md",
             "CODE_OF_CONDUCT.md"

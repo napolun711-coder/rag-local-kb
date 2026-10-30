@@ -24,7 +24,7 @@ $CodeEntries = @(
     'setup.cmd', 'deploy.cmd', 'update.cmd', 'RAG启动器.ps1',
     'README.md', 'LICENSE', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md',
     'CODE_OF_CONDUCT.md', '部署阶段.md',
-    'pyproject.toml', 'uv.lock', '.env.example',
+    'pyproject.toml', 'uv.lock', '.python-version', '.env.example',
     'config\.gitkeep', 'config\memory-supervisor.example.json',
     'config\update.example.json'
 )

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 - 2026-10-30
+
+- deployment: pin fresh Windows installs to managed Python 3.12 through
+  `.python-version`, `UV_PYTHON_PREFERENCE=only-managed`, and explicit
+  `uv sync --python 3.12`; fail setup if the app environment is not 3.12
+- deployment: install PyYAML 6.0.3 from the existing cp312 Windows wheel instead
+  of selecting Python 3.15 and attempting a source build requiring Visual C++
+  Build Tools
+- ci: verify the deployment environment is Python 3.12 and include
+  `.python-version` in release/upgrade entries
+
 ## 0.1.0 - 2026-10-30
 
 - upload chain: `保存并入库` now submits, image caption/document naming works,

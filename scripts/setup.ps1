@@ -20,6 +20,7 @@ $Tools = Join-Path $root '.tools'
 # project. This setup script must not write to system or user profile paths.
 $env:UV_CACHE_DIR = Join-Path $Tools 'uv-cache'
 $env:UV_PYTHON_INSTALL_DIR = Join-Path $Tools 'python'
+$env:UV_PYTHON_PREFERENCE = 'only-managed'
 $env:UV_TOOL_DIR = Join-Path $Tools 'uv-tools'
 $env:UV_TOOL_BIN_DIR = Join-Path $Tools 'bin'
 
@@ -311,17 +312,21 @@ if (-not $SkipApp) {
     Write-OK ('uv: ' + $uvExe)
     Push-Location $root
     try {
-        $code = Invoke-Uv $uvExe @('sync', '--frozen', '--no-dev')
+        $code = Invoke-Uv $uvExe @('sync', '--frozen', '--no-dev', '--python', '3.12')
         if ($code -ne 0) { throw 'uv sync failed' }
     } finally { Pop-Location }
     $appPython = Join-Path $root '.venv\Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $appPython)) { throw '.venv not created' }
+    $appPyVersion = (& $appPython -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null).Trim()
+    if ($appPyVersion -ne '3.12') {
+        throw ('App environment uses Python ' + $appPyVersion + '; deployment requires Python 3.12')
+    }
     Push-Location $root
     try {
         & cmd /c "`"$appPython`" -c `"import app.main`" >nul 2>&1"
         if ($LASTEXITCODE -ne 0) { throw 'app.main import failed - source incomplete?' }
     } finally { Pop-Location }
-    Write-OK 'App dependencies and source import verified'
+    Write-OK 'App dependencies and source import verified (Python 3.12)'
 }
 
 if (-not $SkipEngine) {
@@ -335,8 +340,8 @@ if (-not $SkipEngine) {
     if (-not (Test-Path -LiteralPath $enginePython)) {
         Push-Location $engineDir
         try {
-            & $uvExe venv --python 3.12 --clear $engineVenv
-            if ($LASTEXITCODE -ne 0) { throw 'engine venv creation failed' }
+            $code = Invoke-Uv $uvExe @('venv', '--python', '3.12', '--clear', $engineVenv)
+            if ($code -ne 0) { throw 'engine venv creation failed' }
         } finally { Pop-Location }
     }
     Write-OK ('engine venv: ' + $engineVenv)

@@ -27,6 +27,8 @@ Issues = "https://github.com/napolun711-coder/rag-local-kb/issues"
 - Keep `pyproject.toml` `version` equal to the tag without the leading `v`.
 - Do not add features, authentication changes, or performance limits during the
   release gate.
+- The deploy runtime is pinned to Python 3.12 by `.python-version` and
+  `scripts/setup.ps1`; keep the release package's `.python-version` intact.
 
 ## 2. Run the release gate
 
