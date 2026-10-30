@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/static/theme.css">
 <!-- 外观模式（auto / light / dark）：必须在 head 同步执行，避免深色下先闪一帧浅色 -->
 <script src="/static/theme.js"></script>
-<link rel="stylesheet" href="/static/index.css?v=20261030-quality">
+<link rel="stylesheet" href="/static/index.css?v=20261030-ux">
 </head><body>
 <div class="app">
 
@@ -99,10 +99,10 @@
       <div class="side-title side-title-status">系统状态</div>
       <div class="status-row"><span>知识库服务</span><b><i id="stLightrag" class="dot gray"></i><em id="txLightrag" class="status-text">检查中</em></b></div>
       <div class="status-row"><span>本地模型</span><b><i id="stOllama" class="dot gray"></i><em id="txOllama" class="status-text">检查中</em></b></div>
-      <div class="status-row"><span>本地向量库（已启用）</span><b><i id="stQdrant" class="dot ok" title="本地文件向量库（NanoVectorDBStorage）"></i></b></div>
+      <div class="status-row"><span>本地向量库</span><b><i id="stQdrant" class="dot ok" title="本地文件向量库（NanoVectorDBStorage），已启用"></i><em id="txQdrant" class="status-text">正常</em></b></div>
     </div>
 
-          <div class="side-version" id="appVersion">v0.1.0</div>
+          <div class="side-version" id="appVersion">v0.1.2</div>
 
 </aside>
 
@@ -163,10 +163,6 @@
           <span class="mm-txt">自动朗读</span>
           <span class="mm-state" id="mmSpeakState">关</span>
         </button>
-        <a class="mm-item" href="/files">
-          <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8h8.4A1.5 1.5 0 0 1 20 9.3v8.2A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5Z"/></svg></span>
-          <span class="mm-txt">文件管理</span>
-        </a>
         <a class="mm-item" href="/settings">
           <span class="mm-ico"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 9.4a1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0-3.4Z"/><path d="M9.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span>
           <span class="mm-txt">设置</span>
@@ -385,7 +381,7 @@
 
 
 <script src="/static/companion.js?v=20261029-ref-error"></script>
-<script src="/static/index.js?v=20261030-quality"></script>
+<script src="/static/index.js?v=20261030-ux"></script>
 
 <script src="/static/ui.js" defer></script>
 <script src="/static/session.js" defer></script>

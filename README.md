@@ -7,6 +7,8 @@ A modular monolith for a self-hosted retrieval-augmented knowledge base.
 **Status:** 0.1.2 beta, Windows first, local-first. Phone access is optional and
 intended for a trusted private LAN.
 
+[中文安装与使用说明](README.zh-CN.md)
+
 ## Quick start (Windows)
 
 For normal use, download the latest

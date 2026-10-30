@@ -22,8 +22,8 @@ $CodeEntries = @(
     'services\lightrag_engine\.env.example',
     'main.py', 'start.cmd', 'start.ps1', 'stop.ps1', 'status.ps1',
     'setup.cmd', 'deploy.cmd', 'update.cmd', 'RAG启动器.ps1',
-    'README.md', 'LICENSE', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md',
-    'CODE_OF_CONDUCT.md', '部署阶段.md',
+    'README.md', 'README.zh-CN.md', 'LICENSE', 'CHANGELOG.md',
+    'CONTRIBUTING.md', 'SECURITY.md', 'CODE_OF_CONDUCT.md', '部署阶段.md',
     'pyproject.toml', 'uv.lock', '.python-version', '.env.example',
     'config\.gitkeep', 'config\memory-supervisor.example.json',
     'config\update.example.json'

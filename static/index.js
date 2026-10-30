@@ -4641,6 +4641,8 @@ async function refreshStatus() {
     const data = await response.json();
     setStatus("Lightrag", data.lightrag || false);
     setStatus("Ollama", data.ollama || false);
+    const versionNode = $("appVersion");
+    if (versionNode && data.version) { versionNode.textContent = "v" + data.version; }
   } catch (err) { /* 状态查询失败时保持原样 */ }
 }
 

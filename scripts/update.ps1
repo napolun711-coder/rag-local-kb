@@ -61,6 +61,7 @@ $CodeEntries = @(
     'update.cmd',
     'RAG启动器.ps1',
     'README.md',
+    'README.zh-CN.md',
     'LICENSE',
     'CHANGELOG.md',
     'CONTRIBUTING.md',

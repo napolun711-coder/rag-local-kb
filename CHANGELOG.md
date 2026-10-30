@@ -14,6 +14,12 @@
   `.ini`, `.cfg`, `.toml`) and stop advertising unsupported `.xls`
 - lifecycle: resolve a relative engine data directory against the project root,
   not the caller's current working directory
+- docs: add a complete Chinese installation, first-run, usage, backup, upgrade,
+  and troubleshooting guide
+- mobile UI: remove duplicate file-management entry from the three-dot menu;
+  keep the clear-conversation action only when a conversation has messages
+- desktop UI: align the three sidebar status rows, showing local vector storage
+  with a green dot and `正常`
 
 ## 0.1.1 - 2026-10-30
 

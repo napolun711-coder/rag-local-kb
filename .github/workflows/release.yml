@@ -106,6 +106,7 @@ jobs:
             "scripts\update.ps1",
             ".python-version",
             "README.md",
+            "README.zh-CN.md",
             "SECURITY.md",
             "CODE_OF_CONDUCT.md"
           )

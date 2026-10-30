@@ -1716,3 +1716,18 @@ Residual test-data note:
 - Their deletion was blocked by the safety policy because it would mutate live
   knowledge-base data. They require explicit user approval for cleanup.
 - The user's separate 0.1.1 deployment at port 18081 was not modified.
+
+Follow-up UI/documentation pass for 0.1.2:
+
+- Added `README.zh-CN.md` with complete Chinese installation, first-run,
+  upload/review, quality-advisory, chat/memory/graph, LAN, backup, upgrade,
+  rollback, and troubleshooting instructions.
+- Included the Chinese guide in release/update entries and package validation.
+- Mobile three-dot menu no longer duplicates the file-management entry; the
+  sidebar remains the single entry point for files.
+- The clear-conversation action remains available only when the current
+  conversation actually has messages.
+- Desktop sidebar status is now three visually aligned rows: knowledge service,
+  local model, and local vector storage with a green dot plus `正常`.
+- Dynamic app version is read from `/health`; the static fallback is `v0.1.2`.
+- Final suite: 132 tests passed; package scan and JS/lock checks passed.
