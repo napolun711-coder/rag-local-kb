@@ -232,6 +232,16 @@ async def upload_document(file: UploadFile = File(...)) -> Dict[str, Any]:
     )
 
 
+@app.post("/documents/text")
+async def insert_text(request: Request) -> Dict[str, Any]:
+    if not _engine_configured():
+        return _not_installed()
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid text payload")
+    return _request_json("POST", "/documents/text", json=payload)
+
+
 @app.get("/documents")
 def list_documents(request: Request) -> Dict[str, Any]:
     return _request_json("GET", "/documents", params=dict(request.query_params))

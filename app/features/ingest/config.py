@@ -12,9 +12,10 @@ from app.platform.config import ENV_FILE
 from app.platform.paths import DATA_DIR
 
 DEFAULT_ALLOWED_EXTENSIONS = (
-    ".txt", ".md", ".pdf", ".docx", ".csv", ".xlsx", ".xls",
-    ".pptx", ".json", ".html", ".htm", ".jpg", ".jpeg", ".png",
-    ".webp", ".bmp",
+    ".txt", ".md", ".pdf", ".docx", ".csv", ".xlsx", ".pptx",
+    ".json", ".html", ".htm", ".log", ".xml", ".yaml", ".yml",
+    ".ini", ".cfg", ".toml", ".jpg", ".jpeg", ".png", ".webp",
+    ".bmp",
 )
 
 

@@ -10,6 +10,7 @@ return fabricated query results or mark documents as ingested.
 - `POST /query`
 - `POST /query/stream`
 - `POST /documents/upload`
+- `POST /documents/text`
 - `GET /documents`
 - `GET /documents/track_status/{track_id}`
 - `DELETE /documents/delete_document`

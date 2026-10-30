@@ -182,6 +182,13 @@ def _doc_id_for(result: Dict[str, Any]) -> str:
 def _document_name(result: Dict[str, Any]) -> str:
     stem = _doc_name_stem(result)
     short_id = _doc_id_for(result)
+    # LightRAG stores and resolves upload names on disk. Its legacy parser has
+    # been observed to fail to resolve non-ASCII upload basenames, even though
+    # the upload itself returns success. Keep the user-facing filename in the
+    # local job, but use a stable ASCII name for the engine submission.
+    if not stem.isascii():
+        engine_id = str(result.get("file_id") or "").strip()
+        return f"document_{engine_id}.md" if engine_id else "document.md"
     return f"{stem}_{short_id}.md" if short_id else f"{stem}.md"
 
 
@@ -1061,9 +1068,7 @@ def _submit_to_knowledge(settings: IngestSettings, result: Dict[str, Any]) -> Di
     result["updated_at"] = submitted_at
     storage.write_result(settings, result["file_id"], result)
     try:
-        response = get_knowledge_gateway().upload_document(
-            document_name, content.encode("utf-8"), "text/markdown"
-        )
+        response = get_knowledge_gateway().insert_text(content, document_name)
     except KnowledgeIndexMismatch as exc:
         return _knowledge_failure(
             settings,

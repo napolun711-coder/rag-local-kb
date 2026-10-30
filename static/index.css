@@ -893,6 +893,7 @@ body.graph-open #sideToggle{display:none !important}
 .outcome-note{margin-top:9px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.55}
 .outcome-note.success{border-color:var(--ok-line);background:var(--ok-soft);color:var(--ok-text)}
 .outcome-note.failure{border-color:var(--bad-line);background:var(--bad-soft);color:var(--bad-text)}
+.outcome-note.warning{border-color:var(--warn-line);background:var(--warn-soft);color:var(--warn-text)}
 .review-reason{margin:5px 0 0;color:var(--grey-text-dim)}
 .review-check{margin:3px 0 0;color:var(--muted)}
 .review-check b{color:var(--grey-text-dim);font-weight:600}

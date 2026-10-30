@@ -571,9 +571,13 @@ def start(*, open_browser: bool, reuse_running: bool = False) -> int:
         return 2
 
     explicit_data_root = _setting("RAGKB_LIGHTRAG_ENGINE_DATA_DIR", "")
-    data_root = Path(
-        explicit_data_root or str(ROOT / "data" / "lightrag")
-    ).resolve()
+    if explicit_data_root:
+        data_root = Path(explicit_data_root).expanduser()
+        if not data_root.is_absolute():
+            data_root = ROOT / data_root
+        data_root = data_root.resolve()
+    else:
+        data_root = (ROOT / "data" / "lightrag").resolve()
 
     def engine_path(setting_name: str, env_key: str, fallback: Path) -> Path:
         override = _setting(setting_name, "")

@@ -62,6 +62,12 @@ class _Gateway:
             raise KnowledgeUnavailable("offline")
         return {"track_id": "track-1"}
 
+    def insert_text(self, text: str, file_source: str):
+        self.uploads.append((file_source, text.encode("utf-8"), "text/markdown"))
+        if self.fail:
+            raise KnowledgeUnavailable("offline")
+        return {"track_id": "track-1"}
+
     def document_status(self, track_id: str):
         self.status_calls.append(track_id)
         return self.status
@@ -288,6 +294,14 @@ class UploadChainTests(unittest.TestCase):
         refresh.assert_called_once_with(FILE_ID)
         self.assertEqual(payload["state"], "done")
         self.assertEqual(payload["detail"], "知识库索引已完成")
+
+    def test_non_ascii_upload_name_is_ascii_for_lightrag(self) -> None:
+        result = _result(filename="新建 文本文档111.txt", doc_name="新建 文本文档111")
+        name = service._document_name(result)
+        self.assertTrue(name.isascii())
+        self.assertTrue(name.endswith(".md"))
+        self.assertNotIn("新建", name)
+        self.assertTrue(name.startswith("document_"))
 
     def test_duplicate_ingest_is_idempotent_while_submission_is_active(self) -> None:
         self._write(_result(

@@ -4,7 +4,7 @@
 
 A modular monolith for a self-hosted retrieval-augmented knowledge base.
 
-**Status:** 0.1.1 beta, Windows first, local-first. Phone access is optional and
+**Status:** 0.1.2 beta, Windows first, local-first. Phone access is optional and
 intended for a trusted private LAN.
 
 ## Quick start (Windows)

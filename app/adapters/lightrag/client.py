@@ -148,6 +148,22 @@ class LightRagHttpClient(KnowledgeGateway):
         payload = response.json()
         return payload if isinstance(payload, dict) else {"data": payload}
 
+    def insert_text(self, text: str, file_source: str) -> Dict[str, Any]:
+        """Submit reviewed text through LightRAG's native text-ingest API."""
+        self._assert_index_compatible()
+        try:
+            response = self.session.post(
+                self._url("/documents/text"),
+                json={"text": text, "file_source": file_source},
+                timeout=self.timeout,
+                verify=self.settings.verify_tls,
+            )
+        except requests.RequestException as exc:
+            raise KnowledgeUnavailable(type(exc).__name__) from exc
+        self._raise_for_response(response)
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {"data": payload}
+
     def list_documents(self, **params: Any) -> Dict[str, Any]:
         try:
             response = self.session.get(

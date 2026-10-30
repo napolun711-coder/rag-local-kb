@@ -2974,7 +2974,7 @@ function setUploadState(card, state, detail, data) {
     skipped: ["已跳过", "skipped", "已跳过：这个文件没有入库（点「仍要入库」可以反悔）"],
     cancelled: ["已取消", "skipped", "已取消排队；原件与上传留档保留"],
     duplicate: ["已存在", "skipped", "相同内容已存在，未重复入库"],
-    blocked: ["✗ 未通过校验", "blocked", "未通过质量校验，已拦截：可先「修改正文」再重试，或点「仍要入库」自己担责放行"],
+    blocked: ["质量提示", "blocked", "质量校验有提示，未自动入库；可修改正文，或点「仍要入库」按你的选择入库"],
     failed: ["✗ 处理失败", "failed", "处理失败，可点击「重试」或查看 logs/app.log"],
     error: ["✗ 上传失败", "failed", "上传失败"],
     unknown: ["已提交", "unknown", "已提交（暂无法获取处理进度）"]
@@ -3269,16 +3269,15 @@ function renderOutcomeNote(card, data) {
     text = "已入库，可以继续提问。处理过程已收起，需要时点「处理过程」展开。";
   } else if (knowledgeError) {
     kind = "failure";
-    text = "入库失败。原件与解析结果保留：可点「入库」重试，"
-      + "或点「文件管理」查看记录与失败原因。";
+    text = "入库失败：" + knowledgeError
+      + "。原件与解析结果保留：可点「入库」重试，或点「文件管理」查看记录。";
   } else if (data && data.state === "failed") {
     kind = "failure";
     text = "解析失败。可点「重试」；仍失败时请修改原件后重新上传，"
       + "或点「文件管理」保留留档。";
   } else if (data && data.state === "blocked") {
-    kind = "failure";
-    text = "未通过质量校验。可先「修改正文」再「重试」，或「跳过」保留留档；"
-      + "需要人工放行可点「仍要入库」。";
+    kind = "warning";
+    text = "质量校验有提示，未自动入库；可先「修改正文」，或点「仍要入库」按你的选择入库。";
   }
   if (!text) {
     if (card.__outcomeNote && card.__outcomeNote.parentNode) {
@@ -4206,7 +4205,7 @@ function notifyOcrOutcome(card, data) {
     return;
   }
   if (data.state === "blocked") {
-    setToast("OCR 完成，但质量校验未通过" + (data.detail ? "：" + data.detail : "") + "（可先改正文）", "bad");
+    setToast("OCR 完成，但质量校验有提示" + (data.detail ? "：" + data.detail : "") + "（可改正文或仍要入库）", "bad");
     return;
   }
   if (data.state === "failed") {
@@ -4543,7 +4542,7 @@ function ingestChip(label, dotClass, tip) {
 
 // 质检恒定运行（没有整体开关）—— 这句话在侧栏摘要、设置页、文档里是同一套说法
 const QUALITY_ALWAYS_TIP = "质量校验恒定运行（没有整体开关）：上传后先在本地解析并做质量校验。"
-  + "未通过的会停下来说清原因 —— 想放行只能在卡片上点「仍要入库」，且档案里会记下「人工放行」。";
+  + "有提示时会停下来说清原因；是否仍要入库由你决定，点「仍要入库」会留痕。";
 
 /* 本机模式标识：只认「进程当前生效值」，与 /chat/stream 的实际行为一致；
    设置页保存了但还没重启时仍是旧模式，这里也如实显示旧模式。

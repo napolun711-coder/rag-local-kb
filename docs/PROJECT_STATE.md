@@ -1668,3 +1668,51 @@ Verification:
   - `local-rag-kb-0.1.1-win64.zip` and its `.sha256`
   - Verified SHA256: `f5b4540f4acec0137e0b55b166a7b89bb3e8ec41f85284fcf64da209b5e760b3`
   - Package includes `.python-version`; Release workflow and CI both succeeded.
+
+## Real upload failure fix (0.1.2, 2026-10-30)
+
+Root cause found from the user's 0.1.1 deployment:
+
+- Parsed text was submitted to LightRAG's file-upload endpoint
+  (`/documents/upload`), then LightRAG's legacy file parser reported
+  `legacy source file not found` during indexing.
+- Quality checks had already passed for the test document; the failure was the
+  handoff to the knowledge engine, not an upload-size or quality threshold.
+- An isolated diagnostic initially inherited the caller's cwd and used the
+  formal engine data directory. The lifecycle now resolves a relative
+  `RAGKB_LIGHTRAG_ENGINE_DATA_DIR` against the project root.
+
+Fix:
+
+- Added shell `POST /documents/text` and client `insert_text`.
+- Reviewed parsed text now enters LightRAG through `/documents/text` with a
+  stable ASCII `file_source`; LightRAG's normal text queue/index path handles
+  parsing, chunking, and graph/vector indexing.
+- Non-ASCII source names use `document_<file_id>.md`; the user-facing filename
+  remains unchanged in the local job.
+- Quality wording is advisory: the card explains the quality hint and offers
+  `仍要入库`; user choice remains authoritative and is recorded.
+- Knowledge failures now display the exact `knowledge_error` receipt in the
+  card rather than only a generic sentence.
+- Added common text formats and removed unsupported `.xls` from the advertised
+  upload list.
+- Version bumped to `0.1.2`; `uv.lock` project version updated.
+
+Verification:
+
+- Targeted upload-chain tests pass, including the non-ASCII source-name case.
+- Isolated Chinese-named upload via the new text path reached `done`; LightRAG
+  reported `Text successfully received` and produced one processed document.
+- Isolated engine health now points at the isolated root's
+  `data/lightrag/{input,storage}` after the lifecycle fix.
+- Full suite: 132 tests passed.
+
+Residual test-data note:
+
+- During the first isolated diagnosis, two synthetic documents were written to
+  the formal engine data before the cwd bug was identified:
+  `document_bda2.md` and
+  `document_20261030052732-bda23591.md`.
+- Their deletion was blocked by the safety policy because it would mutate live
+  knowledge-base data. They require explicit user approval for cleanup.
+- The user's separate 0.1.1 deployment at port 18081 was not modified.

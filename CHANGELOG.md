@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.2 - 2026-10-30
+
+- ingest: submit reviewed parsed text through LightRAG's native
+  `/documents/text` path instead of treating it as a source file; fixes
+  `legacy source file not found` failures for normal documents and non-ASCII
+  filenames
+- ingest: keep quality results advisory in the UI wording; users can still
+  choose "仍要入库" and the system records the decision
+- ingest: show the exact LightRAG failure receipt on the upload card instead of
+  only a generic failure sentence
+- ingest: accept common plain-text formats (`.log`, `.xml`, `.yaml`, `.yml`,
+  `.ini`, `.cfg`, `.toml`) and stop advertising unsupported `.xls`
+- lifecycle: resolve a relative engine data directory against the project root,
+  not the caller's current working directory
+
 ## 0.1.1 - 2026-10-30
 
 - deployment: pin fresh Windows installs to managed Python 3.12 through

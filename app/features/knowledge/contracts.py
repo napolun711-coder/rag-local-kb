@@ -43,6 +43,9 @@ class KnowledgeGateway(Protocol):
     ) -> Dict[str, Any]:
         ...
 
+    def insert_text(self, text: str, file_source: str) -> Dict[str, Any]:
+        ...
+
     def list_documents(self, **params: Any) -> Dict[str, Any]:
         ...
 

@@ -23,7 +23,10 @@ from xml.etree import ElementTree
 from app.features.ingest.config import get_ingest_settings
 
 # ---------- 路由表 ----------
-TEXT_EXTENSIONS = (".txt", ".md", ".csv", ".json", ".html", ".htm")
+TEXT_EXTENSIONS = (
+    ".txt", ".md", ".csv", ".json", ".html", ".htm",
+    ".log", ".xml", ".yaml", ".yml", ".ini", ".cfg", ".toml",
+)
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
 UNSUPPORTED_EXTENSIONS = (".doc", ".xls")
 
