@@ -1663,3 +1663,8 @@ Verification:
   Python/PyYAML build failure. Managed Python 3.12 was still downloaded and used
   in the separate clean deployment.
 - Formal data/services were not modified; isolated test services were stopped.
+- Published `v0.1.1`:
+  `https://github.com/napolun711-coder/rag-local-kb/releases/tag/v0.1.1`
+  - `local-rag-kb-0.1.1-win64.zip` and its `.sha256`
+  - Verified SHA256: `f5b4540f4acec0137e0b55b166a7b89bb3e8ec41f85284fcf64da209b5e760b3`
+  - Package includes `.python-version`; Release workflow and CI both succeeded.
